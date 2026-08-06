@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "158624427242",
+    "project_id": "business-management-app-112ea",
+    "storage_bucket": "business-management-app-112ea.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:158624427242:android:615f99df287681315a3b93",
+        "android_client_info": {
+          "package_name": "com.example.business_managment_app"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyABkwIWkfjdRloxPfTXKy_34JL2XqdM9dA"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
