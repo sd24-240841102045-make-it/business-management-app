@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'services/supabase_service.dart';
+import 'services/app_data_store.dart';
 import 'main_shell.dart';
 import 'client_shell.dart';
 
@@ -76,30 +77,19 @@ class _LoginPageState extends State<LoginPage> {
     try {
       if (authMode == AuthMode.createBusiness) {
         // Create new organization & register user as Business Admin
-        try {
-          await SupabaseService().signUpBusinessAdmin(
-            email: email,
-            password: password,
-            fullName: fullNameController.text.trim(),
-            businessName: businessNameController.text.trim(),
-            industry: industryController.text.trim().isEmpty ? 'Technology' : industryController.text.trim(),
-            phone: phoneController.text.trim(),
-            country: countryController.text.trim().isEmpty ? 'United States' : countryController.text.trim(),
-          );
-          if (!mounted) return;
-          _showSnackBar('Organization & Admin account created successfully!', isError: false);
-          _navigateToShell(AuthRole.admin);
-        } catch (e) {
-          final errStr = e.toString().toLowerCase();
-          if (errStr.contains('rate limit') || errStr.contains('rate_limit') || errStr.contains('over_email_send_rate_limit')) {
-            _showSnackBar('Supabase default email rate limit reached. Proceeding to Admin Workspace...', isError: false);
-            _navigateToShell(AuthRole.admin);
-          } else {
-            // Friendly error message or launch fallback
-            _showSnackBar('Registered in fallback mode: ${e.toString().replaceAll('AuthException:', '').trim()}', isError: false);
-            _navigateToShell(AuthRole.admin);
-          }
-        }
+        await SupabaseService().signUpBusinessAdmin(
+          email: email,
+          password: password,
+          fullName: fullNameController.text.trim(),
+          businessName: businessNameController.text.trim(),
+          industry: industryController.text.trim().isEmpty ? 'Technology' : industryController.text.trim(),
+          phone: phoneController.text.trim(),
+          country: countryController.text.trim().isEmpty ? 'United States' : countryController.text.trim(),
+        );
+        await AppDataStore().refreshFromSupabase();
+        if (!mounted) return;
+        _showSnackBar('Organization & Admin account created successfully!', isError: false);
+        _navigateToShell(AuthRole.admin);
       } else if (authMode == AuthMode.acceptInvite) {
         final token = inviteTokenController.text.trim();
         if (token.isEmpty) {
@@ -111,56 +101,80 @@ class _LoginPageState extends State<LoginPage> {
           password: password,
           fullName: fullNameController.text.trim(),
         );
+        await AppDataStore().refreshFromSupabase();
         if (!mounted) return;
         _showSnackBar('Invitation accepted! Welcome to the team.', isError: false);
         _navigateToShell(selectedRole);
       } else {
-        // Normal Sign In
-        try {
-          final res = await SupabaseService().signInWithEmail(
-            email: email,
-            password: password,
-          );
+        // Strict Database Sign In
+        final res = await SupabaseService().signInWithEmail(
+          email: email,
+          password: password,
+        );
+        await AppDataStore().refreshFromSupabase();
 
-          if (!mounted) return;
+        if (!mounted) return;
 
-          if (res.user != null) {
-            final userRole = SupabaseService().currentRole;
-            final roleEnum = userRole == 'client'
-                ? AuthRole.client
-                : (userRole == 'employee' ? AuthRole.employee : AuthRole.admin);
+        if (res.user != null) {
+          final userRole = SupabaseService().currentRole;
+          final roleEnum = userRole == 'client'
+              ? AuthRole.client
+              : (userRole == 'employee' ? AuthRole.employee : AuthRole.admin);
 
-            _showSnackBar('Welcome back!', isError: false);
-            _navigateToShell(roleEnum);
-          }
-        } catch (e) {
-          // If credentials not found in Supabase Auth, seamlessly launch requested role portal
-          _showSnackBar('Signed in to ${selectedRole == AuthRole.client ? "Client Portal" : "Admin Workspace"}', isError: false);
-          _navigateToShell(selectedRole);
+          _showSnackBar('Welcome back!', isError: false);
+          _navigateToShell(roleEnum);
+        } else {
+          _showSnackBar('Login failed: Invalid email or password', isError: true);
         }
       }
     } catch (e) {
       if (mounted) {
-        final msg = e.toString().replaceAll('AuthException:', '').replaceAll('Exception:', '').trim();
-        _showSnackBar(msg.isEmpty ? 'Authentication successful' : msg, isError: false);
-        _navigateToShell(selectedRole);
+        final errStr = e.toString().toLowerCase();
+        if (errStr.contains('rate limit') || errStr.contains('rate_limit') || errStr.contains('over_email_send_rate_limit')) {
+          _showSnackBar('Supabase default email rate limit reached (max 3-4 emails/hr). Please wait a few minutes or disable "Confirm Email" in Supabase settings.', isError: true);
+        } else {
+          final msg = e.toString().replaceAll('AuthException:', '').replaceAll('Exception:', '').trim();
+          _showSnackBar('Authentication failed: $msg', isError: true);
+        }
       }
     } finally {
       if (mounted) setState(() => isLoading = false);
     }
   }
 
-  void _demoLogin(AuthRole role) {
-    if (role == AuthRole.admin) {
-      emailController.text = 'admin@business.com';
-      passwordController.text = 'admin123';
-      _showSnackBar('Launching Demo Admin Workspace...', isError: false);
-      _navigateToShell(AuthRole.admin);
-    } else {
-      emailController.text = 'client@acme.com';
-      passwordController.text = 'client123';
-      _showSnackBar('Launching Demo Client Portal...', isError: false);
-      _navigateToShell(AuthRole.client);
+  Future<void> _demoLogin(AuthRole role) async {
+    final demoEmail = role == AuthRole.admin ? 'admin@business.com' : 'client@acme.com';
+    final demoPassword = role == AuthRole.admin ? 'admin123' : 'client123';
+
+    emailController.text = demoEmail;
+    passwordController.text = demoPassword;
+
+    setState(() => isLoading = true);
+    try {
+      final res = await SupabaseService().signInWithEmail(
+        email: demoEmail,
+        password: demoPassword,
+      );
+      await AppDataStore().refreshFromSupabase();
+
+      if (!mounted) return;
+
+      if (res.user != null) {
+        final userRole = SupabaseService().currentRole;
+        final roleEnum = userRole == 'client'
+            ? AuthRole.client
+            : (userRole == 'employee' ? AuthRole.employee : AuthRole.admin);
+
+        _showSnackBar('Logged in as ${role == AuthRole.client ? "Client" : "Admin"}', isError: false);
+        _navigateToShell(roleEnum);
+      } else {
+        _showSnackBar('Demo user not found in database. Please click "Create Business".', isError: true);
+      }
+    } catch (e) {
+      if (!mounted) return;
+      _showSnackBar('Account not found in database: ${e.toString().replaceAll('AuthException:', '').trim()}. Use "Create Business" to register.', isError: true);
+    } finally {
+      if (mounted) setState(() => isLoading = false);
     }
   }
 
@@ -176,6 +190,72 @@ class _LoginPageState extends State<LoginPage> {
         MaterialPageRoute(builder: (context) => const MainShell()),
       );
     }
+  }
+
+  void _showForgotPasswordDialog() {
+    final resetEmailController = TextEditingController(text: emailController.text.trim());
+
+    showDialog(
+      context: context,
+      builder: (context) {
+        bool isSending = false;
+        return StatefulBuilder(
+          builder: (context, setDialogState) {
+            return AlertDialog(
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+              title: const Text('Reset Password'),
+              content: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  const Text('Enter your registered email address below. We will send password reset instructions to your inbox.'),
+                  const SizedBox(height: 16),
+                  TextField(
+                    controller: resetEmailController,
+                    keyboardType: TextInputType.emailAddress,
+                    decoration: InputDecoration(
+                      labelText: 'Email Address',
+                      prefixIcon: const Icon(Icons.email_outlined),
+                      border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+                    ),
+                  ),
+                ],
+              ),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.pop(context),
+                  child: const Text('Cancel'),
+                ),
+                ElevatedButton(
+                  onPressed: isSending
+                      ? null
+                      : () async {
+                          final email = resetEmailController.text.trim();
+                          if (email.isEmpty) {
+                            _showSnackBar('Please enter your email address', isError: true);
+                            return;
+                          }
+                          setDialogState(() => isSending = true);
+                          try {
+                            await SupabaseService().resetPassword(email);
+                            if (mounted) {
+                              Navigator.pop(context);
+                              _showSnackBar('Password reset email sent! Check your inbox.', isError: false);
+                            }
+                          } catch (e) {
+                            setDialogState(() => isSending = false);
+                            _showSnackBar('Error sending reset link: ${e.toString().replaceAll('AuthException:', '').trim()}', isError: true);
+                          }
+                        },
+                  child: isSending
+                      ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
+                      : const Text('Send Reset Link'),
+                ),
+              ],
+            );
+          },
+        );
+      },
+    );
   }
 
   void _showSnackBar(String message, {bool isError = true}) {
@@ -321,7 +401,24 @@ class _LoginPageState extends State<LoginPage> {
                             ),
                           ),
 
-                          const SizedBox(height: 20),
+                          if (authMode == AuthMode.signIn) ...[
+                            Align(
+                              alignment: Alignment.centerRight,
+                              child: TextButton(
+                                onPressed: _showForgotPasswordDialog,
+                                child: Text(
+                                  'Forgot Password?',
+                                  style: TextStyle(
+                                    color: activeThemeColor,
+                                    fontWeight: FontWeight.w600,
+                                    fontSize: 13,
+                                  ),
+                                ),
+                              ),
+                            ),
+                          ],
+
+                          const SizedBox(height: 12),
 
                           // Submit Button
                           SizedBox(

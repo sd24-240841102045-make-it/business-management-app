@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'services/app_data_store.dart';
+import 'emp_profile.dart';
 
 class EmployeesBody extends StatefulWidget {
   final void Function(int index)? onNavigate;
@@ -201,7 +202,7 @@ class EmployeesBodyState extends State<EmployeesBody> {
                         physics: const NeverScrollableScrollPhysics(),
                         gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
                           crossAxisCount: isDesktop ? 3 : isTablet ? 2 : 1,
-                          mainAxisExtent: 220,
+                          mainAxisExtent: 140,
                           crossAxisSpacing: 16,
                           mainAxisSpacing: 16,
                         ),
@@ -210,112 +211,116 @@ class EmployeesBodyState extends State<EmployeesBody> {
                           final emp = filteredEmployees[index];
                           final assignedClients = _store.clients.where((c) => c.assignedEmployeeId == emp.id).length;
 
-                          return Container(
-                            padding: const EdgeInsets.all(18),
-                            decoration: BoxDecoration(
-                              color: Colors.white,
-                              borderRadius: BorderRadius.circular(20),
-                              boxShadow: [
-                                BoxShadow(color: Colors.black.withOpacity(0.04), blurRadius: 10, offset: const Offset(0, 4)),
-                              ],
-                            ),
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Row(
-                                  children: [
-                                    CircleAvatar(
-                                      radius: 24,
-                                      backgroundColor: Colors.deepPurple.shade50,
-                                      child: Text(
-                                        emp.name.substring(0, 1),
-                                        style: const TextStyle(color: Colors.deepPurple, fontWeight: FontWeight.bold, fontSize: 20),
-                                      ),
-                                    ),
-                                    const SizedBox(width: 12),
-                                    Expanded(
-                                      child: Column(
-                                        crossAxisAlignment: CrossAxisAlignment.start,
-                                        children: [
-                                          Text(
-                                            emp.name,
-                                            style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
-                                            maxLines: 1,
-                                            overflow: TextOverflow.ellipsis,
-                                          ),
-                                          const SizedBox(height: 2),
-                                          Text(
-                                            emp.role,
-                                            style: const TextStyle(color: Colors.grey, fontSize: 13),
-                                            maxLines: 1,
-                                            overflow: TextOverflow.ellipsis,
-                                          ),
-                                        ],
-                                      ),
-                                    ),
-                                    Container(
-                                      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-                                      decoration: BoxDecoration(
-                                        color: emp.status == 'Active'
-                                            ? Colors.green.withOpacity(0.12)
-                                            : Colors.orange.withOpacity(0.12),
-                                        borderRadius: BorderRadius.circular(12),
-                                      ),
-                                      child: Text(
-                                        emp.status,
-                                        style: TextStyle(
-                                          color: emp.status == 'Active' ? Colors.green : Colors.orange,
-                                          fontWeight: FontWeight.bold,
-                                          fontSize: 12,
+                          return InkWell(
+                            onTap: () {
+                              Navigator.push(
+                                context,
+                                MaterialPageRoute(
+                                  builder: (context) => EmployeeProfilePage(employee: emp),
+                                ),
+                              );
+                            },
+                            borderRadius: BorderRadius.circular(18),
+                            child: Container(
+                              padding: const EdgeInsets.all(16),
+                              decoration: BoxDecoration(
+                                color: Colors.white,
+                                borderRadius: BorderRadius.circular(18),
+                                boxShadow: [
+                                  BoxShadow(color: Colors.black.withOpacity(0.04), blurRadius: 8, offset: const Offset(0, 3)),
+                                ],
+                              ),
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  Row(
+                                    children: [
+                                      CircleAvatar(
+                                        radius: 22,
+                                        backgroundColor: Colors.deepPurple.shade50,
+                                        child: Text(
+                                          emp.name.isNotEmpty ? emp.name[0].toUpperCase() : 'E',
+                                          style: const TextStyle(color: Colors.deepPurple, fontWeight: FontWeight.bold, fontSize: 18),
                                         ),
                                       ),
-                                    ),
-                                  ],
-                                ),
+                                      const SizedBox(width: 10),
+                                      Expanded(
+                                        child: Column(
+                                          crossAxisAlignment: CrossAxisAlignment.start,
+                                          children: [
+                                            Text(
+                                              emp.name,
+                                              style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 15),
+                                              maxLines: 1,
+                                              overflow: TextOverflow.ellipsis,
+                                            ),
+                                            const SizedBox(height: 2),
+                                            Text(
+                                              emp.role,
+                                              style: const TextStyle(color: Colors.grey, fontSize: 12),
+                                              maxLines: 1,
+                                              overflow: TextOverflow.ellipsis,
+                                            ),
+                                          ],
+                                        ),
+                                      ),
+                                      Container(
+                                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                                        decoration: BoxDecoration(
+                                          color: emp.status == 'Active'
+                                              ? Colors.green.withOpacity(0.12)
+                                              : Colors.orange.withOpacity(0.12),
+                                          borderRadius: BorderRadius.circular(10),
+                                        ),
+                                        child: Text(
+                                          emp.status,
+                                          style: TextStyle(
+                                            color: emp.status == 'Active' ? Colors.green : Colors.orange,
+                                            fontWeight: FontWeight.bold,
+                                            fontSize: 11,
+                                          ),
+                                        ),
+                                      ),
+                                      const SizedBox(width: 6),
+                                      IconButton(
+                                        icon: const Icon(Icons.delete_outline, color: Colors.redAccent, size: 18),
+                                        onPressed: () => _confirmDelete(emp),
+                                        tooltip: 'Delete Employee',
+                                        padding: EdgeInsets.zero,
+                                        constraints: const BoxConstraints(),
+                                      ),
+                                    ],
+                                  ),
 
-                                const Divider(height: 24),
+                                  const Divider(height: 18),
 
-                                Row(
-                                  children: [
-                                    const Icon(Icons.business_center_outlined, size: 16, color: Colors.grey),
-                                    const SizedBox(width: 6),
-                                    Expanded(
-                                      child: Text(emp.department, style: const TextStyle(fontSize: 13, color: Colors.black87)),
-                                    ),
-                                  ],
-                                ),
+                                  Row(
+                                    children: [
+                                      const Icon(Icons.business_center_outlined, size: 15, color: Colors.grey),
+                                      const SizedBox(width: 6),
+                                      Expanded(
+                                        child: Text(emp.department, style: const TextStyle(fontSize: 12, color: Colors.black87)),
+                                      ),
+                                    ],
+                                  ),
 
-                                const SizedBox(height: 6),
+                                  const SizedBox(height: 6),
 
-                                Row(
-                                  children: [
-                                    const Icon(Icons.people_alt_outlined, size: 16, color: Colors.deepPurple),
-                                    const SizedBox(width: 6),
-                                    Text(
-                                      '$assignedClients Assigned Client${assignedClients == 1 ? '' : 's'}',
-                                      style: const TextStyle(fontSize: 13, color: Colors.deepPurple, fontWeight: FontWeight.w600),
-                                    ),
-                                  ],
-                                ),
-
-                                const Spacer(),
-
-                                Row(
-                                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                                  children: [
-                                    TextButton.icon(
-                                      onPressed: () => widget.onNavigate?.call(4),
-                                      icon: const Icon(Icons.person_outline, size: 16),
-                                      label: const Text('View Profile'),
-                                      style: TextButton.styleFrom(foregroundColor: Colors.deepPurple),
-                                    ),
-                                    IconButton(
-                                      icon: const Icon(Icons.delete_outline, color: Colors.redAccent, size: 20),
-                                      onPressed: () => _confirmDelete(emp),
-                                    ),
-                                  ],
-                                ),
-                              ],
+                                  Row(
+                                    children: [
+                                      const Icon(Icons.people_alt_outlined, size: 15, color: Colors.deepPurple),
+                                      const SizedBox(width: 6),
+                                      Expanded(
+                                        child: Text(
+                                          '$assignedClients Assigned Client${assignedClients == 1 ? '' : 's'}',
+                                          style: const TextStyle(fontSize: 12, color: Colors.deepPurple, fontWeight: FontWeight.w600),
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ],
+                              ),
                             ),
                           );
                         },

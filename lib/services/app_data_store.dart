@@ -447,6 +447,7 @@ class AppDataStore extends ChangeNotifier {
   AppDataStore._internal() {
     _initInitialData();
     refreshFromSupabase();
+    SupabaseService().subscribeToRealtimeChanges(refreshFromSupabase);
   }
 
   final List<AdminModel> _admins = [];
@@ -604,8 +605,7 @@ class AppDataStore extends ChangeNotifier {
       if (remoteEmployees != null && remoteEmployees.isNotEmpty) {
         _employees.clear();
         _employees.addAll(remoteEmployees);
-      } else {
-        // Seed initial employees to Supabase
+      } else if (SupabaseService().currentOrganization != null) {
         for (final emp in _employees) {
           await SupabaseService().insertEmployee(emp);
         }
@@ -615,8 +615,7 @@ class AppDataStore extends ChangeNotifier {
       if (remoteClients != null && remoteClients.isNotEmpty) {
         _clients.clear();
         _clients.addAll(remoteClients);
-      } else {
-        // Seed initial clients to Supabase
+      } else if (SupabaseService().currentOrganization != null) {
         for (final cli in _clients) {
           await SupabaseService().insertClient(cli);
         }
@@ -626,17 +625,65 @@ class AppDataStore extends ChangeNotifier {
       if (remoteLeaves != null && remoteLeaves.isNotEmpty) {
         _leaveRequests.clear();
         _leaveRequests.addAll(remoteLeaves);
-      } else {
-        // Seed initial leave requests to Supabase
+      } else if (SupabaseService().currentOrganization != null) {
         for (final req in _leaveRequests) {
           await SupabaseService().insertLeaveRequest(req);
         }
       }
 
       final remoteChats = await SupabaseService().fetchChatMessages();
-      if (remoteChats != null) {
+      if (remoteChats != null && remoteChats.isNotEmpty) {
         _chatMessages.clear();
         _chatMessages.addAll(remoteChats);
+      }
+
+      final remoteProjects = await SupabaseService().fetchProjects();
+      if (remoteProjects.isNotEmpty) {
+        _projects.clear();
+        for (final p in remoteProjects) {
+          _projects.add(ProjectModel(
+            id: p.id,
+            name: p.name,
+            clientId: p.clientId,
+            clientName: p.client?.displayName ?? 'Client',
+            status: p.status,
+            budget: p.budget,
+            deadline: p.deadline ?? '',
+          ));
+        }
+      }
+
+      final remoteTasks = await SupabaseService().fetchTasks();
+      if (remoteTasks.isNotEmpty) {
+        _tasks.clear();
+        for (final t in remoteTasks) {
+          _tasks.add(TaskModel(
+            id: t.id,
+            title: t.title,
+            projectId: t.projectId,
+            projectName: 'Project',
+            assignedToName: t.assignee?.fullName ?? 'Unassigned',
+            status: t.status,
+            priority: t.priority,
+            dueDate: t.dueDate ?? '',
+          ));
+        }
+      }
+
+      final remoteInvoices = await SupabaseService().fetchInvoices();
+      if (remoteInvoices.isNotEmpty) {
+        _invoices.clear();
+        for (final inv in remoteInvoices) {
+          _invoices.add(InvoiceModel(
+            id: inv.id,
+            invoiceNumber: inv.invoiceNumber,
+            clientName: 'Client',
+            amount: inv.total,
+            status: inv.status,
+            issueDate: inv.issueDate,
+            dueDate: inv.dueDate,
+          ));
+        }
       }
     } catch (e) {
       debugPrint('Error syncing with Supabase: $e');

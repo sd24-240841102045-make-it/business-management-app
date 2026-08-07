@@ -439,3 +439,355 @@ class _ProfileBodyState extends State<ProfileBody> {
     );
   }
 }
+
+class EmployeeProfilePage extends StatefulWidget {
+  final Employee employee;
+  const EmployeeProfilePage({super.key, required this.employee});
+
+  @override
+  State<EmployeeProfilePage> createState() => _EmployeeProfilePageState();
+}
+
+class _EmployeeProfilePageState extends State<EmployeeProfilePage> {
+  final AppDataStore _store = AppDataStore();
+  late Employee _currentEmp;
+
+  @override
+  void initState() {
+    super.initState();
+    _currentEmp = widget.employee;
+    _store.addListener(_onStoreUpdate);
+  }
+
+  @override
+  void dispose() {
+    _store.removeListener(_onStoreUpdate);
+    super.dispose();
+  }
+
+  void _onStoreUpdate() {
+    if (mounted) {
+      for (final e in _store.employees) {
+        if (e.id == _currentEmp.id) {
+          setState(() {
+            _currentEmp = e;
+          });
+          break;
+        }
+      }
+    }
+  }
+
+  void _editEmployeeDialog() {
+    final nameCtrl = TextEditingController(text: _currentEmp.name);
+    final roleCtrl = TextEditingController(text: _currentEmp.role);
+    final deptCtrl = TextEditingController(text: _currentEmp.department);
+    final phoneCtrl = TextEditingController(text: _currentEmp.phone);
+    String status = _currentEmp.status;
+
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(18)),
+        title: Text('Edit ${_currentEmp.name}\'s Profile'),
+        content: SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              TextField(
+                controller: nameCtrl,
+                decoration: const InputDecoration(labelText: 'Full Name', prefixIcon: Icon(Icons.person)),
+              ),
+              const SizedBox(height: 10),
+              TextField(
+                controller: roleCtrl,
+                decoration: const InputDecoration(labelText: 'Role / Designation', prefixIcon: Icon(Icons.badge)),
+              ),
+              const SizedBox(height: 10),
+              TextField(
+                controller: deptCtrl,
+                decoration: const InputDecoration(labelText: 'Department', prefixIcon: Icon(Icons.business_center)),
+              ),
+              const SizedBox(height: 10),
+              TextField(
+                controller: phoneCtrl,
+                decoration: const InputDecoration(labelText: 'Phone Number', prefixIcon: Icon(Icons.phone)),
+              ),
+              const SizedBox(height: 10),
+              StatefulBuilder(
+                builder: (context, setDialogState) => DropdownButtonFormField<String>(
+                  value: status,
+                  decoration: const InputDecoration(labelText: 'Status', prefixIcon: Icon(Icons.check_circle)),
+                  items: ['Active', 'On Leave', 'Inactive']
+                      .map((s) => DropdownMenuItem(value: s, child: Text(s)))
+                      .toList(),
+                  onChanged: (val) {
+                    if (val != null) {
+                      setDialogState(() => status = val);
+                    }
+                  },
+                ),
+              ),
+            ],
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Cancel'),
+          ),
+          ElevatedButton(
+            onPressed: () {
+              final newName = nameCtrl.text.trim();
+              if (newName.isNotEmpty) {
+                final updated = _currentEmp.copyWith(
+                  name: newName,
+                  role: roleCtrl.text.trim(),
+                  department: deptCtrl.text.trim(),
+                  phone: phoneCtrl.text.trim(),
+                  status: status,
+                );
+                _store.updateEmployee(updated);
+                setState(() {
+                  _currentEmp = updated;
+                });
+                Navigator.pop(context);
+                ScaffoldMessenger.of(context).showSnackBar(
+                  SnackBar(content: Text('${updated.name}\'s profile updated successfully!'), backgroundColor: Colors.green),
+                );
+              }
+            },
+            style: ElevatedButton.styleFrom(backgroundColor: Colors.deepPurple),
+            child: const Text('Save Changes', style: TextStyle(color: Colors.white)),
+          ),
+        ],
+      ),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final assignedClients = _store.clients.where((c) => c.assignedEmployeeId == _currentEmp.id).toList();
+    final leaveHistory = _store.leaveRequests.where((r) => r.employeeId == _currentEmp.id).toList();
+
+    Color statusColor = Colors.green;
+    if (_currentEmp.status == 'On Leave') statusColor = Colors.orange;
+    if (_currentEmp.status == 'Inactive') statusColor = Colors.red;
+
+    return Scaffold(
+      appBar: AppBar(
+        title: Text('${_currentEmp.name}\'s Profile', style: const TextStyle(fontWeight: FontWeight.bold)),
+        backgroundColor: Colors.deepPurple,
+        foregroundColor: Colors.white,
+        elevation: 2,
+        actions: [
+          IconButton(
+            icon: const Icon(Icons.edit),
+            tooltip: 'Edit Profile',
+            onPressed: _editEmployeeDialog,
+          ),
+        ],
+      ),
+      body: SingleChildScrollView(
+        padding: const EdgeInsets.all(20),
+        child: Center(
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: 900),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                // Header Profile Card
+                Container(
+                  width: double.infinity,
+                  padding: const EdgeInsets.all(24),
+                  decoration: BoxDecoration(
+                    color: Colors.white,
+                    borderRadius: BorderRadius.circular(22),
+                    boxShadow: [
+                      BoxShadow(
+                        color: Colors.black.withOpacity(0.05),
+                        blurRadius: 10,
+                        offset: const Offset(0, 4),
+                      ),
+                    ],
+                  ),
+                  child: Column(
+                    children: [
+                      CircleAvatar(
+                        radius: 45,
+                        backgroundColor: Colors.deepPurple.shade100,
+                        child: Text(
+                          _currentEmp.name.isNotEmpty ? _currentEmp.name[0].toUpperCase() : 'E',
+                          style: const TextStyle(fontSize: 36, color: Colors.deepPurple, fontWeight: FontWeight.bold),
+                        ),
+                      ),
+                      const SizedBox(height: 14),
+                      Text(
+                        _currentEmp.name,
+                        style: const TextStyle(fontSize: 22, fontWeight: FontWeight.bold),
+                      ),
+                      const SizedBox(height: 4),
+                      Text(
+                        '${_currentEmp.role} • ${_currentEmp.department}',
+                        style: TextStyle(color: Colors.deepPurple.shade700, fontWeight: FontWeight.w600, fontSize: 14),
+                      ),
+                      const SizedBox(height: 12),
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 5),
+                        decoration: BoxDecoration(
+                          color: statusColor.withOpacity(0.12),
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                        child: Text(
+                          'Status: ${_currentEmp.status}',
+                          style: TextStyle(color: statusColor, fontWeight: FontWeight.bold, fontSize: 12),
+                        ),
+                      ),
+                      const SizedBox(height: 16),
+                      OutlinedButton.icon(
+                        onPressed: _editEmployeeDialog,
+                        icon: const Icon(Icons.edit, color: Colors.deepPurple, size: 18),
+                        label: const Text('Edit Employee Details', style: TextStyle(color: Colors.deepPurple)),
+                        style: OutlinedButton.styleFrom(
+                          side: const BorderSide(color: Colors.deepPurple),
+                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(height: 24),
+
+                // Personal & Work Information
+                const Text('Workforce Information', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+                const SizedBox(height: 12),
+                _buildInfoCard(Icons.fingerprint, 'Employee ID', _currentEmp.id),
+                _buildInfoCard(Icons.email_outlined, 'Email Address', _currentEmp.email),
+                _buildInfoCard(Icons.phone_outlined, 'Direct Phone', _currentEmp.phone.isNotEmpty ? _currentEmp.phone : 'Not provided'),
+                _buildInfoCard(Icons.business_center_outlined, 'Department', _currentEmp.department),
+                _buildInfoCard(Icons.badge_outlined, 'Role / Designation', _currentEmp.role),
+                _buildInfoCard(Icons.calendar_today_outlined, 'Joining Date', _currentEmp.joiningDate),
+
+                const SizedBox(height: 24),
+
+                // Assigned Client Accounts
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    Text('Assigned Client Accounts (${assignedClients.length})', style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+                  ],
+                ),
+                const SizedBox(height: 12),
+                assignedClients.isEmpty
+                    ? Container(
+                        width: double.infinity,
+                        padding: const EdgeInsets.all(20),
+                        decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(16)),
+                        child: const Text('No clients currently assigned to this employee.', style: TextStyle(color: Colors.grey)),
+                      )
+                    : ListView.builder(
+                        shrinkWrap: true,
+                        physics: const NeverScrollableScrollPhysics(),
+                        itemCount: assignedClients.length,
+                        itemBuilder: (context, index) {
+                          final c = assignedClients[index];
+                          return Card(
+                            margin: const EdgeInsets.only(bottom: 10),
+                            elevation: 2,
+                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+                            child: ListTile(
+                              leading: const CircleAvatar(
+                                backgroundColor: Color(0xFFEDE7F6),
+                                child: Icon(Icons.business, color: Colors.deepPurple),
+                              ),
+                              title: Text(c.name, style: const TextStyle(fontWeight: FontWeight.bold)),
+                              subtitle: Text(c.company),
+                              trailing: Chip(
+                                label: Text(c.status),
+                                backgroundColor: c.status == 'Active' ? Colors.green.withOpacity(0.12) : Colors.orange.withOpacity(0.12),
+                                labelStyle: TextStyle(color: c.status == 'Active' ? Colors.green : Colors.orange, fontWeight: FontWeight.bold, fontSize: 11),
+                              ),
+                            ),
+                          );
+                        },
+                      ),
+
+                const SizedBox(height: 24),
+
+                // Leave History
+                Text('Leave & Attendance History (${leaveHistory.length})', style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+                const SizedBox(height: 12),
+                leaveHistory.isEmpty
+                    ? Container(
+                        width: double.infinity,
+                        padding: const EdgeInsets.all(20),
+                        decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(16)),
+                        child: const Text('No leave applications recorded for this employee.', style: TextStyle(color: Colors.grey)),
+                      )
+                    : ListView.builder(
+                        shrinkWrap: true,
+                        physics: const NeverScrollableScrollPhysics(),
+                        itemCount: leaveHistory.length,
+                        itemBuilder: (context, index) {
+                          final req = leaveHistory[index];
+                          Color lColor = req.status == 'Approved' ? Colors.green : (req.status == 'Rejected' ? Colors.red : Colors.orange);
+                          return Card(
+                            margin: const EdgeInsets.only(bottom: 10),
+                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+                            child: ListTile(
+                              title: Text('${req.type} Leave (${req.startDate} - ${req.endDate})', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
+                              subtitle: Text('Reason: ${req.reason}'),
+                              trailing: Chip(
+                                label: Text(req.status),
+                                backgroundColor: lColor.withOpacity(0.12),
+                                labelStyle: TextStyle(color: lColor, fontWeight: FontWeight.bold, fontSize: 11),
+                              ),
+                            ),
+                          );
+                        },
+                      ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildInfoCard(IconData icon, String title, String value) {
+    return Container(
+      margin: const EdgeInsets.only(bottom: 10),
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(16),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.03),
+            blurRadius: 8,
+            offset: const Offset(0, 2),
+          ),
+        ],
+      ),
+      child: Row(
+        children: [
+          CircleAvatar(
+            backgroundColor: Colors.deepPurple.withOpacity(0.08),
+            child: Icon(icon, color: Colors.deepPurple, size: 20),
+          ),
+          const SizedBox(width: 14),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(title, style: const TextStyle(fontSize: 12, color: Colors.grey)),
+                const SizedBox(height: 2),
+                Text(value, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}

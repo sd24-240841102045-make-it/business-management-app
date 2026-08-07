@@ -13,6 +13,12 @@ class FinancePage extends StatelessWidget {
         final double hPad = isDesktop ? 36 : isTablet ? 24 : 16;
 
         return Scaffold(
+          appBar: AppBar(
+            title: const Text('Finance & Ledger', style: TextStyle(fontWeight: FontWeight.bold)),
+            backgroundColor: Colors.green,
+            foregroundColor: Colors.white,
+            elevation: 2,
+          ),
           body: SingleChildScrollView(
             padding: EdgeInsets.symmetric(horizontal: hPad, vertical: 20),
             child: Center(
@@ -21,7 +27,7 @@ class FinancePage extends StatelessWidget {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    const Text('Financial Overview & Revenue', style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold)),
+                    const Text('Financial Overview & Revenue', style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold)),
                     const SizedBox(height: 16),
                     
                     // Responsive Finance Cards (Stacked on Mobile, Row on Tablet/Desktop)

@@ -13,6 +13,12 @@ class ReportsPage extends StatelessWidget {
         final double hPad = isDesktop ? 36 : isTablet ? 24 : 16;
 
         return Scaffold(
+          appBar: AppBar(
+            title: const Text('Reports & Analytics', style: TextStyle(fontWeight: FontWeight.bold)),
+            backgroundColor: Colors.indigo,
+            foregroundColor: Colors.white,
+            elevation: 2,
+          ),
           body: SingleChildScrollView(
             padding: EdgeInsets.symmetric(horizontal: hPad, vertical: 20),
             child: Center(
@@ -21,7 +27,7 @@ class ReportsPage extends StatelessWidget {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    const Text('Analytics & Operations Reports', style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold)),
+                    const Text('Analytics & Operations Reports', style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold)),
                     const SizedBox(height: 16),
                     _reportCard(context, 'Monthly Revenue Summary', 'Detailed revenue, billing breakdown, and project profits', Icons.analytics),
                     _reportCard(context, 'Employee Attendance & Leave Report', 'Audit logs for punch times, sick leaves, and approvals', Icons.fact_check),

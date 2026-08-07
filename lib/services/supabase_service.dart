@@ -29,8 +29,11 @@ class SupabaseService {
     return 'admin';
   }
 
-  Future<void> resetPassword(String email) async {
-    await client.auth.resetPasswordForEmail(email);
+  Future<void> resetPassword(String email, {String? redirectTo}) async {
+    await client.auth.resetPasswordForEmail(
+      email,
+      redirectTo: redirectTo,
+    );
   }
 
   // ============================================================
@@ -52,30 +55,53 @@ class SupabaseService {
       password: password,
       data: {
         'full_name': fullName,
+        'business_name': businessName,
+        'industry': industry,
         'phone': phone,
+        'country': country,
+        'role': 'admin',
       },
     );
 
     final user = response.user;
     if (user != null) {
-      // 1. Create Organization Tenant
-      final orgResponse = await client.from('organizations').insert({
-        'name': businessName,
-        'industry': industry,
-        'phone': phone,
-        'country': country,
-        'subscription_status': 'active',
-      }).select().single();
+      // 1. Try to sign in to establish active session if auto-confirm is off
+      if (client.auth.currentSession == null) {
+        try {
+          await client.auth.signInWithPassword(email: email, password: password);
+        } catch (e) {
+          debugPrint('Post-signup auto sign-in note: $e');
+        }
+      }
 
-      final orgId = orgResponse['id'];
+      // 2. Check if organization was created via DB trigger or insert manually
+      try {
+        final existingMemberships = await client
+            .from('organization_memberships')
+            .select('organization_id')
+            .eq('user_id', user.id);
 
-      // 2. Insert Admin Membership into organization_memberships
-      await client.from('organization_memberships').insert({
-        'organization_id': orgId,
-        'user_id': user.id,
-        'role': 'admin',
-        'status': 'active',
-      });
+        if ((existingMemberships as List).isEmpty) {
+          final orgResponse = await client.from('organizations').insert({
+            'name': businessName,
+            'industry': industry,
+            'phone': phone,
+            'country': country,
+            'subscription_status': 'active',
+          }).select().single();
+
+          final orgId = orgResponse['id'];
+
+          await client.from('organization_memberships').insert({
+            'organization_id': orgId,
+            'user_id': user.id,
+            'role': 'admin',
+            'status': 'active',
+          });
+        }
+      } catch (e) {
+        debugPrint('Manual organization insert note: $e');
+      }
 
       // Fetch active organization context
       await loadUserOrganizationContext();
@@ -338,13 +364,48 @@ class SupabaseService {
   }
 
   // ============================================================
-  // 6. LEGACY / APP_DATA_STORE COMPATIBILITY METHODS
+  // 6. LEGACY / APP_DATA_STORE COMPATIBILITY & REALTIME METHODS
   // ============================================================
+
+  RealtimeChannel? _realtimeChannel;
+
+  /// Subscribe to Realtime Postgres changes across all organization tables
+  void subscribeToRealtimeChanges(VoidCallback onDataChanged) {
+    _realtimeChannel?.unsubscribe();
+    _realtimeChannel = client
+        .channel('public:org_changes')
+        .onPostgresChanges(
+          event: PostgresChangeEvent.all,
+          schema: 'public',
+          callback: (payload) {
+            debugPrint('Supabase Realtime event received: ${payload.eventType}');
+            onDataChanged();
+          },
+        )
+        .subscribe();
+  }
 
   Future<List<Employee>?> fetchEmployees() async {
     try {
-      final response = await client.from('employees').select();
-      final list = (response as List).map((json) => Employee.fromMap(json)).toList();
+      var query = client.from('employees').select('*, profiles(*)');
+      if (_currentOrganization != null) {
+        query = query.eq('organization_id', _currentOrganization!.id);
+      }
+      final response = await query;
+      final list = (response as List).map((json) {
+        final profile = json['profiles'] as Map<String, dynamic>?;
+        return Employee(
+          id: json['id']?.toString() ?? '',
+          name: profile?['full_name']?.toString() ?? 'Team Member',
+          role: json['designation']?.toString() ?? 'Staff',
+          department: json['department']?.toString() ?? 'General',
+          email: profile?['email']?.toString() ?? '',
+          phone: profile?['phone']?.toString() ?? '',
+          avatarUrl: profile?['avatar_url']?.toString() ?? '',
+          status: json['status']?.toString() ?? 'Active',
+          joiningDate: json['joining_date']?.toString() ?? '',
+        );
+      }).toList();
       return list;
     } catch (e) {
       debugPrint('Supabase fetchEmployees error: $e');
@@ -354,7 +415,17 @@ class SupabaseService {
 
   Future<bool> insertEmployee(Employee emp) async {
     try {
-      await client.from('employees').upsert(emp.toMap());
+      if (_currentOrganization == null) return false;
+      final userId = currentUser?.id;
+      if (userId == null) return false;
+
+      await client.from('employees').upsert({
+        'organization_id': _currentOrganization!.id,
+        'user_id': userId,
+        'designation': emp.role.isEmpty ? 'Staff' : emp.role,
+        'department': emp.department.isEmpty ? 'General' : emp.department,
+        'status': emp.status.isEmpty ? 'Active' : emp.status,
+      });
       return true;
     } catch (e) {
       debugPrint('Supabase insertEmployee error: $e');
@@ -364,7 +435,11 @@ class SupabaseService {
 
   Future<bool> updateEmployee(Employee emp) async {
     try {
-      await client.from('employees').update(emp.toMap()).eq('id', emp.id);
+      await client.from('employees').update({
+        'designation': emp.role,
+        'department': emp.department,
+        'status': emp.status,
+      }).eq('id', emp.id);
       return true;
     } catch (e) {
       debugPrint('Supabase updateEmployee error: $e');
@@ -384,8 +459,23 @@ class SupabaseService {
 
   Future<List<ClientModel>?> fetchClients() async {
     try {
-      final response = await client.from('clients').select();
-      final list = (response as List).map((json) => ClientModel.fromMap(json)).toList();
+      var query = client.from('clients').select();
+      if (_currentOrganization != null) {
+        query = query.eq('organization_id', _currentOrganization!.id);
+      }
+      final response = await query;
+      final list = (response as List).map((json) {
+        return ClientModel(
+          id: json['id']?.toString() ?? '',
+          name: json['contact_name']?.toString() ?? json['name']?.toString() ?? '',
+          company: json['company_name']?.toString() ?? json['company']?.toString() ?? '',
+          email: json['email']?.toString() ?? '',
+          phone: json['phone']?.toString() ?? '',
+          status: 'Active',
+          projectType: 'General Consulting',
+          budget: 0.0,
+        );
+      }).toList();
       return list;
     } catch (e) {
       debugPrint('Supabase fetchClients error: $e');
@@ -395,7 +485,15 @@ class SupabaseService {
 
   Future<bool> insertClient(ClientModel clientData) async {
     try {
-      await client.from('clients').upsert(clientData.toMap());
+      if (_currentOrganization == null) return false;
+      await client.from('clients').insert({
+        'organization_id': _currentOrganization!.id,
+        'client_type': clientData.company.isNotEmpty ? 'business' : 'individual',
+        'company_name': clientData.company,
+        'contact_name': clientData.name.isEmpty ? clientData.company : clientData.name,
+        'email': clientData.email,
+        'phone': clientData.phone,
+      });
       return true;
     } catch (e) {
       debugPrint('Supabase insertClient error: $e');
@@ -405,7 +503,12 @@ class SupabaseService {
 
   Future<bool> updateClient(ClientModel clientData) async {
     try {
-      await client.from('clients').update(clientData.toMap()).eq('id', clientData.id);
+      await client.from('clients').update({
+        'company_name': clientData.company,
+        'contact_name': clientData.name,
+        'email': clientData.email,
+        'phone': clientData.phone,
+      }).eq('id', clientData.id);
       return true;
     } catch (e) {
       debugPrint('Supabase updateClient error: $e');
@@ -425,8 +528,24 @@ class SupabaseService {
 
   Future<List<LeaveRequest>?> fetchLeaveRequests() async {
     try {
-      final response = await client.from('leave_requests').select();
-      final list = (response as List).map((json) => LeaveRequest.fromMap(json)).toList();
+      var query = client.from('leave_requests').select('*, profiles(*)');
+      if (_currentOrganization != null) {
+        query = query.eq('organization_id', _currentOrganization!.id);
+      }
+      final response = await query;
+      final list = (response as List).map((json) {
+        final profile = json['profiles'] as Map<String, dynamic>?;
+        return LeaveRequest(
+          id: json['id']?.toString() ?? '',
+          employeeId: json['user_id']?.toString() ?? '',
+          employeeName: profile?['full_name']?.toString() ?? 'Staff',
+          type: json['leave_type']?.toString() ?? 'Casual',
+          startDate: json['start_date']?.toString() ?? '',
+          endDate: json['end_date']?.toString() ?? '',
+          reason: json['reason']?.toString() ?? '',
+          status: json['status']?.toString() ?? 'Pending',
+        );
+      }).toList();
       return list;
     } catch (e) {
       debugPrint('Supabase fetchLeaveRequests error: $e');
@@ -436,7 +555,16 @@ class SupabaseService {
 
   Future<bool> insertLeaveRequest(LeaveRequest request) async {
     try {
-      await client.from('leave_requests').upsert(request.toMap());
+      if (_currentOrganization == null || currentUser == null) return false;
+      await client.from('leave_requests').insert({
+        'organization_id': _currentOrganization!.id,
+        'user_id': currentUser!.id,
+        'leave_type': request.type.isEmpty ? 'Casual' : request.type,
+        'start_date': request.startDate.isEmpty ? DateTime.now().toIso8601String().split('T')[0] : request.startDate,
+        'end_date': request.endDate.isEmpty ? DateTime.now().toIso8601String().split('T')[0] : request.endDate,
+        'reason': request.reason,
+        'status': request.status,
+      });
       return true;
     } catch (e) {
       debugPrint('Supabase insertLeaveRequest error: $e');
@@ -456,8 +584,21 @@ class SupabaseService {
 
   Future<List<ChatMessage>?> fetchChatMessages() async {
     try {
-      final response = await client.from('chat_messages').select().order('created_at', ascending: true);
-      final list = (response as List).map((json) => ChatMessage.fromMap(json)).toList();
+      var query = client.from('messages').select('*, sender:profiles(*)').order('created_at', ascending: true);
+      final response = await query;
+      final list = (response as List).map((json) {
+        final senderProfile = json['sender'] as Map<String, dynamic>?;
+        return ChatMessage(
+          id: json['id']?.toString() ?? '',
+          senderId: json['sender_id']?.toString() ?? '',
+          senderName: senderProfile?['full_name']?.toString() ?? 'User',
+          senderRole: 'admin',
+          receiverId: '',
+          receiverName: 'General',
+          message: json['content']?.toString() ?? '',
+          createdAt: json['created_at']?.toString() ?? DateTime.now().toIso8601String(),
+        );
+      }).toList();
       return list;
     } catch (e) {
       debugPrint('Supabase fetchChatMessages error: $e');
@@ -467,7 +608,26 @@ class SupabaseService {
 
   Future<bool> sendChatMessage(ChatMessage message) async {
     try {
-      await client.from('chat_messages').insert(message.toMap());
+      if (currentUser == null) return false;
+      final convs = await client.from('conversations').select('id').limit(1);
+      String convId;
+      if ((convs as List).isNotEmpty) {
+        convId = convs.first['id'];
+      } else {
+        if (_currentOrganization == null) return false;
+        final newConv = await client.from('conversations').insert({
+          'organization_id': _currentOrganization!.id,
+          'type': 'direct',
+          'title': 'General Chat',
+        }).select().single();
+        convId = newConv['id'];
+      }
+
+      await client.from('messages').insert({
+        'conversation_id': convId,
+        'sender_id': currentUser!.id,
+        'content': message.message,
+      });
       return true;
     } catch (e) {
       debugPrint('Supabase sendChatMessage error: $e');

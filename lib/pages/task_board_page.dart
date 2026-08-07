@@ -28,13 +28,17 @@ class _TaskBoardPageState extends State<TaskBoardPage> {
     final completed = tasks.where((t) => t.status == 'Completed').toList();
 
     return Scaffold(
+      appBar: AppBar(
+        title: const Text('Task Kanban Board', style: TextStyle(fontWeight: FontWeight.bold)),
+        backgroundColor: Colors.deepPurple,
+        foregroundColor: Colors.white,
+        elevation: 2,
+      ),
       body: Padding(
-        padding: const EdgeInsets.all(20),
+        padding: const EdgeInsets.all(16),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            const Text('Task Kanban Board', style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold)),
-            const SizedBox(height: 16),
             Expanded(
               child: SingleChildScrollView(
                 scrollDirection: Axis.horizontal,
@@ -74,8 +78,13 @@ class _TaskBoardPageState extends State<TaskBoardPage> {
             children: [
               CircleAvatar(radius: 6, backgroundColor: headerColor),
               const SizedBox(width: 8),
-              Text(title, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
-              const Spacer(),
+              Expanded(
+                child: Text(
+                  title,
+                  style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ),
               Chip(
                 label: Text('${taskList.length}'),
                 padding: EdgeInsets.zero,
@@ -106,7 +115,13 @@ class _TaskBoardPageState extends State<TaskBoardPage> {
                         Row(
                           mainAxisAlignment: MainAxisAlignment.spaceBetween,
                           children: [
-                            Text(task.assignedToName, style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w600)),
+                            Expanded(
+                              child: Text(
+                                task.assignedToName,
+                                style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w600),
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                            ),
                             Text(task.dueDate, style: const TextStyle(fontSize: 11, color: Colors.grey)),
                           ],
                         ),

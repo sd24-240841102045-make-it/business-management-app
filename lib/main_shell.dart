@@ -41,7 +41,6 @@ class _MainShellState extends State<MainShell> {
       EmployeesBody(key: _employeesKey, onNavigate: _onItemTapped),
       ClientsBody(key: _clientsKey),
       AttendanceLeaveBody(key: _attendanceKey),
-      const ChatPage(),
       const ProfileBody(),
     ];
 
@@ -50,7 +49,6 @@ class _MainShellState extends State<MainShell> {
       'Employees',
       'Clients',
       'Attendance & Leave',
-      'Live Chat Communications',
       'Profile',
     ];
 
@@ -185,11 +183,6 @@ class _MainShellState extends State<MainShell> {
                           label: Text('Attendance'),
                         ),
                         NavigationRailDestination(
-                          icon: Icon(Icons.chat_bubble_outline),
-                          selectedIcon: Icon(Icons.chat_bubble),
-                          label: Text('Chat'),
-                        ),
-                        NavigationRailDestination(
                           icon: Icon(Icons.person_outline),
                           selectedIcon: Icon(Icons.person),
                           label: Text('Profile'),
@@ -234,11 +227,6 @@ class _MainShellState extends State<MainShell> {
                       icon: Icon(Icons.calendar_month_outlined),
                       selectedIcon: Icon(Icons.calendar_month),
                       label: 'Attendance',
-                    ),
-                    NavigationDestination(
-                      icon: Icon(Icons.chat_bubble_outline),
-                      selectedIcon: Icon(Icons.chat_bubble),
-                      label: 'Chat',
                     ),
                     NavigationDestination(
                       icon: Icon(Icons.person_outline),

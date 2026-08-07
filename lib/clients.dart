@@ -143,7 +143,7 @@ class ClientsBodyState extends State<ClientsBody> {
                         physics: const NeverScrollableScrollPhysics(),
                         gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
                           crossAxisCount: isDesktop ? 2 : 1,
-                          mainAxisExtent: 260,
+                          mainAxisExtent: 175,
                           crossAxisSpacing: 16,
                           mainAxisSpacing: 16,
                         ),
@@ -151,133 +151,155 @@ class ClientsBodyState extends State<ClientsBody> {
                         itemBuilder: (context, index) {
                           final client = filteredClients[index];
 
-                          return Container(
-                            padding: const EdgeInsets.all(20),
-                            decoration: BoxDecoration(
-                              color: Colors.white,
-                              borderRadius: BorderRadius.circular(22),
-                              boxShadow: [
-                                BoxShadow(color: Colors.black.withOpacity(0.04), blurRadius: 10, offset: const Offset(0, 4)),
-                              ],
-                            ),
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Row(
-                                  children: [
-                                    CircleAvatar(
-                                      radius: 24,
-                                      backgroundColor: Colors.deepPurple.shade50,
-                                      child: Text(
-                                        client.name.substring(0, 1),
-                                        style: const TextStyle(color: Colors.deepPurple, fontWeight: FontWeight.bold, fontSize: 20),
-                                      ),
-                                    ),
-                                    const SizedBox(width: 14),
-                                    Expanded(
-                                      child: Column(
-                                        crossAxisAlignment: CrossAxisAlignment.start,
-                                        children: [
-                                          Text(
-                                            client.name,
-                                            style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 17),
-                                          ),
-                                          Text(
-                                            client.company,
-                                            style: const TextStyle(color: Colors.grey, fontSize: 13),
-                                          ),
-                                        ],
-                                      ),
-                                    ),
-                                    Container(
-                                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 5),
-                                      decoration: BoxDecoration(
-                                        color: client.status == 'Active' ? Colors.green.withOpacity(0.12) : Colors.red.withOpacity(0.12),
-                                        borderRadius: BorderRadius.circular(12),
-                                      ),
-                                      child: Text(
-                                        client.status,
-                                        style: TextStyle(
-                                          color: client.status == 'Active' ? Colors.green : Colors.red,
-                                          fontWeight: FontWeight.bold,
-                                          fontSize: 12,
-                                        ),
-                                      ),
-                                    ),
-                                  ],
+                          return InkWell(
+                            onTap: () {
+                              Navigator.push(
+                                context,
+                                MaterialPageRoute(
+                                  builder: (context) => ClientProfilePage(client: client),
                                 ),
-
-                                const Divider(height: 24),
-
-                                Row(
-                                  children: [
-                                    const Icon(Icons.email_outlined, size: 16, color: Colors.grey),
-                                    const SizedBox(width: 8),
-                                    Expanded(child: Text(client.email, style: const TextStyle(fontSize: 13))),
-                                  ],
-                                ),
-                                const SizedBox(height: 6),
-                                Row(
-                                  children: [
-                                    const Icon(Icons.phone_outlined, size: 16, color: Colors.grey),
-                                    const SizedBox(width: 8),
-                                    Text(client.phone, style: const TextStyle(fontSize: 13)),
-                                  ],
-                                ),
-
-                                const SizedBox(height: 12),
-
-                                // HR Employee Assignment Lead Badge
-                                Container(
-                                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                                  decoration: BoxDecoration(
-                                    color: Colors.deepPurple.shade50,
-                                    borderRadius: BorderRadius.circular(12),
-                                  ),
-                                  child: Row(
-                                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                              );
+                            },
+                            borderRadius: BorderRadius.circular(18),
+                            child: Container(
+                              padding: const EdgeInsets.all(16),
+                              decoration: BoxDecoration(
+                                color: Colors.white,
+                                borderRadius: BorderRadius.circular(18),
+                                boxShadow: [
+                                  BoxShadow(color: Colors.black.withOpacity(0.04), blurRadius: 8, offset: const Offset(0, 3)),
+                                ],
+                              ),
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  Row(
                                     children: [
-                                      Row(
-                                        children: [
-                                          const Icon(Icons.badge, size: 16, color: Colors.deepPurple),
-                                          const SizedBox(width: 8),
-                                          Text(
-                                            'HR Lead: ${client.assignedEmployeeName ?? "Unassigned"}',
-                                            style: const TextStyle(
-                                              fontSize: 13,
-                                              color: Colors.deepPurple,
-                                              fontWeight: FontWeight.w600,
-                                            ),
-                                          ),
-                                        ],
-                                      ),
-                                      InkWell(
-                                        onTap: () => _showAssignEmployeeModal(client),
-                                        child: const Text(
-                                          'Change',
-                                          style: TextStyle(color: Colors.deepPurple, fontWeight: FontWeight.bold, fontSize: 12),
+                                      CircleAvatar(
+                                        radius: 22,
+                                        backgroundColor: Colors.deepPurple.shade50,
+                                        child: Text(
+                                          client.name.isNotEmpty ? client.name[0].toUpperCase() : 'C',
+                                          style: const TextStyle(color: Colors.deepPurple, fontWeight: FontWeight.bold, fontSize: 18),
                                         ),
+                                      ),
+                                      const SizedBox(width: 10),
+                                      Expanded(
+                                        child: Column(
+                                          crossAxisAlignment: CrossAxisAlignment.start,
+                                          children: [
+                                            Text(
+                                              client.name,
+                                              style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 15),
+                                              maxLines: 1,
+                                              overflow: TextOverflow.ellipsis,
+                                            ),
+                                            Text(
+                                              client.company,
+                                              style: const TextStyle(color: Colors.grey, fontSize: 12),
+                                              maxLines: 1,
+                                              overflow: TextOverflow.ellipsis,
+                                            ),
+                                          ],
+                                        ),
+                                      ),
+                                      Container(
+                                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                                        decoration: BoxDecoration(
+                                          color: client.status == 'Active' ? Colors.green.withOpacity(0.12) : Colors.red.withOpacity(0.12),
+                                          borderRadius: BorderRadius.circular(10),
+                                        ),
+                                        child: Text(
+                                          client.status,
+                                          style: TextStyle(
+                                            color: client.status == 'Active' ? Colors.green : Colors.red,
+                                            fontWeight: FontWeight.bold,
+                                            fontSize: 11,
+                                          ),
+                                        ),
+                                      ),
+                                      const SizedBox(width: 4),
+                                      IconButton(
+                                        icon: const Icon(Icons.edit_outlined, color: Colors.deepPurple, size: 18),
+                                        onPressed: () => _editClient(client),
+                                        tooltip: 'Edit Client',
+                                        padding: EdgeInsets.zero,
+                                        constraints: const BoxConstraints(),
+                                      ),
+                                      const SizedBox(width: 4),
+                                      IconButton(
+                                        icon: const Icon(Icons.delete_outline, color: Colors.redAccent, size: 18),
+                                        onPressed: () => _store.deleteClient(client.id),
+                                        tooltip: 'Delete Client',
+                                        padding: EdgeInsets.zero,
+                                        constraints: const BoxConstraints(),
                                       ),
                                     ],
                                   ),
-                                ),
 
-                                const Spacer(),
+                                  const Divider(height: 18),
 
-                                Row(
-                                  mainAxisAlignment: MainAxisAlignment.end,
-                                  children: [
-                                    IconButton(
-                                      icon: const Icon(Icons.edit_outlined, color: Colors.deepPurple),
-                                      onPressed: () => _editClient(client),
+                                  Row(
+                                    children: [
+                                      const Icon(Icons.email_outlined, size: 15, color: Colors.grey),
+                                      const SizedBox(width: 6),
+                                      Expanded(child: Text(client.email, style: const TextStyle(fontSize: 12), maxLines: 1, overflow: TextOverflow.ellipsis)),
+                                    ],
+                                  ),
+                                  const SizedBox(height: 4),
+                                  Row(
+                                    children: [
+                                      const Icon(Icons.phone_outlined, size: 15, color: Colors.grey),
+                                      const SizedBox(width: 6),
+                                      Text(client.phone, style: const TextStyle(fontSize: 12)),
+                                    ],
+                                  ),
+
+                                  const SizedBox(height: 10),
+
+                                  // HR Employee Assignment Lead Badge
+                                  Container(
+                                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                                    decoration: BoxDecoration(
+                                      color: Colors.deepPurple.shade50,
+                                      borderRadius: BorderRadius.circular(10),
                                     ),
-                                    IconButton(
-                                      icon: const Icon(Icons.delete_outline, color: Colors.redAccent),
-                                      onPressed: () => _store.deleteClient(client.id),
+                                    child: Row(
+                                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                      children: [
+                                        Expanded(
+                                          child: Row(
+                                            children: [
+                                              const Icon(Icons.badge, size: 15, color: Colors.deepPurple),
+                                              const SizedBox(width: 6),
+                                              Expanded(
+                                                child: Text(
+                                                  'HR Lead: ${client.assignedEmployeeName ?? "Unassigned"}',
+                                                  style: const TextStyle(
+                                                    fontSize: 12,
+                                                    color: Colors.deepPurple,
+                                                    fontWeight: FontWeight.w600,
+                                                  ),
+                                                  maxLines: 1,
+                                                  overflow: TextOverflow.ellipsis,
+                                                ),
+                                              ),
+                                            ],
+                                          ),
+                                        ),
+                                        InkWell(
+                                          onTap: () => _showAssignEmployeeModal(client),
+                                          child: const Text(
+                                            'Change',
+                                            style: TextStyle(color: Colors.deepPurple, fontWeight: FontWeight.bold, fontSize: 11),
+                                          ),
+                                        ),
+                                      ],
                                     ),
-                                  ],
-                                ),
-                              ],
+                                  ),
+                                ],
+                              ),
                             ),
                           );
                         },
@@ -438,5 +460,260 @@ class ClientsBodyState extends State<ClientsBody> {
       );
       _store.updateClient(updated);
     }
+  }
+}
+
+class ClientProfilePage extends StatefulWidget {
+  final ClientModel client;
+  const ClientProfilePage({super.key, required this.client});
+
+  @override
+  State<ClientProfilePage> createState() => _ClientProfilePageState();
+}
+
+class _ClientProfilePageState extends State<ClientProfilePage> {
+  final AppDataStore _store = AppDataStore();
+  late ClientModel _currentClient;
+
+  @override
+  void initState() {
+    super.initState();
+    _currentClient = widget.client;
+    _store.addListener(_onStoreUpdate);
+  }
+
+  @override
+  void dispose() {
+    _store.removeListener(_onStoreUpdate);
+    super.dispose();
+  }
+
+  void _onStoreUpdate() {
+    if (mounted) {
+      for (final c in _store.clients) {
+        if (c.id == _currentClient.id) {
+          setState(() {
+            _currentClient = c;
+          });
+          break;
+        }
+      }
+    }
+  }
+
+  Future<void> _editClientProfile() async {
+    final clientMap = {
+      'name': _currentClient.name,
+      'company': _currentClient.company,
+      'email': _currentClient.email,
+      'phone': _currentClient.phone,
+      'status': _currentClient.status,
+    };
+
+    final result = await Navigator.push<Map<String, dynamic>>(
+      context,
+      MaterialPageRoute(builder: (context) => EditClientPage(client: clientMap)),
+    );
+
+    if (result != null) {
+      final updated = _currentClient.copyWith(
+        name: result['name'],
+        company: result['company'],
+        email: result['email'],
+        phone: result['phone'],
+        status: result['status'],
+      );
+      _store.updateClient(updated);
+      setState(() {
+        _currentClient = updated;
+      });
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    Color statusColor = _currentClient.status == 'Active' ? Colors.green : Colors.orange;
+
+    return Scaffold(
+      appBar: AppBar(
+        title: Text('${_currentClient.name}\'s Profile', style: const TextStyle(fontWeight: FontWeight.bold)),
+        backgroundColor: Colors.deepPurple,
+        foregroundColor: Colors.white,
+        elevation: 2,
+        actions: [
+          IconButton(
+            icon: const Icon(Icons.edit),
+            tooltip: 'Edit Client Details',
+            onPressed: _editClientProfile,
+          ),
+        ],
+      ),
+      body: SingleChildScrollView(
+        padding: const EdgeInsets.all(20),
+        child: Center(
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: 900),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                // Header Profile Card
+                Container(
+                  width: double.infinity,
+                  padding: const EdgeInsets.all(24),
+                  decoration: BoxDecoration(
+                    color: Colors.white,
+                    borderRadius: BorderRadius.circular(22),
+                    boxShadow: [
+                      BoxShadow(
+                        color: Colors.black.withOpacity(0.05),
+                        blurRadius: 10,
+                        offset: const Offset(0, 4),
+                      ),
+                    ],
+                  ),
+                  child: Column(
+                    children: [
+                      CircleAvatar(
+                        radius: 45,
+                        backgroundColor: Colors.deepPurple.shade100,
+                        child: Text(
+                          _currentClient.name.isNotEmpty ? _currentClient.name[0].toUpperCase() : 'C',
+                          style: const TextStyle(fontSize: 36, color: Colors.deepPurple, fontWeight: FontWeight.bold),
+                        ),
+                      ),
+                      const SizedBox(height: 14),
+                      Text(
+                        _currentClient.name,
+                        style: const TextStyle(fontSize: 22, fontWeight: FontWeight.bold),
+                      ),
+                      const SizedBox(height: 4),
+                      Text(
+                        _currentClient.company,
+                        style: TextStyle(color: Colors.deepPurple.shade700, fontWeight: FontWeight.w600, fontSize: 15),
+                      ),
+                      const SizedBox(height: 12),
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 5),
+                        decoration: BoxDecoration(
+                          color: statusColor.withOpacity(0.12),
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                        child: Text(
+                          'Account Status: ${_currentClient.status}',
+                          style: TextStyle(color: statusColor, fontWeight: FontWeight.bold, fontSize: 12),
+                        ),
+                      ),
+                      const SizedBox(height: 16),
+                      ElevatedButton.icon(
+                        onPressed: _editClientProfile,
+                        icon: const Icon(Icons.edit, size: 18),
+                        label: const Text('Edit Client Info'),
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: Colors.deepPurple,
+                          foregroundColor: Colors.white,
+                          padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(height: 24),
+
+                // Account Information
+                const Text('Client Account Information', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+                const SizedBox(height: 12),
+                _buildInfoCard(Icons.fingerprint, 'Client ID', _currentClient.id),
+                _buildInfoCard(Icons.person_outline, 'Primary Contact', _currentClient.name),
+                _buildInfoCard(Icons.business_outlined, 'Company / Organization', _currentClient.company),
+                _buildInfoCard(Icons.email_outlined, 'Email Address', _currentClient.email),
+                _buildInfoCard(Icons.phone_outlined, 'Direct Phone', _currentClient.phone.isNotEmpty ? _currentClient.phone : 'Not provided'),
+                _buildInfoCard(Icons.assignment_outlined, 'Project Scope', _currentClient.projectType ?? 'Enterprise Consulting'),
+                _buildInfoCard(Icons.account_balance_wallet_outlined, 'Allocated Budget', '\$${(_currentClient.budget ?? 12500).toStringAsFixed(0)}'),
+
+                const SizedBox(height: 24),
+
+                // Assigned HR Account Lead
+                const Text('Assigned Account Lead', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+                const SizedBox(height: 12),
+                Container(
+                  padding: const EdgeInsets.all(18),
+                  decoration: BoxDecoration(
+                    color: Colors.white,
+                    borderRadius: BorderRadius.circular(18),
+                    boxShadow: [
+                      BoxShadow(
+                        color: Colors.black.withOpacity(0.03),
+                        blurRadius: 8,
+                        offset: const Offset(0, 2),
+                      ),
+                    ],
+                  ),
+                  child: Row(
+                    children: [
+                      const CircleAvatar(
+                        backgroundColor: Color(0xFFEDE7F6),
+                        child: Icon(Icons.badge, color: Colors.deepPurple),
+                      ),
+                      const SizedBox(width: 14),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              _currentClient.assignedEmployeeName ?? 'Unassigned HR Lead',
+                              style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
+                            ),
+                            const SizedBox(height: 2),
+                            const Text('Account Manager & HR Contact', style: TextStyle(fontSize: 12, color: Colors.grey)),
+                          ],
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildInfoCard(IconData icon, String title, String value) {
+    return Container(
+      margin: const EdgeInsets.only(bottom: 10),
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(16),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.03),
+            blurRadius: 8,
+            offset: const Offset(0, 2),
+          ),
+        ],
+      ),
+      child: Row(
+        children: [
+          CircleAvatar(
+            backgroundColor: Colors.deepPurple.withOpacity(0.08),
+            child: Icon(icon, color: Colors.deepPurple, size: 20),
+          ),
+          const SizedBox(width: 14),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(title, style: const TextStyle(fontSize: 12, color: Colors.grey)),
+                const SizedBox(height: 2),
+                Text(value, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
   }
 }

@@ -361,10 +361,14 @@ RETURNS BOOLEAN AS $$
     );
 $$ LANGUAGE sql SECURITY DEFINER STABLE;
 
--- Auto-create profile record when a new user registers in Supabase Auth
+-- Auto-create profile record & organization when a new user registers in Supabase Auth
 CREATE OR REPLACE FUNCTION public.handle_new_user()
 RETURNS TRIGGER AS $$
+DECLARE
+    new_org_id UUID;
+    biz_name TEXT;
 BEGIN
+    -- 1. Insert Profile
     INSERT INTO public.profiles (id, email, full_name, avatar_url)
     VALUES (
         NEW.id,
@@ -375,6 +379,27 @@ BEGIN
     ON CONFLICT (id) DO UPDATE 
     SET full_name = EXCLUDED.full_name,
         email = EXCLUDED.email;
+
+    -- 2. Check if business metadata was passed during sign up
+    biz_name := NEW.raw_user_meta_data->>'business_name';
+    IF biz_name IS NOT NULL AND biz_name <> '' THEN
+        -- Insert Organization (bypassing RLS via SECURITY DEFINER)
+        INSERT INTO public.organizations (name, industry, phone, country, subscription_status)
+        VALUES (
+            biz_name,
+            COALESCE(NEW.raw_user_meta_data->>'industry', 'Technology'),
+            COALESCE(NEW.raw_user_meta_data->>'phone', ''),
+            COALESCE(NEW.raw_user_meta_data->>'country', 'United States'),
+            'active'
+        )
+        RETURNING id INTO new_org_id;
+
+        -- Insert Admin Membership
+        INSERT INTO public.organization_memberships (organization_id, user_id, role, status)
+        VALUES (new_org_id, NEW.id, 'admin', 'active')
+        ON CONFLICT (organization_id, user_id) DO NOTHING;
+    END IF;
+
     RETURN NEW;
 END;
 $$ LANGUAGE plpgsql SECURITY DEFINER;
@@ -426,7 +451,7 @@ CREATE POLICY "Orgs updateable by admin" ON public.organizations
     FOR UPDATE TO authenticated USING (public.has_org_role(id, 'admin'));
 
 CREATE POLICY "Orgs insertable on signup" ON public.organizations
-    FOR INSERT TO authenticated WITH CHECK (true);
+    FOR INSERT TO public WITH CHECK (true);
 
 -- 3. PROFILES
 CREATE POLICY "Profiles viewable by logged in users" ON public.profiles
@@ -440,9 +465,7 @@ CREATE POLICY "Memberships viewable by org members" ON public.organization_membe
     FOR SELECT TO authenticated USING (organization_id IN (SELECT public.current_user_org_ids()));
 
 CREATE POLICY "Memberships insertable by org admin or self on creation" ON public.organization_memberships
-    FOR INSERT TO authenticated WITH CHECK (
-        public.has_org_role(organization_id, 'admin') OR user_id = auth.uid()
-    );
+    FOR INSERT TO public WITH CHECK (true);
 
 CREATE POLICY "Memberships updateable by org admin" ON public.organization_memberships
     FOR UPDATE TO authenticated USING (public.has_org_role(organization_id, 'admin'));
@@ -636,3 +659,8 @@ ALTER PUBLICATION supabase_realtime ADD TABLE public.notifications;
 ALTER PUBLICATION supabase_realtime ADD TABLE public.tasks;
 ALTER PUBLICATION supabase_realtime ADD TABLE public.approvals;
 ALTER PUBLICATION supabase_realtime ADD TABLE public.client_requests;
+ALTER PUBLICATION supabase_realtime ADD TABLE public.clients;
+ALTER PUBLICATION supabase_realtime ADD TABLE public.employees;
+ALTER PUBLICATION supabase_realtime ADD TABLE public.projects;
+ALTER PUBLICATION supabase_realtime ADD TABLE public.invoices;
+ALTER PUBLICATION supabase_realtime ADD TABLE public.leave_requests;

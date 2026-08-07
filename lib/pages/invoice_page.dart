@@ -23,6 +23,12 @@ class InvoicePage extends StatelessWidget {
         final double hPad = isDesktop ? 36 : isTablet ? 24 : 16;
 
         return Scaffold(
+          appBar: AppBar(
+            title: const Text('Invoices & Billing', style: TextStyle(fontWeight: FontWeight.bold)),
+            backgroundColor: Colors.purple,
+            foregroundColor: Colors.white,
+            elevation: 2,
+          ),
           body: SingleChildScrollView(
             padding: EdgeInsets.symmetric(horizontal: hPad, vertical: 20),
             child: Center(
@@ -36,8 +42,8 @@ class InvoicePage extends StatelessWidget {
                       children: [
                         const Expanded(
                           child: Text(
-                            'Client Invoices & Billing',
-                            style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
+                            'Client Invoices Overview',
+                            style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
                             overflow: TextOverflow.ellipsis,
                           ),
                         ),
@@ -46,7 +52,7 @@ class InvoicePage extends StatelessWidget {
                           icon: const Icon(Icons.add, size: 18),
                           label: const Text('Create Invoice'),
                           style: ElevatedButton.styleFrom(
-                            backgroundColor: Colors.deepPurple,
+                            backgroundColor: Colors.purple,
                             foregroundColor: Colors.white,
                             shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
                           ),
@@ -82,7 +88,7 @@ class InvoicePage extends StatelessWidget {
                                           const CircleAvatar(
                                             radius: 18,
                                             backgroundColor: Color(0xFFEDE7F6),
-                                            child: Icon(Icons.receipt_long, color: Colors.deepPurple, size: 18),
+                                            child: Icon(Icons.receipt_long, color: Colors.purple, size: 18),
                                           ),
                                           const SizedBox(width: 10),
                                           Expanded(
@@ -105,7 +111,7 @@ class InvoicePage extends StatelessWidget {
                                         mainAxisAlignment: MainAxisAlignment.spaceBetween,
                                         children: [
                                           Text('Due: ${inv.dueDate}', style: const TextStyle(fontSize: 12, color: Colors.grey)),
-                                          Text('\$${inv.amount.toStringAsFixed(2)}', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16, color: Colors.deepPurple)),
+                                          Text('\$${inv.amount.toStringAsFixed(2)}', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16, color: Colors.purple)),
                                         ],
                                       ),
                                     ],
@@ -117,7 +123,7 @@ class InvoicePage extends StatelessWidget {
                                   children: [
                                     const CircleAvatar(
                                       backgroundColor: Color(0xFFEDE7F6),
-                                      child: Icon(Icons.receipt_long, color: Colors.deepPurple),
+                                      child: Icon(Icons.receipt_long, color: Colors.purple),
                                     ),
                                     const SizedBox(width: 14),
                                     Expanded(
