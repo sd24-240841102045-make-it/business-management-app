@@ -378,7 +378,43 @@ class ClientOverviewBody extends StatelessWidget {
                     ],
                   ),
                 ),
-                const SizedBox(height: 20),
+                const SizedBox(height: 16),
+
+                // Admin Announcement Banner if configured
+                if (matchedClient?.adminNote != null && matchedClient!.adminNote.isNotEmpty) ...[
+                  Container(
+                    width: double.infinity,
+                    padding: const EdgeInsets.all(16),
+                    decoration: BoxDecoration(
+                      color: Colors.purple.shade50,
+                      borderRadius: BorderRadius.circular(16),
+                      border: Border.all(color: Colors.deepPurple.shade200),
+                    ),
+                    child: Row(
+                      children: [
+                        const Icon(Icons.campaign, color: Colors.deepPurple, size: 28),
+                        const SizedBox(width: 12),
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              const Text(
+                                'Notice from Management',
+                                style: TextStyle(fontWeight: FontWeight.bold, color: Colors.deepPurple, fontSize: 13),
+                              ),
+                              const SizedBox(height: 2),
+                              Text(
+                                matchedClient.adminNote,
+                                style: const TextStyle(fontSize: 13, color: Colors.black87),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(height: 16),
+                ],
 
                 // Overview Cards Title
                 const Text(

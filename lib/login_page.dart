@@ -1,12 +1,17 @@
 import 'package:flutter/material.dart';
-import 'package:supabase_flutter/supabase_flutter.dart';
 import 'services/supabase_service.dart';
-import 'services/app_data_store.dart';
-import 'main_shell.dart';
-import 'client_shell.dart';
 
-enum AuthRole { admin, employee, client }
-enum AuthMode { signIn, createBusiness, acceptInvite }
+enum AuthRole {
+  admin,
+  employee,
+  client,
+}
+
+enum AuthMode {
+  signIn,
+  createBusiness,
+  acceptInvite,
+}
 
 class LoginPage extends StatefulWidget {
   const LoginPage({super.key});
@@ -16,24 +21,49 @@ class LoginPage extends StatefulWidget {
 }
 
 class _LoginPageState extends State<LoginPage> {
-  // Controllers for Sign In
-  final TextEditingController emailController = TextEditingController();
-  final TextEditingController passwordController = TextEditingController();
+  // ============================================================
+  // CONTROLLERS
+  // ============================================================
 
-  // Controllers for Business Creation (Admin)
-  final TextEditingController fullNameController = TextEditingController();
-  final TextEditingController businessNameController = TextEditingController();
-  final TextEditingController industryController = TextEditingController();
-  final TextEditingController phoneController = TextEditingController();
-  final TextEditingController countryController = TextEditingController();
+  final TextEditingController emailController =
+      TextEditingController();
 
-  // Controller for Invitations
-  final TextEditingController inviteTokenController = TextEditingController();
+  final TextEditingController passwordController =
+      TextEditingController();
+
+  final TextEditingController fullNameController =
+      TextEditingController();
+
+  final TextEditingController businessNameController =
+      TextEditingController();
+
+  final TextEditingController industryController =
+      TextEditingController();
+
+  final TextEditingController phoneController =
+      TextEditingController();
+
+  final TextEditingController countryController =
+      TextEditingController();
+
+  final TextEditingController inviteTokenController =
+      TextEditingController();
+
+  // ============================================================
+  // STATE
+  // ============================================================
 
   AuthRole selectedRole = AuthRole.admin;
+
   AuthMode authMode = AuthMode.signIn;
+
   bool obscurePassword = true;
+
   bool isLoading = false;
+
+  // ============================================================
+  // DISPOSE
+  // ============================================================
 
   @override
   void dispose() {
@@ -45,210 +75,304 @@ class _LoginPageState extends State<LoginPage> {
     phoneController.dispose();
     countryController.dispose();
     inviteTokenController.dispose();
+
     super.dispose();
   }
+
+  // ============================================================
+  // AUTH SUBMIT
+  // ============================================================
 
   Future<void> handleAuthSubmit() async {
     final email = emailController.text.trim();
     final password = passwordController.text.trim();
 
+    // ----------------------------------------------------------
+    // SIGN IN VALIDATION
+    // ----------------------------------------------------------
+
     if (authMode == AuthMode.signIn) {
       if (email.isEmpty || password.isEmpty) {
-        _showSnackBar('Please enter your email address and password');
+        _showSnackBar(
+          'Please enter your email address and password.',
+        );
         return;
       }
-    } else if (authMode == AuthMode.createBusiness) {
+    }
+
+    // ----------------------------------------------------------
+    // BUSINESS CREATION VALIDATION
+    // ----------------------------------------------------------
+
+    if (authMode == AuthMode.createBusiness) {
       if (email.isEmpty ||
           password.isEmpty ||
           fullNameController.text.trim().isEmpty ||
           businessNameController.text.trim().isEmpty) {
-        _showSnackBar('Please fill in all required business creation fields');
+        _showSnackBar(
+          'Please fill in all required business fields.',
+        );
         return;
       }
     }
 
+    // ----------------------------------------------------------
+    // INVITATION VALIDATION
+    // ----------------------------------------------------------
+
+    if (authMode == AuthMode.acceptInvite) {
+      if (inviteTokenController.text.trim().isEmpty ||
+          email.isEmpty ||
+          password.isEmpty ||
+          fullNameController.text.trim().isEmpty) {
+        _showSnackBar(
+          'Please fill in all invitation fields.',
+        );
+        return;
+      }
+    }
+
+    // ----------------------------------------------------------
+    // PASSWORD VALIDATION
+    // ----------------------------------------------------------
+
     if (password.length < 6) {
-      _showSnackBar('Password must be at least 6 characters long');
+      _showSnackBar(
+        'Password must be at least 6 characters long.',
+      );
       return;
     }
 
-    setState(() => isLoading = true);
+    setState(() {
+      isLoading = true;
+    });
 
     try {
+      // ========================================================
+      // CREATE BUSINESS
+      // ========================================================
+
       if (authMode == AuthMode.createBusiness) {
-        // Create new organization & register user as Business Admin
         await SupabaseService().signUpBusinessAdmin(
           email: email,
           password: password,
           fullName: fullNameController.text.trim(),
           businessName: businessNameController.text.trim(),
-          industry: industryController.text.trim().isEmpty ? 'Technology' : industryController.text.trim(),
+          industry: industryController.text.trim().isEmpty
+              ? 'Technology'
+              : industryController.text.trim(),
           phone: phoneController.text.trim(),
-          country: countryController.text.trim().isEmpty ? 'United States' : countryController.text.trim(),
+          country: countryController.text.trim().isEmpty
+              ? 'United States'
+              : countryController.text.trim(),
         );
-        await AppDataStore().refreshFromSupabase();
+
         if (!mounted) return;
-        _showSnackBar('Organization & Admin account created successfully!', isError: false);
-        _navigateToShell(AuthRole.admin);
-      } else if (authMode == AuthMode.acceptInvite) {
-        final token = inviteTokenController.text.trim();
-        if (token.isEmpty) {
-          _showSnackBar('Please enter your invitation code/token');
-          return;
-        }
+
+        _showSnackBar(
+          'Business account created successfully! Logged in as ${fullNameController.text.trim()} ($email)',
+          isError: false,
+        );
+
+        // AuthGate will handle the next screen.
+        return;
+      }
+
+      // ========================================================
+      // ACCEPT INVITATION
+      // ========================================================
+
+      if (authMode == AuthMode.acceptInvite) {
         await SupabaseService().acceptInvitation(
-          token: token,
+          token: inviteTokenController.text.trim(),
+          email: email,
           password: password,
           fullName: fullNameController.text.trim(),
         );
-        await AppDataStore().refreshFromSupabase();
+
         if (!mounted) return;
-        _showSnackBar('Invitation accepted! Welcome to the team.', isError: false);
-        _navigateToShell(selectedRole);
-      } else {
-        // Strict Database Sign In
-        final res = await SupabaseService().signInWithEmail(
-          email: email,
-          password: password,
+
+        _showSnackBar(
+          'Invitation accepted successfully! Logged in as ${fullNameController.text.trim()} ($email)',
+          isError: false,
         );
-        await AppDataStore().refreshFromSupabase();
 
-        if (!mounted) return;
-
-        if (res.user != null) {
-          final userRole = SupabaseService().currentRole;
-          final roleEnum = userRole == 'client'
-              ? AuthRole.client
-              : (userRole == 'employee' ? AuthRole.employee : AuthRole.admin);
-
-          _showSnackBar('Welcome back!', isError: false);
-          _navigateToShell(roleEnum);
-        } else {
-          _showSnackBar('Login failed: Invalid email or password', isError: true);
-        }
+        // AuthGate handles navigation.
+        return;
       }
+
+      // ========================================================
+      // SIGN IN
+      // ========================================================
+
+      await SupabaseService().signInWithEmail(
+        email: email,
+        password: password,
+      );
+
+      final user = SupabaseService().currentUser;
+      final userName = user?.userMetadata?['full_name'] as String? ?? 'User';
+
+      if (!mounted) return;
+
+      _showSnackBar(
+        'Welcome back, $userName ($email)!',
+        isError: false,
+      );
+
+      // Do NOT manually navigate here.
+      //
+      // AuthGate in main.dart will detect the Supabase session
+      // and load the correct shell based on the database role.
     } catch (e) {
+      if (!mounted) return;
+
+      final message = e
+          .toString()
+          .replaceAll('AuthException:', '')
+          .replaceAll('AuthRetryableFetchException:', '')
+          .replaceAll('Exception:', '')
+          .trim();
+
+      _showSnackBar(
+        message.isEmpty
+            ? 'Authentication failed. Please try again.'
+            : message,
+      );
+    } finally {
       if (mounted) {
-        final errStr = e.toString().toLowerCase();
-        if (errStr.contains('rate limit') || errStr.contains('rate_limit') || errStr.contains('over_email_send_rate_limit')) {
-          _showSnackBar('Supabase default email rate limit reached (max 3-4 emails/hr). Please wait a few minutes or disable "Confirm Email" in Supabase settings.', isError: true);
-        } else {
-          final msg = e.toString().replaceAll('AuthException:', '').replaceAll('Exception:', '').trim();
-          _showSnackBar('Authentication failed: $msg', isError: true);
-        }
+        setState(() {
+          isLoading = false;
+        });
       }
-    } finally {
-      if (mounted) setState(() => isLoading = false);
     }
   }
 
-  Future<void> _demoLogin(AuthRole role) async {
-    final demoEmail = role == AuthRole.admin ? 'admin@business.com' : 'client@acme.com';
-    final demoPassword = role == AuthRole.admin ? 'admin123' : 'client123';
+  // ============================================================
+  // FORGOT PASSWORD
+  // ============================================================
 
-    emailController.text = demoEmail;
-    passwordController.text = demoPassword;
+  Future<void> _showForgotPasswordDialog() async {
+    final controller = TextEditingController(
+      text: emailController.text.trim(),
+    );
 
-    setState(() => isLoading = true);
-    try {
-      final res = await SupabaseService().signInWithEmail(
-        email: demoEmail,
-        password: demoPassword,
-      );
-      await AppDataStore().refreshFromSupabase();
+    bool sending = false;
 
-      if (!mounted) return;
-
-      if (res.user != null) {
-        final userRole = SupabaseService().currentRole;
-        final roleEnum = userRole == 'client'
-            ? AuthRole.client
-            : (userRole == 'employee' ? AuthRole.employee : AuthRole.admin);
-
-        _showSnackBar('Logged in as ${role == AuthRole.client ? "Client" : "Admin"}', isError: false);
-        _navigateToShell(roleEnum);
-      } else {
-        _showSnackBar('Demo user not found in database. Please click "Create Business".', isError: true);
-      }
-    } catch (e) {
-      if (!mounted) return;
-      _showSnackBar('Account not found in database: ${e.toString().replaceAll('AuthException:', '').trim()}. Use "Create Business" to register.', isError: true);
-    } finally {
-      if (mounted) setState(() => isLoading = false);
-    }
-  }
-
-  void _navigateToShell(AuthRole role) {
-    if (role == AuthRole.client) {
-      Navigator.pushReplacement(
-        context,
-        MaterialPageRoute(builder: (context) => const ClientShell()),
-      );
-    } else {
-      Navigator.pushReplacement(
-        context,
-        MaterialPageRoute(builder: (context) => const MainShell()),
-      );
-    }
-  }
-
-  void _showForgotPasswordDialog() {
-    final resetEmailController = TextEditingController(text: emailController.text.trim());
-
-    showDialog(
+    await showDialog(
       context: context,
-      builder: (context) {
-        bool isSending = false;
+      builder: (dialogContext) {
         return StatefulBuilder(
           builder: (context, setDialogState) {
             return AlertDialog(
-              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-              title: const Text('Reset Password'),
+              title: const Text(
+                'Reset Password',
+                style: TextStyle(
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+
               content: Column(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  const Text('Enter your registered email address below. We will send password reset instructions to your inbox.'),
+                  const Text(
+                    'Enter your registered email address. '
+                    'We will send you a password reset link.',
+                  ),
+
                   const SizedBox(height: 16),
+
                   TextField(
-                    controller: resetEmailController,
-                    keyboardType: TextInputType.emailAddress,
+                    controller: controller,
+                    keyboardType:
+                        TextInputType.emailAddress,
                     decoration: InputDecoration(
                       labelText: 'Email Address',
-                      prefixIcon: const Icon(Icons.email_outlined),
-                      border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+                      prefixIcon: const Icon(
+                        Icons.email_outlined,
+                      ),
+                      border: OutlineInputBorder(
+                        borderRadius:
+                            BorderRadius.circular(12),
+                      ),
                     ),
                   ),
                 ],
               ),
+
               actions: [
                 TextButton(
-                  onPressed: () => Navigator.pop(context),
+                  onPressed: sending
+                      ? null
+                      : () {
+                          Navigator.pop(dialogContext);
+                        },
                   child: const Text('Cancel'),
                 ),
+
                 ElevatedButton(
-                  onPressed: isSending
+                  onPressed: sending
                       ? null
                       : () async {
-                          final email = resetEmailController.text.trim();
+                          final email =
+                              controller.text.trim();
+
                           if (email.isEmpty) {
-                            _showSnackBar('Please enter your email address', isError: true);
+                            _showSnackBar(
+                              'Please enter your email address.',
+                            );
                             return;
                           }
-                          setDialogState(() => isSending = true);
+
+                          setDialogState(() {
+                            sending = true;
+                          });
+
                           try {
-                            await SupabaseService().resetPassword(email);
-                            if (mounted) {
-                              Navigator.pop(context);
-                              _showSnackBar('Password reset email sent! Check your inbox.', isError: false);
-                            }
+                            await SupabaseService()
+                                .resetPassword(email);
+
+                            if (!mounted) return;
+
+                            Navigator.pop(dialogContext);
+
+                            _showSnackBar(
+                              'Password reset email sent. '
+                              'Please check your inbox.',
+                              isError: false,
+                            );
                           } catch (e) {
-                            setDialogState(() => isSending = false);
-                            _showSnackBar('Error sending reset link: ${e.toString().replaceAll('AuthException:', '').trim()}', isError: true);
+                            setDialogState(() {
+                              sending = false;
+                            });
+
+                            _showSnackBar(
+                              e.toString()
+                                  .replaceAll(
+                                    'AuthException:',
+                                    '',
+                                  )
+                                  .replaceAll(
+                                    'Exception:',
+                                    '',
+                                  )
+                                  .trim(),
+                            );
                           }
                         },
-                  child: isSending
-                      ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
-                      : const Text('Send Reset Link'),
+                  child: sending
+                      ? const SizedBox(
+                          width: 20,
+                          height: 20,
+                          child:
+                              CircularProgressIndicator(
+                            strokeWidth: 2,
+                            color: Colors.white,
+                          ),
+                        )
+                      : const Text(
+                          'Send Reset Link',
+                        ),
                 ),
               ],
             );
@@ -256,222 +380,421 @@ class _LoginPageState extends State<LoginPage> {
         );
       },
     );
+
+    controller.dispose();
   }
 
-  void _showSnackBar(String message, {bool isError = true}) {
+  // ============================================================
+  // SNACKBAR
+  // ============================================================
+
+  void _showSnackBar(
+    String message, {
+    bool isError = true,
+  }) {
+    if (!mounted) return;
+
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
         content: Text(message),
-        backgroundColor: isError ? Colors.redAccent.shade700 : Colors.green.shade700,
+        backgroundColor: isError
+            ? Colors.redAccent.shade700
+            : Colors.green.shade700,
         behavior: SnackBarBehavior.floating,
-        duration: const Duration(seconds: 3),
+        duration: const Duration(seconds: 4),
       ),
     );
   }
 
+  // ============================================================
+  // BUILD
+  // ============================================================
+
   @override
   Widget build(BuildContext context) {
-    final activeThemeColor = selectedRole == AuthRole.client ? Colors.indigo : Colors.deepPurple;
-
     return Scaffold(
       backgroundColor: const Color(0xFFF4F6FA),
+
       body: SafeArea(
         child: LayoutBuilder(
           builder: (context, constraints) {
-            final isMobile = constraints.maxWidth < 480;
-            final horizontalPadding = isMobile ? 12.0 : 24.0;
-            final cardPadding = isMobile ? 16.0 : 28.0;
+            final width = constraints.maxWidth;
+
+            final bool isMobile = width < 600;
+
+            final double horizontalPadding =
+                width < 400
+                    ? 12
+                    : isMobile
+                        ? 20
+                        : 32;
+
+            final double cardPadding =
+                isMobile ? 20 : 32;
 
             return Center(
               child: SingleChildScrollView(
-                padding: EdgeInsets.symmetric(horizontal: horizontalPadding, vertical: 20),
+                padding: EdgeInsets.symmetric(
+                  horizontal: horizontalPadding,
+                  vertical: 24,
+                ),
+
                 child: ConstrainedBox(
-                  constraints: const BoxConstraints(maxWidth: 520),
+                  constraints: const BoxConstraints(
+                    maxWidth: 520,
+                  ),
+
                   child: Card(
                     elevation: 8,
-                    shadowColor: activeThemeColor.withOpacity(0.15),
-                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
-                    color: Colors.white,
+
+                    shadowColor:
+                        Colors.deepPurple.withOpacity(0.12),
+
+                    shape: RoundedRectangleBorder(
+                      borderRadius:
+                          BorderRadius.circular(24),
+                    ),
+
                     child: Padding(
-                      padding: EdgeInsets.all(cardPadding),
+                      padding:
+                          EdgeInsets.all(cardPadding),
+
                       child: Column(
                         mainAxisSize: MainAxisSize.min,
                         children: [
-                          // Role Selector Bar
+                          // ==================================================
+                          // LOGO
+                          // ==================================================
+
                           Container(
-                            padding: const EdgeInsets.all(4),
+                            width: 64,
+                            height: 64,
+
                             decoration: BoxDecoration(
-                              color: const Color(0xFFEEEEF5),
-                              borderRadius: BorderRadius.circular(16),
+                              color: Colors.deepPurple
+                                  .withOpacity(0.1),
+                              shape: BoxShape.circle,
                             ),
-                            child: Row(
-                              children: [
-                                _buildRoleTab(AuthRole.admin, 'Business / Admin', Icons.admin_panel_settings),
-                                _buildRoleTab(AuthRole.client, 'Client Portal', Icons.business_center),
-                              ],
-                            ),
-                          ),
 
-                          const SizedBox(height: 20),
-
-                          // Header Icon & Title
-                          CircleAvatar(
-                            radius: 30,
-                            backgroundColor: activeThemeColor.withOpacity(0.1),
-                            child: Icon(
-                              selectedRole == AuthRole.client ? Icons.business_center_outlined : Icons.shield_outlined,
-                              color: activeThemeColor,
-                              size: 30,
-                            ),
-                          ),
-                          const SizedBox(height: 12),
-                          Text(
-                            authMode == AuthMode.createBusiness
-                                ? 'Register New Business'
-                                : (authMode == AuthMode.acceptInvite
-                                    ? 'Accept Invitation'
-                                    : '${selectedRole == AuthRole.admin ? "Business & Admin" : "Client"} Login'),
-                            textAlign: TextAlign.center,
-                            style: TextStyle(
-                              fontSize: isMobile ? 20 : 22,
-                              fontWeight: FontWeight.bold,
-                              color: activeThemeColor,
+                            child: const Icon(
+                              Icons.business_center_outlined,
+                              size: 32,
+                              color: Colors.deepPurple,
                             ),
                           ),
 
                           const SizedBox(height: 16),
 
-                          // Action Chips
+                          // ==================================================
+                          // TITLE
+                          // ==================================================
+
+                          Text(
+                            authMode ==
+                                    AuthMode.createBusiness
+                                ? 'Create Your Business'
+                                : authMode ==
+                                        AuthMode.acceptInvite
+                                    ? 'Join Organization'
+                                    : 'Business Management',
+
+                            textAlign: TextAlign.center,
+
+                            style: TextStyle(
+                              fontSize:
+                                  isMobile ? 22 : 26,
+                              fontWeight:
+                                  FontWeight.bold,
+                              color:
+                                  Colors.deepPurple,
+                            ),
+                          ),
+
+                          const SizedBox(height: 8),
+
+                          Text(
+                            authMode ==
+                                    AuthMode.createBusiness
+                                ? 'Create your organization and administrator account.'
+                                : authMode ==
+                                        AuthMode.acceptInvite
+                                    ? 'Use your invitation code to join your organization.'
+                                    : 'Sign in to manage your business.',
+                            textAlign: TextAlign.center,
+                            style: TextStyle(
+                              color: Colors.grey.shade600,
+                              fontSize: 14,
+                            ),
+                          ),
+
+                          const SizedBox(height: 24),
+
+                          // ==================================================
+                          // ROLE SELECTOR
+                          // ==================================================
+
+                          _buildRoleSelector(),
+
+                          const SizedBox(height: 20),
+
+                          // ==================================================
+                          // MODE SELECTOR
+                          // ==================================================
+
                           Wrap(
+                            alignment: WrapAlignment.center,
                             spacing: 8,
                             runSpacing: 8,
-                            alignment: WrapAlignment.center,
+
                             children: [
-                              FilterChip(
-                                label: const Text('Sign In'),
-                                selected: authMode == AuthMode.signIn,
-                                onSelected: (_) => setState(() => authMode = AuthMode.signIn),
+                              _buildModeChip(
+                                'Sign In',
+                                AuthMode.signIn,
                               ),
-                              if (selectedRole == AuthRole.admin)
-                                FilterChip(
-                                  label: const Text('Create Business'),
-                                  selected: authMode == AuthMode.createBusiness,
-                                  onSelected: (_) => setState(() => authMode = AuthMode.createBusiness),
+
+                              if (selectedRole ==
+                                  AuthRole.admin)
+                                _buildModeChip(
+                                  'Create Business',
+                                  AuthMode.createBusiness,
                                 ),
-                              FilterChip(
-                                label: const Text('Invite Code'),
-                                selected: authMode == AuthMode.acceptInvite,
-                                onSelected: (_) => setState(() => authMode = AuthMode.acceptInvite),
+
+                              _buildModeChip(
+                                'Invitation',
+                                AuthMode.acceptInvite,
                               ),
                             ],
                           ),
 
-                          const SizedBox(height: 20),
+                          const SizedBox(height: 24),
 
-                          // Form Fields
-                          if (authMode == AuthMode.createBusiness) ...[
-                            _buildField(fullNameController, 'Admin Full Name', Icons.person_outline),
+                          // ==================================================
+                          // BUSINESS CREATION FIELDS
+                          // ==================================================
+
+                          if (authMode ==
+                              AuthMode.createBusiness) ...[
+                            _buildField(
+                              controller:
+                                  fullNameController,
+                              label: 'Admin Full Name',
+                              icon: Icons.person_outline,
+                            ),
+
                             const SizedBox(height: 12),
-                            _buildField(businessNameController, 'Business Name', Icons.domain),
+
+                            _buildField(
+                              controller:
+                                  businessNameController,
+                              label: 'Business Name',
+                              icon: Icons.domain_outlined,
+                            ),
+
                             const SizedBox(height: 12),
-                            _buildField(industryController, 'Industry', Icons.category_outlined),
+
+                            _buildField(
+                              controller:
+                                  industryController,
+                              label: 'Industry',
+                              icon:
+                                  Icons.category_outlined,
+                            ),
+
                             const SizedBox(height: 12),
-                            _buildField(phoneController, 'Contact Phone', Icons.phone_outlined),
+
+                            _buildField(
+                              controller:
+                                  phoneController,
+                              label: 'Phone',
+                              icon: Icons.phone_outlined,
+                              keyboardType:
+                                  TextInputType.phone,
+                            ),
+
+                            const SizedBox(height: 12),
+
+                            _buildField(
+                              controller:
+                                  countryController,
+                              label: 'Country',
+                              icon:
+                                  Icons.public_outlined,
+                            ),
+
                             const SizedBox(height: 12),
                           ],
 
-                          if (authMode == AuthMode.acceptInvite) ...[
-                            _buildField(inviteTokenController, 'Invitation Token', Icons.vpn_key_outlined),
+                          // ==================================================
+                          // INVITATION FIELDS
+                          // ==================================================
+
+                          if (authMode ==
+                              AuthMode.acceptInvite) ...[
+                            _buildField(
+                              controller:
+                                  inviteTokenController,
+                              label: 'Invitation Token',
+                              icon:
+                                  Icons.vpn_key_outlined,
+                            ),
+
                             const SizedBox(height: 12),
-                            _buildField(fullNameController, 'Your Full Name', Icons.person_outline),
+
+                            _buildField(
+                              controller:
+                                  fullNameController,
+                              label: 'Your Full Name',
+                              icon:
+                                  Icons.person_outline,
+                            ),
+
                             const SizedBox(height: 12),
                           ],
 
-                          // Email & Password Fields
-                          _buildField(emailController, 'Email Address', Icons.email_outlined, keyboardType: TextInputType.emailAddress),
-                          const SizedBox(height: 12),
+                          // ==================================================
+                          // EMAIL
+                          // ==================================================
+
                           _buildField(
-                            passwordController,
-                            'Password',
-                            Icons.lock_outline,
-                            obscureText: obscurePassword,
+                            controller:
+                                emailController,
+                            label: 'Email Address',
+                            icon:
+                                Icons.email_outlined,
+                            keyboardType:
+                                TextInputType.emailAddress,
+                          ),
+
+                          const SizedBox(height: 12),
+
+                          // ==================================================
+                          // PASSWORD
+                          // ==================================================
+
+                          _buildField(
+                            controller:
+                                passwordController,
+                            label: 'Password',
+                            icon:
+                                Icons.lock_outline,
+                            obscureText:
+                                obscurePassword,
                             suffixIcon: IconButton(
-                              icon: Icon(obscurePassword ? Icons.visibility_off_outlined : Icons.visibility_outlined),
-                              onPressed: () => setState(() => obscurePassword = !obscurePassword),
+                              icon: Icon(
+                                obscurePassword
+                                    ? Icons
+                                        .visibility_off_outlined
+                                    : Icons
+                                        .visibility_outlined,
+                              ),
+                              onPressed: () {
+                                setState(() {
+                                  obscurePassword =
+                                      !obscurePassword;
+                                });
+                              },
                             ),
                           ),
 
-                          if (authMode == AuthMode.signIn) ...[
+                          // ==================================================
+                          // FORGOT PASSWORD
+                          // ==================================================
+
+                          if (authMode ==
+                              AuthMode.signIn)
                             Align(
-                              alignment: Alignment.centerRight,
+                              alignment:
+                                  Alignment.centerRight,
                               child: TextButton(
-                                onPressed: _showForgotPasswordDialog,
-                                child: Text(
+                                onPressed:
+                                    _showForgotPasswordDialog,
+                                child: const Text(
                                   'Forgot Password?',
                                   style: TextStyle(
-                                    color: activeThemeColor,
-                                    fontWeight: FontWeight.w600,
-                                    fontSize: 13,
+                                    color:
+                                        Colors.deepPurple,
+                                    fontWeight:
+                                        FontWeight.w600,
                                   ),
                                 ),
                               ),
                             ),
-                          ],
 
-                          const SizedBox(height: 12),
+                          const SizedBox(height: 8),
 
-                          // Submit Button
+                          // ==================================================
+                          // SUBMIT BUTTON
+                          // ==================================================
+
                           SizedBox(
                             width: double.infinity,
-                            height: 50,
+                            height: 52,
+
                             child: ElevatedButton(
-                              onPressed: isLoading ? null : handleAuthSubmit,
-                              style: ElevatedButton.styleFrom(
-                                backgroundColor: activeThemeColor,
-                                foregroundColor: Colors.white,
-                                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                              onPressed: isLoading
+                                  ? null
+                                  : handleAuthSubmit,
+
+                              style:
+                                  ElevatedButton.styleFrom(
+                                backgroundColor:
+                                    Colors.deepPurple,
+                                foregroundColor:
+                                    Colors.white,
+
+                                shape:
+                                    RoundedRectangleBorder(
+                                  borderRadius:
+                                      BorderRadius.circular(
+                                          12),
+                                ),
                               ),
+
                               child: isLoading
-                                  ? const CircularProgressIndicator(color: Colors.white, strokeWidth: 2)
-                                  : FittedBox(
-                                      fit: BoxFit.scaleDown,
-                                      child: Text(
-                                        authMode == AuthMode.createBusiness
-                                            ? 'Create Business & Launch Workspace'
-                                            : (authMode == AuthMode.acceptInvite ? 'Join Organization' : 'Sign In'),
-                                        style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+                                  ? const SizedBox(
+                                      width: 22,
+                                      height: 22,
+                                      child:
+                                          CircularProgressIndicator(
+                                        strokeWidth: 2,
+                                        color:
+                                            Colors.white,
+                                      ),
+                                    )
+                                  : Text(
+                                      authMode ==
+                                              AuthMode
+                                                  .createBusiness
+                                          ? 'Create Business'
+                                          : authMode ==
+                                                  AuthMode
+                                                      .acceptInvite
+                                              ? 'Join Organization'
+                                              : 'Sign In',
+
+                                      style:
+                                          const TextStyle(
+                                        fontSize: 16,
+                                        fontWeight:
+                                            FontWeight.bold,
                                       ),
                                     ),
                             ),
                           ),
 
                           const SizedBox(height: 20),
-                          const Divider(),
-                          const SizedBox(height: 12),
 
-                          // Quick Demo Logins
-                          Row(
-                            children: [
-                              Expanded(
-                                child: OutlinedButton(
-                                  onPressed: () => _demoLogin(AuthRole.admin),
-                                  child: const FittedBox(
-                                    fit: BoxFit.scaleDown,
-                                    child: Text('Demo Admin', style: TextStyle(fontSize: 12)),
-                                  ),
-                                ),
-                              ),
-                              const SizedBox(width: 8),
-                              Expanded(
-                                child: OutlinedButton(
-                                  onPressed: () => _demoLogin(AuthRole.client),
-                                  child: const FittedBox(
-                                    fit: BoxFit.scaleDown,
-                                    child: Text('Demo Client', style: TextStyle(fontSize: 12)),
-                                  ),
-                                ),
-                              ),
-                            ],
+                          // ==================================================
+                          // FOOTER
+                          // ==================================================
+
+                          Text(
+                            'Secure business management powered by Supabase',
+                            textAlign: TextAlign.center,
+                            style: TextStyle(
+                              fontSize: 12,
+                              color: Colors.grey.shade500,
+                            ),
                           ),
                         ],
                       ),
@@ -486,29 +809,107 @@ class _LoginPageState extends State<LoginPage> {
     );
   }
 
-  Widget _buildRoleTab(AuthRole role, String title, IconData icon) {
-    final isSelected = selectedRole == role;
+  // ============================================================
+  // ROLE SELECTOR
+  // ============================================================
+
+  Widget _buildRoleSelector() {
+    return Container(
+      padding: const EdgeInsets.all(4),
+
+      decoration: BoxDecoration(
+        color: const Color(0xFFEEEEF5),
+        borderRadius: BorderRadius.circular(16),
+      ),
+
+      child: Row(
+        children: [
+          _buildRoleTab(
+            AuthRole.admin,
+            'Business / Admin',
+            Icons.admin_panel_settings_outlined,
+          ),
+
+          _buildRoleTab(
+            AuthRole.client,
+            'Client Portal',
+            Icons.business_center_outlined,
+          ),
+        ],
+      ),
+    );
+  }
+
+  // ============================================================
+  // ROLE TAB
+  // ============================================================
+
+  Widget _buildRoleTab(
+    AuthRole role,
+    String title,
+    IconData icon,
+  ) {
+    final bool selected = selectedRole == role;
+
     return Expanded(
       child: GestureDetector(
-        onTap: () => setState(() => selectedRole = role),
-        child: Container(
-          padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 4),
+        onTap: isLoading
+            ? null
+            : () {
+                setState(() {
+                  selectedRole = role;
+
+                  // Client cannot create a business.
+                  if (role == AuthRole.client &&
+                      authMode ==
+                          AuthMode.createBusiness) {
+                    authMode = AuthMode.signIn;
+                  }
+                });
+              },
+
+        child: AnimatedContainer(
+          duration:
+              const Duration(milliseconds: 200),
+
+          padding: const EdgeInsets.symmetric(
+            vertical: 12,
+            horizontal: 8,
+          ),
+
           decoration: BoxDecoration(
-            color: isSelected ? (role == AuthRole.client ? Colors.indigo : Colors.deepPurple) : Colors.transparent,
+            color: selected
+                ? Colors.deepPurple
+                : Colors.transparent,
             borderRadius: BorderRadius.circular(12),
           ),
+
           child: FittedBox(
             fit: BoxFit.scaleDown,
+
             child: Row(
-              mainAxisAlignment: MainAxisAlignment.center,
+              mainAxisAlignment:
+                  MainAxisAlignment.center,
+
               children: [
-                Icon(icon, size: 16, color: isSelected ? Colors.white : Colors.black54),
+                Icon(
+                  icon,
+                  size: 18,
+                  color: selected
+                      ? Colors.white
+                      : Colors.black54,
+                ),
+
                 const SizedBox(width: 6),
+
                 Text(
                   title,
                   style: TextStyle(
-                    color: isSelected ? Colors.white : Colors.black54,
-                    fontWeight: FontWeight.bold,
+                    color: selected
+                        ? Colors.white
+                        : Colors.black54,
+                    fontWeight:
+                        FontWeight.bold,
                     fontSize: 13,
                   ),
                 ),
@@ -520,25 +921,95 @@ class _LoginPageState extends State<LoginPage> {
     );
   }
 
-  Widget _buildField(
-    TextEditingController controller,
-    String label,
-    IconData icon, {
+  // ============================================================
+  // MODE CHIP
+  // ============================================================
+
+  Widget _buildModeChip(
+    String title,
+    AuthMode mode,
+  ) {
+    return FilterChip(
+      label: Text(title),
+
+      selected: authMode == mode,
+
+      onSelected: isLoading
+          ? null
+          : (_) {
+              setState(() {
+                authMode = mode;
+              });
+            },
+
+      selectedColor:
+          Colors.deepPurple.withOpacity(0.15),
+
+      checkmarkColor: Colors.deepPurple,
+    );
+  }
+
+  // ============================================================
+  // TEXT FIELD
+  // ============================================================
+
+  Widget _buildField({
+    required TextEditingController controller,
+    required String label,
+    required IconData icon,
     bool obscureText = false,
     Widget? suffixIcon,
     TextInputType? keyboardType,
   }) {
     return TextField(
       controller: controller,
+
       obscureText: obscureText,
+
       keyboardType: keyboardType,
+
+      textInputAction:
+          TextInputAction.next,
+
       decoration: InputDecoration(
         labelText: label,
+
         prefixIcon: Icon(icon),
+
         suffixIcon: suffixIcon,
+
         filled: true,
-        fillColor: const Color(0xFFF8F8FC),
-        border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+
+        fillColor:
+            const Color(0xFFF8F8FC),
+
+        border: OutlineInputBorder(
+          borderRadius:
+              BorderRadius.circular(12),
+
+          borderSide: BorderSide.none,
+        ),
+
+        enabledBorder:
+            OutlineInputBorder(
+          borderRadius:
+              BorderRadius.circular(12),
+
+          borderSide: BorderSide(
+            color: Colors.grey.shade200,
+          ),
+        ),
+
+        focusedBorder:
+            OutlineInputBorder(
+          borderRadius:
+              BorderRadius.circular(12),
+
+          borderSide: const BorderSide(
+            color: Colors.deepPurple,
+            width: 1.5,
+          ),
+        ),
       ),
     );
   }

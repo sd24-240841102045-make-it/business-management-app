@@ -221,7 +221,15 @@ class ClientsBodyState extends State<ClientsBody> {
                                       ),
                                       const SizedBox(width: 4),
                                       IconButton(
-                                        icon: const Icon(Icons.edit_outlined, color: Colors.deepPurple, size: 18),
+                                        icon: const Icon(Icons.tune, color: Colors.deepPurple, size: 18),
+                                        onPressed: () => _showClientPortalConfigModal(client),
+                                        tooltip: 'Configure Portal Visibility',
+                                        padding: EdgeInsets.zero,
+                                        constraints: const BoxConstraints(),
+                                      ),
+                                      const SizedBox(width: 4),
+                                      IconButton(
+                                        icon: const Icon(Icons.edit_outlined, color: Colors.blueGrey, size: 18),
                                         onPressed: () => _editClient(client),
                                         tooltip: 'Edit Client',
                                         padding: EdgeInsets.zero,
@@ -312,6 +320,125 @@ class ClientsBodyState extends State<ClientsBody> {
     );
   },
 );
+  }
+
+  void _showClientPortalConfigModal(ClientModel client) {
+    bool showProjects = client.showProjects;
+    bool showTasks = client.showTasks;
+    bool showInvoices = client.showInvoices;
+    bool showTimesheets = client.showTimesheets;
+    bool allowChat = client.allowChat;
+    final noteController = TextEditingController(text: client.adminNote);
+
+    showDialog(
+      context: context,
+      builder: (context) {
+        return StatefulBuilder(
+          builder: (context, setModalState) {
+            return AlertDialog(
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+              title: Row(
+                children: [
+                  const Icon(Icons.tune, color: Colors.deepPurple),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      'Portal Visibility: ${client.company.isNotEmpty ? client.company : client.name}',
+                      style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ),
+                ],
+              ),
+              content: SingleChildScrollView(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Text(
+                      'Configure what data & features this client can access in their Client Portal:',
+                      style: TextStyle(fontSize: 12, color: Colors.grey),
+                    ),
+                    const SizedBox(height: 12),
+                    SwitchListTile(
+                      title: const Text('Show Projects & Progress', style: TextStyle(fontSize: 14)),
+                      subtitle: const Text('Allow client to view project status & deadlines', style: TextStyle(fontSize: 11)),
+                      value: showProjects,
+                      activeColor: Colors.deepPurple,
+                      onChanged: (val) => setModalState(() => showProjects = val),
+                    ),
+                    SwitchListTile(
+                      title: const Text('Show Deliverables & Approvals', style: TextStyle(fontSize: 14)),
+                      subtitle: const Text('Allow client to review & approve task deliverables', style: TextStyle(fontSize: 11)),
+                      value: showTasks,
+                      activeColor: Colors.deepPurple,
+                      onChanged: (val) => setModalState(() => showTasks = val),
+                    ),
+                    SwitchListTile(
+                      title: const Text('Show Invoices & Payments', style: TextStyle(fontSize: 14)),
+                      subtitle: const Text('Allow client to view invoices & record payments', style: TextStyle(fontSize: 11)),
+                      value: showInvoices,
+                      activeColor: Colors.deepPurple,
+                      onChanged: (val) => setModalState(() => showInvoices = val),
+                    ),
+                    SwitchListTile(
+                      title: const Text('Show Timesheets / Hours Worked', style: TextStyle(fontSize: 14)),
+                      subtitle: const Text('Allow client to view team hours spent on projects', style: TextStyle(fontSize: 11)),
+                      value: showTimesheets,
+                      activeColor: Colors.deepPurple,
+                      onChanged: (val) => setModalState(() => showTimesheets = val),
+                    ),
+                    SwitchListTile(
+                      title: const Text('Enable Support Chat', style: TextStyle(fontSize: 14)),
+                      subtitle: const Text('Allow client to message project manager', style: TextStyle(fontSize: 11)),
+                      value: allowChat,
+                      activeColor: Colors.deepPurple,
+                      onChanged: (val) => setModalState(() => allowChat = val),
+                    ),
+                    const SizedBox(height: 12),
+                    const Text('Admin Announcement for Client Dashboard:', style: TextStyle(fontSize: 13, fontWeight: FontWeight.bold)),
+                    const SizedBox(height: 6),
+                    TextField(
+                      controller: noteController,
+                      maxLines: 2,
+                      decoration: InputDecoration(
+                        hintText: 'e.g. Welcome! Please review the Q3 Deliverable approval above.',
+                        border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+                        filled: true,
+                        fillColor: Colors.purple.shade50.withOpacity(0.3),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              actions: [
+                TextButton(onPressed: () => Navigator.pop(context), child: const Text('Cancel')),
+                ElevatedButton(
+                  style: ElevatedButton.styleFrom(backgroundColor: Colors.deepPurple, foregroundColor: Colors.white),
+                  onPressed: () {
+                    final updated = client.copyWith(
+                      showProjects: showProjects,
+                      showTasks: showTasks,
+                      showInvoices: showInvoices,
+                      showTimesheets: showTimesheets,
+                      allowChat: allowChat,
+                      adminNote: noteController.text.trim(),
+                    );
+                    _store.updateClient(updated);
+                    Navigator.pop(context);
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      const SnackBar(content: Text('Client portal visibility rules updated!'), backgroundColor: Colors.green),
+                    );
+                  },
+                  child: const Text('Save Controls'),
+                ),
+              ],
+            );
+          },
+        );
+      },
+    );
   }
 
   // Public method called by MainShell's FAB via GlobalKey

@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'services/app_data_store.dart';
+import 'services/supabase_service.dart';
 
 /// Body-only Dashboard widget — Scaffold lives in MainShell.
 class HomeBody extends StatefulWidget {
@@ -27,6 +28,28 @@ class _HomeBodyState extends State<HomeBody> {
 
   void _onStoreUpdate() {
     if (mounted) setState(() {});
+  }
+
+  String _getGreeting() {
+    final hour = DateTime.now().hour;
+    String greeting = 'Good Day';
+    if (hour < 12) {
+      greeting = 'Good Morning';
+    } else if (hour < 17) {
+      greeting = 'Good Afternoon';
+    } else {
+      greeting = 'Good Evening';
+    }
+
+    final user = SupabaseService().currentUser;
+    final name = user?.userMetadata?['full_name'] as String? ?? 'User';
+    final firstName = name.split(' ').first;
+    return '$greeting 👋, $firstName';
+  }
+
+  String _getBusinessName() {
+    final user = SupabaseService().currentUser;
+    return user?.userMetadata?['business_name'] as String? ?? 'CRM & HR Operations';
   }
 
   @override
@@ -64,14 +87,42 @@ class _HomeBodyState extends State<HomeBody> {
                       const SizedBox(height: 10),
                     ],
               // ── Welcome ───────────────────────────────────
-              const Text(
-                'Good Day 👋',
-                style: TextStyle(fontSize: 15, color: Colors.grey),
-              ),
-              const SizedBox(height: 4),
-              const Text(
-                'CRM & HR Operations',
-                style: TextStyle(fontSize: 26, fontWeight: FontWeight.bold),
+              Row(
+                crossAxisAlignment: CrossAxisAlignment.end,
+                children: [
+                  Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        _getGreeting(),
+                        style: TextStyle(
+                          fontSize: 16,
+                          color: Colors.grey.shade600,
+                          fontWeight: FontWeight.w500,
+                          letterSpacing: 0.2,
+                        ),
+                      ),
+                      const SizedBox(height: 4),
+                      ShaderMask(
+                        shaderCallback: (bounds) => const LinearGradient(
+                          colors: [Color(0xFF38BDF8), Color(0xFF818CF8), Color(0xFFC084FC)],
+                          begin: Alignment.topLeft,
+                          end: Alignment.bottomRight,
+                        ).createShader(bounds),
+                        child: Text(
+                          _getBusinessName(),
+                          style: const TextStyle(
+                            fontSize: 32,
+                            fontWeight: FontWeight.w900,
+                            color: Colors.white,
+                            letterSpacing: -1.0,
+                            height: 1.1,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ],
               ),
 
               const SizedBox(height: 20),

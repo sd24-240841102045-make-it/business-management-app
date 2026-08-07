@@ -97,6 +97,12 @@ class ClientModel {
   final String? assignedEmployeeName;
   final String projectType;
   final double budget;
+  final bool showProjects;
+  final bool showTasks;
+  final bool showInvoices;
+  final bool showTimesheets;
+  final bool allowChat;
+  final String adminNote;
 
   ClientModel({
     required this.id,
@@ -109,6 +115,12 @@ class ClientModel {
     this.assignedEmployeeName,
     this.projectType = 'General Consulting',
     this.budget = 0.0,
+    this.showProjects = true,
+    this.showTasks = true,
+    this.showInvoices = true,
+    this.showTimesheets = false,
+    this.allowChat = true,
+    this.adminNote = '',
   });
 
   ClientModel copyWith({
@@ -122,6 +134,12 @@ class ClientModel {
     String? assignedEmployeeName,
     String? projectType,
     double? budget,
+    bool? showProjects,
+    bool? showTasks,
+    bool? showInvoices,
+    bool? showTimesheets,
+    bool? allowChat,
+    String? adminNote,
   }) {
     return ClientModel(
       id: id ?? this.id,
@@ -134,6 +152,12 @@ class ClientModel {
       assignedEmployeeName: assignedEmployeeName ?? this.assignedEmployeeName,
       projectType: projectType ?? this.projectType,
       budget: budget ?? this.budget,
+      showProjects: showProjects ?? this.showProjects,
+      showTasks: showTasks ?? this.showTasks,
+      showInvoices: showInvoices ?? this.showInvoices,
+      showTimesheets: showTimesheets ?? this.showTimesheets,
+      allowChat: allowChat ?? this.allowChat,
+      adminNote: adminNote ?? this.adminNote,
     );
   }
 
@@ -149,14 +173,20 @@ class ClientModel {
       'assigned_employee_name': assignedEmployeeName,
       'project_type': projectType,
       'budget': budget,
+      'show_projects': showProjects,
+      'show_tasks': showTasks,
+      'show_invoices': showInvoices,
+      'show_timesheets': showTimesheets,
+      'allow_chat': allowChat,
+      'admin_note': adminNote,
     };
   }
 
   factory ClientModel.fromMap(Map<String, dynamic> map) {
     return ClientModel(
       id: map['id'] ?? '',
-      name: map['name'] ?? '',
-      company: map['company'] ?? '',
+      name: map['name'] ?? map['contact_name'] ?? '',
+      company: map['company'] ?? map['company_name'] ?? '',
       email: map['email'] ?? '',
       phone: map['phone'] ?? '',
       status: map['status'] ?? 'Active',
@@ -164,6 +194,12 @@ class ClientModel {
       assignedEmployeeName: map['assigned_employee_name'],
       projectType: map['project_type'] ?? 'General Consulting',
       budget: (map['budget'] as num?)?.toDouble() ?? 0.0,
+      showProjects: map['show_projects'] ?? true,
+      showTasks: map['show_tasks'] ?? true,
+      showInvoices: map['show_invoices'] ?? true,
+      showTimesheets: map['show_timesheets'] ?? false,
+      allowChat: map['allow_chat'] ?? true,
+      adminNote: map['admin_note'] ?? '',
     );
   }
 }

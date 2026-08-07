@@ -13,6 +13,8 @@ import 'pages/task_board_page.dart';
 import 'pages/finance_page.dart';
 import 'pages/invoice_page.dart';
 import 'pages/reports_page.dart';
+import 'pages/invite_page.dart';
+import 'services/supabase_service.dart';
 
 class MainShell extends StatefulWidget {
   const MainShell({super.key});
@@ -36,21 +38,89 @@ class _MainShellState extends State<MainShell> {
 
   @override
   Widget build(BuildContext context) {
+    final isAdmin = SupabaseService().currentRole == 'admin';
+
+    // 1. Dynamic Main Navigation
     final List<Widget> pages = [
       HomeBody(onNavigate: _onItemTapped),
-      EmployeesBody(key: _employeesKey, onNavigate: _onItemTapped),
-      ClientsBody(key: _clientsKey),
+      if (isAdmin) EmployeesBody(key: _employeesKey, onNavigate: _onItemTapped),
+      if (isAdmin) ClientsBody(key: _clientsKey),
       AttendanceLeaveBody(key: _attendanceKey),
       const ProfileBody(),
     ];
 
-    final titles = [
+    final List<String> titles = [
       'Dashboard',
-      'Employees',
-      'Clients',
+      if (isAdmin) 'Employees',
+      if (isAdmin) 'Clients',
       'Attendance & Leave',
       'Profile',
     ];
+
+    final List<NavigationRailDestination> railDestinations = [
+      const NavigationRailDestination(
+        icon: Icon(Icons.dashboard_outlined),
+        selectedIcon: Icon(Icons.dashboard),
+        label: Text('Home'),
+      ),
+      if (isAdmin)
+        const NavigationRailDestination(
+          icon: Icon(Icons.people_outline),
+          selectedIcon: Icon(Icons.people),
+          label: Text('Employees'),
+        ),
+      if (isAdmin)
+        const NavigationRailDestination(
+          icon: Icon(Icons.business_center_outlined),
+          selectedIcon: Icon(Icons.business_center),
+          label: Text('Clients'),
+        ),
+      const NavigationRailDestination(
+        icon: Icon(Icons.calendar_month_outlined),
+        selectedIcon: Icon(Icons.calendar_month),
+        label: Text('Attendance'),
+      ),
+      const NavigationRailDestination(
+        icon: Icon(Icons.person_outline),
+        selectedIcon: Icon(Icons.person),
+        label: Text('Profile'),
+      ),
+    ];
+
+    final List<NavigationDestination> bottomDestinations = [
+      const NavigationDestination(
+        icon: Icon(Icons.dashboard_outlined),
+        selectedIcon: Icon(Icons.dashboard),
+        label: 'Home',
+      ),
+      if (isAdmin)
+        const NavigationDestination(
+          icon: Icon(Icons.people_outline),
+          selectedIcon: Icon(Icons.people),
+          label: 'Employees',
+        ),
+      if (isAdmin)
+        const NavigationDestination(
+          icon: Icon(Icons.business_center_outlined),
+          selectedIcon: Icon(Icons.business_center),
+          label: 'Clients',
+        ),
+      const NavigationDestination(
+        icon: Icon(Icons.calendar_month_outlined),
+        selectedIcon: Icon(Icons.calendar_month),
+        label: 'Attendance',
+      ),
+      const NavigationDestination(
+        icon: Icon(Icons.person_outline),
+        selectedIcon: Icon(Icons.person),
+        label: 'Profile',
+      ),
+    ];
+
+    // Ensure selectedIndex doesn't crash if we switch roles and shrink the array
+    if (_selectedIndex >= pages.length) {
+      _selectedIndex = 0;
+    }
 
     return LayoutBuilder(
       builder: (context, constraints) {
@@ -90,28 +160,42 @@ class _MainShellState extends State<MainShell> {
                       title: Text('Task Kanban Board'),
                     ),
                   ),
-                  const PopupMenuItem(
-                    value: FinancePage(),
-                    child: ListTile(
-                      leading: Icon(Icons.account_balance, color: Colors.green),
-                      title: Text('Finance & Ledger'),
+                  if (isAdmin)
+                    const PopupMenuItem(
+                      value: FinancePage(),
+                      child: ListTile(
+                        leading: Icon(Icons.account_balance, color: Colors.green),
+                        title: Text('Finance & Ledger'),
+                      ),
                     ),
-                  ),
-                  const PopupMenuItem(
-                    value: InvoicePage(),
-                    child: ListTile(
-                      leading: Icon(Icons.receipt_long, color: Colors.purple),
-                      title: Text('Invoices & Billing'),
+                  if (isAdmin)
+                    const PopupMenuItem(
+                      value: InvoicePage(),
+                      child: ListTile(
+                        leading: Icon(Icons.receipt_long, color: Colors.purple),
+                        title: Text('Invoices & Billing'),
+                      ),
                     ),
-                  ),
-                  const PopupMenuItem(
-                    value: ReportsPage(),
-                    child: ListTile(
-                      leading: Icon(Icons.assessment, color: Colors.indigo),
-                      title: Text('Reports & Analytics'),
+                  if (isAdmin)
+                    const PopupMenuItem(
+                      value: ReportsPage(),
+                      child: ListTile(
+                        leading: Icon(Icons.assessment, color: Colors.indigo),
+                        title: Text('Reports & Analytics'),
+                      ),
                     ),
-                  ),
                 ],
+              ),
+              if (isAdmin)
+              IconButton(
+                icon: const Icon(Icons.person_add_alt_1),
+                tooltip: 'Invite Members',
+                onPressed: () {
+                  Navigator.push(
+                    context,
+                    MaterialPageRoute(builder: (context) => const InvitePage()),
+                  );
+                },
               ),
               IconButton(
                 icon: const Icon(Icons.chat_bubble_outline),
@@ -121,29 +205,6 @@ class _MainShellState extends State<MainShell> {
                     context,
                     MaterialPageRoute(builder: (context) => const ChatPage()),
                   );
-                },
-              ),
-              IconButton(
-                icon: const Icon(Icons.settings),
-                tooltip: 'Settings',
-                onPressed: () {
-                  Navigator.push(
-                    context,
-                    MaterialPageRoute(builder: (context) => const SettingsPage()),
-                  );
-                },
-              ),
-              IconButton(
-                icon: const Icon(Icons.logout),
-                tooltip: 'Logout',
-                onPressed: () async {
-                  await Supabase.instance.client.auth.signOut();
-                  if (context.mounted) {
-                    Navigator.pushReplacement(
-                      context,
-                      MaterialPageRoute(builder: (context) => const LoginPage()),
-                    );
-                  }
                 },
               ),
             ],
@@ -161,33 +222,7 @@ class _MainShellState extends State<MainShell> {
                         fontWeight: FontWeight.bold,
                       ),
                       unselectedIconTheme: const IconThemeData(color: Colors.grey),
-                      destinations: const [
-                        NavigationRailDestination(
-                          icon: Icon(Icons.dashboard_outlined),
-                          selectedIcon: Icon(Icons.dashboard),
-                          label: Text('Home'),
-                        ),
-                        NavigationRailDestination(
-                          icon: Icon(Icons.people_outline),
-                          selectedIcon: Icon(Icons.people),
-                          label: Text('Employees'),
-                        ),
-                        NavigationRailDestination(
-                          icon: Icon(Icons.business_center_outlined),
-                          selectedIcon: Icon(Icons.business_center),
-                          label: Text('Clients'),
-                        ),
-                        NavigationRailDestination(
-                          icon: Icon(Icons.calendar_month_outlined),
-                          selectedIcon: Icon(Icons.calendar_month),
-                          label: Text('Attendance'),
-                        ),
-                        NavigationRailDestination(
-                          icon: Icon(Icons.person_outline),
-                          selectedIcon: Icon(Icons.person),
-                          label: Text('Profile'),
-                        ),
-                      ],
+                      destinations: railDestinations,
                     ),
                     const VerticalDivider(thickness: 1, width: 1),
                     Expanded(
@@ -207,33 +242,7 @@ class _MainShellState extends State<MainShell> {
               : NavigationBar(
                   selectedIndex: _selectedIndex,
                   onDestinationSelected: _onItemTapped,
-                  destinations: const [
-                    NavigationDestination(
-                      icon: Icon(Icons.dashboard_outlined),
-                      selectedIcon: Icon(Icons.dashboard),
-                      label: 'Home',
-                    ),
-                    NavigationDestination(
-                      icon: Icon(Icons.people_outline),
-                      selectedIcon: Icon(Icons.people),
-                      label: 'Employees',
-                    ),
-                    NavigationDestination(
-                      icon: Icon(Icons.business_center_outlined),
-                      selectedIcon: Icon(Icons.business_center),
-                      label: 'Clients',
-                    ),
-                    NavigationDestination(
-                      icon: Icon(Icons.calendar_month_outlined),
-                      selectedIcon: Icon(Icons.calendar_month),
-                      label: 'Attendance',
-                    ),
-                    NavigationDestination(
-                      icon: Icon(Icons.person_outline),
-                      selectedIcon: Icon(Icons.person),
-                      label: 'Profile',
-                    ),
-                  ],
+                  destinations: bottomDestinations,
                 ),
         );
       },

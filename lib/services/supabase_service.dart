@@ -4,36 +4,43 @@ import '../models/saas_models.dart';
 import 'app_data_store.dart';
 
 class SupabaseService {
-  static final SupabaseService _instance = SupabaseService._internal();
-  factory SupabaseService() => _instance;
   SupabaseService._internal();
 
+  static final SupabaseService _instance = SupabaseService._internal();
+
+  factory SupabaseService() => _instance;
+
   SupabaseClient get client => Supabase.instance.client;
+
+  // ============================================================
+  // CURRENT USER & SESSION
+  // ============================================================
 
   User? get currentUser => client.auth.currentUser;
   Session? get currentSession => client.auth.currentSession;
 
-  Organization? _currentOrganization;
-  OrganizationMembership? _currentMembership;
+  // ============================================================
+  // CURRENT ORGANIZATION & MEMBERSHIP CONTEXT
+  // ============================================================
 
-  Organization? get currentOrganization => _currentOrganization;
-  OrganizationMembership? get currentMembership => _currentMembership;
-  String get currentRole => _currentMembership?.role ?? 'admin';
+  Map<String, dynamic>? _currentOrganization;
+  Map<String, dynamic>? _currentMembership;
+
+  Map<String, dynamic>? get currentOrganization => _currentOrganization;
+  Map<String, dynamic>? get currentMembership => _currentMembership;
+
+  String get currentRole => _currentMembership?['role']?.toString() ?? 'admin';
+  String? get currentOrganizationId => _currentMembership?['organization_id']?.toString();
 
   String getUserRole([User? user]) {
-    if (_currentMembership != null) return _currentMembership!.role;
+    if (_currentMembership != null && _currentMembership!['role'] != null) {
+      return _currentMembership!['role'].toString().toLowerCase();
+    }
     final u = user ?? currentUser;
     if (u?.userMetadata != null && u!.userMetadata!.containsKey('role')) {
       return u.userMetadata!['role'].toString().toLowerCase();
     }
     return 'admin';
-  }
-
-  Future<void> resetPassword(String email, {String? redirectTo}) async {
-    await client.auth.resetPasswordForEmail(
-      email,
-      redirectTo: redirectTo,
-    );
   }
 
   // ============================================================
@@ -63,47 +70,11 @@ class SupabaseService {
       },
     );
 
-    final user = response.user;
-    if (user != null) {
-      // 1. Try to sign in to establish active session if auto-confirm is off
-      if (client.auth.currentSession == null) {
-        try {
-          await client.auth.signInWithPassword(email: email, password: password);
-        } catch (e) {
-          debugPrint('Post-signup auto sign-in note: $e');
-        }
-      }
+    if (response.user == null) {
+      throw Exception('Business account could not be created.');
+    }
 
-      // 2. Check if organization was created via DB trigger or insert manually
-      try {
-        final existingMemberships = await client
-            .from('organization_memberships')
-            .select('organization_id')
-            .eq('user_id', user.id);
-
-        if ((existingMemberships as List).isEmpty) {
-          final orgResponse = await client.from('organizations').insert({
-            'name': businessName,
-            'industry': industry,
-            'phone': phone,
-            'country': country,
-            'subscription_status': 'active',
-          }).select().single();
-
-          final orgId = orgResponse['id'];
-
-          await client.from('organization_memberships').insert({
-            'organization_id': orgId,
-            'user_id': user.id,
-            'role': 'admin',
-            'status': 'active',
-          });
-        }
-      } catch (e) {
-        debugPrint('Manual organization insert note: $e');
-      }
-
-      // Fetch active organization context
+    if (response.session != null) {
       await loadUserOrganizationContext();
     }
 
@@ -120,63 +91,52 @@ class SupabaseService {
       password: password,
     );
 
-    if (response.user != null) {
-      await loadUserOrganizationContext();
+    if (response.user == null) {
+      throw Exception('Login failed.');
     }
+
+    await loadUserOrganizationContext();
     return response;
   }
 
   /// Accept Employee or Client Invitation via Token
   Future<AuthResponse> acceptInvitation({
     required String token,
+    String? email,
     required String password,
     required String fullName,
   }) async {
-    // 1. Verify invitation token
-    final inviteData = await client
-        .from('invitations')
-        .select()
-        .eq('token', token)
-        .eq('status', 'pending')
-        .single();
+    final cleanToken = token.trim();
+    final cleanName = fullName.trim();
+    final targetEmail = email?.trim().toLowerCase();
 
-    final String email = inviteData['email'];
-    final String orgId = inviteData['organization_id'];
-    final String role = inviteData['role'];
+    if (cleanToken.isEmpty) {
+      throw Exception('Please enter your invitation code.');
+    }
+    if (targetEmail == null || targetEmail.isEmpty) {
+      throw Exception('Email is required.');
+    }
 
-    // 2. Create Supabase Auth Account
+    // 1. Create Supabase Auth Account (The trigger creates a basic profile)
     final response = await client.auth.signUp(
-      email: email,
+      email: targetEmail,
       password: password,
-      data: {'full_name': fullName},
+      data: {
+        'full_name': cleanName,
+      },
     );
 
-    final user = response.user;
-    if (user != null) {
-      // 3. Create Organization Membership
-      await client.from('organization_memberships').insert({
-        'organization_id': orgId,
-        'user_id': user.id,
-        'role': role,
-        'status': 'active',
-      });
+    if (response.user == null) {
+      throw Exception('Could not create account for invitation.');
+    }
 
-      // 4. If Employee, create Employee profile record
-      if (role == 'employee') {
-        await client.from('employees').insert({
-          'organization_id': orgId,
-          'user_id': user.id,
-          'designation': 'Team Member',
-          'department': 'Operations',
-        });
-      }
+    // 2. Call the secure RPC to accept the invitation
+    await client.rpc('accept_invitation', params: {
+      'invite_code': cleanToken,
+    });
 
-      // 5. Update invitation status
-      await client
-          .from('invitations')
-          .update({'status': 'accepted'})
-          .eq('token', token);
-
+    // 3. Load the new multi-tenant context
+    if (response.session != null) {
       await loadUserOrganizationContext();
     }
 
@@ -186,25 +146,42 @@ class SupabaseService {
   /// Load current organization & membership details for logged-in user
   Future<void> loadUserOrganizationContext() async {
     final user = currentUser;
-    if (user == null) return;
+    if (user == null) {
+      _currentOrganization = null;
+      _currentMembership = null;
+      return;
+    }
 
     try {
-      final memberships = await client
-          .from('organization_memberships')
+      final result = await client
+          .from('organization_members')
           .select('*, organizations(*)')
-          .eq('user_id', user.id)
-          .eq('status', 'active');
+          .eq('profile_id', user.id);
 
-      if ((memberships as List).isNotEmpty) {
-        final firstMem = memberships.first;
-        _currentMembership = OrganizationMembership.fromMap(firstMem);
+      final List<dynamic> memberships = result as List<dynamic>;
+
+      if (memberships.isNotEmpty) {
+        final firstMem = Map<String, dynamic>.from(memberships.first);
+        _currentMembership = firstMem;
         if (firstMem['organizations'] != null) {
-          _currentOrganization = Organization.fromMap(firstMem['organizations']);
+          _currentOrganization = Map<String, dynamic>.from(firstMem['organizations']);
         }
+      } else {
+        _currentMembership = null;
+        _currentOrganization = null;
       }
     } catch (e) {
       debugPrint('Error loading organization context: $e');
+      _currentMembership = null;
+      _currentOrganization = null;
     }
+  }
+
+  Future<void> resetPassword(String email, {String? redirectTo}) async {
+    await client.auth.resetPasswordForEmail(
+      email,
+      redirectTo: redirectTo,
+    );
   }
 
   Future<void> signOut() async {
@@ -214,162 +191,11 @@ class SupabaseService {
   }
 
   // ============================================================
-  // 2. PROJECTS WORKSPACE SERVICES
-  // ============================================================
-
-  Future<List<ProjectDomainModel>> fetchProjects() async {
-    if (_currentOrganization == null) return [];
-    try {
-      final response = await client
-          .from('projects')
-          .select('*, clients(*)')
-          .eq('organization_id', _currentOrganization!.id);
-      return (response as List).map((json) => ProjectDomainModel.fromMap(json)).toList();
-    } catch (e) {
-      debugPrint('Error fetching projects: $e');
-      return [];
-    }
-  }
-
-  Future<bool> createProject(ProjectDomainModel project) async {
-    if (_currentOrganization == null) return false;
-    try {
-      await client.from('projects').insert(project.toMap());
-      return true;
-    } catch (e) {
-      debugPrint('Error creating project: $e');
-      return false;
-    }
-  }
-
-  // ============================================================
-  // 3. TASKS & CLIENT REQUEST SERVICES
-  // ============================================================
-
-  Future<List<TaskDomainModel>> fetchTasks([String? projectId]) async {
-    if (_currentOrganization == null) return [];
-    try {
-      var query = client.from('tasks').select('*, assignee:profiles!tasks_assigned_to_fkey(*)');
-      query = query.eq('organization_id', _currentOrganization!.id);
-      if (projectId != null && projectId.isNotEmpty) {
-        query = query.eq('project_id', projectId);
-      }
-      final response = await query;
-      return (response as List).map((json) => TaskDomainModel.fromMap(json)).toList();
-    } catch (e) {
-      debugPrint('Error fetching tasks: $e');
-      return [];
-    }
-  }
-
-  Future<bool> updateTaskStatus(String taskId, String newStatus) async {
-    try {
-      await client.from('tasks').update({
-        'status': newStatus,
-        if (newStatus == 'Completed') 'completed_at': DateTime.now().toIso8601String(),
-      }).eq('id', taskId);
-      return true;
-    } catch (e) {
-      debugPrint('Error updating task status: $e');
-      return false;
-    }
-  }
-
-  Future<bool> createClientRequest(ClientRequestModel request) async {
-    if (_currentOrganization == null) return false;
-    try {
-      await client.from('client_requests').insert(request.toMap());
-      return true;
-    } catch (e) {
-      debugPrint('Error creating client request: $e');
-      return false;
-    }
-  }
-
-  // ============================================================
-  // 4. CLIENTS & EMPLOYEES SERVICES (DOMAIN MODELS)
-  // ============================================================
-
-  Future<List<ClientDomainModel>> fetchClientsDomain() async {
-    if (_currentOrganization == null) return [];
-    try {
-      final response = await client
-          .from('clients')
-          .select()
-          .eq('organization_id', _currentOrganization!.id);
-      return (response as List).map((json) => ClientDomainModel.fromMap(json)).toList();
-    } catch (e) {
-      debugPrint('Error fetching clients: $e');
-      return [];
-    }
-  }
-
-  Future<bool> createClient(ClientDomainModel clientData) async {
-    if (_currentOrganization == null) return false;
-    try {
-      await client.from('clients').insert(clientData.toMap());
-      return true;
-    } catch (e) {
-      debugPrint('Error creating client: $e');
-      return false;
-    }
-  }
-
-  Future<List<EmployeeDomainModel>> fetchEmployeesDomain() async {
-    if (_currentOrganization == null) return [];
-    try {
-      final response = await client
-          .from('employees')
-          .select('*, profiles(*)')
-          .eq('organization_id', _currentOrganization!.id);
-      return (response as List).map((json) => EmployeeDomainModel.fromMap(json)).toList();
-    } catch (e) {
-      debugPrint('Error fetching employees: $e');
-      return [];
-    }
-  }
-
-  // ============================================================
-  // 5. INVOICES & PAYMENTS SERVICES
-  // ============================================================
-
-  Future<List<InvoiceDomainModel>> fetchInvoices() async {
-    if (_currentOrganization == null) return [];
-    try {
-      final response = await client
-          .from('invoices')
-          .select()
-          .eq('organization_id', _currentOrganization!.id);
-      return (response as List).map((json) => InvoiceDomainModel.fromMap(json)).toList();
-    } catch (e) {
-      debugPrint('Error fetching invoices: $e');
-      return [];
-    }
-  }
-
-  Future<bool> recordPayment(PaymentRecordModel payment) async {
-    if (_currentOrganization == null) return false;
-    try {
-      await client.from('payments').insert(payment.toMap());
-      
-      // Update Invoice Status to Paid or Partially Paid
-      await client.from('invoices').update({
-        'status': 'Paid',
-      }).eq('id', payment.invoiceId);
-      return true;
-    } catch (e) {
-      debugPrint('Error recording payment: $e');
-      return false;
-    }
-  }
-
-  // ============================================================
-  // 6. LEGACY / APP_DATA_STORE COMPATIBILITY & REALTIME METHODS
+  // 2. REALTIME & REPOSITORY COMPATIBILITY METHODS
   // ============================================================
 
   RealtimeChannel? _realtimeChannel;
 
-  /// Subscribe to Realtime Postgres changes across all organization tables
   void subscribeToRealtimeChanges(VoidCallback onDataChanged) {
     _realtimeChannel?.unsubscribe();
     _realtimeChannel = client
@@ -388,8 +214,8 @@ class SupabaseService {
   Future<List<Employee>?> fetchEmployees() async {
     try {
       var query = client.from('employees').select('*, profiles(*)');
-      if (_currentOrganization != null) {
-        query = query.eq('organization_id', _currentOrganization!.id);
+      if (currentOrganizationId != null) {
+        query = query.eq('organization_id', currentOrganizationId!);
       }
       final response = await query;
       final list = (response as List).map((json) {
@@ -415,12 +241,12 @@ class SupabaseService {
 
   Future<bool> insertEmployee(Employee emp) async {
     try {
-      if (_currentOrganization == null) return false;
+      if (currentOrganizationId == null) return false;
       final userId = currentUser?.id;
       if (userId == null) return false;
 
       await client.from('employees').upsert({
-        'organization_id': _currentOrganization!.id,
+        'organization_id': currentOrganizationId,
         'user_id': userId,
         'designation': emp.role.isEmpty ? 'Staff' : emp.role,
         'department': emp.department.isEmpty ? 'General' : emp.department,
@@ -460,8 +286,8 @@ class SupabaseService {
   Future<List<ClientModel>?> fetchClients() async {
     try {
       var query = client.from('clients').select();
-      if (_currentOrganization != null) {
-        query = query.eq('organization_id', _currentOrganization!.id);
+      if (currentOrganizationId != null) {
+        query = query.eq('organization_id', currentOrganizationId!);
       }
       final response = await query;
       final list = (response as List).map((json) {
@@ -485,9 +311,9 @@ class SupabaseService {
 
   Future<bool> insertClient(ClientModel clientData) async {
     try {
-      if (_currentOrganization == null) return false;
+      if (currentOrganizationId == null) return false;
       await client.from('clients').insert({
-        'organization_id': _currentOrganization!.id,
+        'organization_id': currentOrganizationId,
         'client_type': clientData.company.isNotEmpty ? 'business' : 'individual',
         'company_name': clientData.company,
         'contact_name': clientData.name.isEmpty ? clientData.company : clientData.name,
@@ -529,8 +355,8 @@ class SupabaseService {
   Future<List<LeaveRequest>?> fetchLeaveRequests() async {
     try {
       var query = client.from('leave_requests').select('*, profiles(*)');
-      if (_currentOrganization != null) {
-        query = query.eq('organization_id', _currentOrganization!.id);
+      if (currentOrganizationId != null) {
+        query = query.eq('organization_id', currentOrganizationId!);
       }
       final response = await query;
       final list = (response as List).map((json) {
@@ -555,9 +381,9 @@ class SupabaseService {
 
   Future<bool> insertLeaveRequest(LeaveRequest request) async {
     try {
-      if (_currentOrganization == null || currentUser == null) return false;
+      if (currentOrganizationId == null || currentUser == null) return false;
       await client.from('leave_requests').insert({
-        'organization_id': _currentOrganization!.id,
+        'organization_id': currentOrganizationId,
         'user_id': currentUser!.id,
         'leave_type': request.type.isEmpty ? 'Casual' : request.type,
         'start_date': request.startDate.isEmpty ? DateTime.now().toIso8601String().split('T')[0] : request.startDate,
@@ -614,9 +440,9 @@ class SupabaseService {
       if ((convs as List).isNotEmpty) {
         convId = convs.first['id'];
       } else {
-        if (_currentOrganization == null) return false;
+        if (currentOrganizationId == null) return false;
         final newConv = await client.from('conversations').insert({
-          'organization_id': _currentOrganization!.id,
+          'organization_id': currentOrganizationId,
           'type': 'direct',
           'title': 'General Chat',
         }).select().single();
@@ -632,6 +458,50 @@ class SupabaseService {
     } catch (e) {
       debugPrint('Supabase sendChatMessage error: $e');
       return false;
+    }
+  }
+
+  Future<List<ProjectDomainModel>> fetchProjects() async {
+    if (currentOrganizationId == null) return [];
+    try {
+      final response = await client
+          .from('projects')
+          .select('*, clients(*)')
+          .eq('organization_id', currentOrganizationId!);
+      return (response as List).map((json) => ProjectDomainModel.fromMap(json)).toList();
+    } catch (e) {
+      debugPrint('Error fetching projects: $e');
+      return [];
+    }
+  }
+
+  Future<List<TaskDomainModel>> fetchTasks([String? projectId]) async {
+    if (currentOrganizationId == null) return [];
+    try {
+      var query = client.from('tasks').select('*, assignee:profiles!tasks_assigned_to_fkey(*)');
+      query = query.eq('organization_id', currentOrganizationId!);
+      if (projectId != null && projectId.isNotEmpty) {
+        query = query.eq('project_id', projectId);
+      }
+      final response = await query;
+      return (response as List).map((json) => TaskDomainModel.fromMap(json)).toList();
+    } catch (e) {
+      debugPrint('Error fetching tasks: $e');
+      return [];
+    }
+  }
+
+  Future<List<InvoiceDomainModel>> fetchInvoices() async {
+    if (currentOrganizationId == null) return [];
+    try {
+      final response = await client
+          .from('invoices')
+          .select()
+          .eq('organization_id', currentOrganizationId!);
+      return (response as List).map((json) => InvoiceDomainModel.fromMap(json)).toList();
+    } catch (e) {
+      debugPrint('Error fetching invoices: $e');
+      return [];
     }
   }
 }
