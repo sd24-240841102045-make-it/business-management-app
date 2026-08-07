@@ -3,10 +3,10 @@ import 'package:firebase_core/firebase_core.dart';
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'login_page.dart';
-
 import 'client_shell.dart';
 import 'main_shell.dart';
 import 'services/supabase_service.dart';
+import 'services/app_data_store.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -20,18 +20,53 @@ void main() async {
   runApp(const MyApp());
 }
 
-class MyApp extends StatelessWidget {
+class MyApp extends StatefulWidget {
   const MyApp({super.key});
+
+  @override
+  State<MyApp> createState() => _MyAppState();
+}
+
+class _MyAppState extends State<MyApp> {
+  final AppDataStore _store = AppDataStore();
+
+  @override
+  void initState() {
+    super.initState();
+    _store.addListener(_onStoreChange);
+  }
+
+  @override
+  void dispose() {
+    _store.removeListener(_onStoreChange);
+    super.dispose();
+  }
+
+  void _onStoreChange() {
+    if (mounted) setState(() {});
+  }
 
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
       debugShowCheckedModeBanner: false,
-      title: 'Business Management App',
+      title: 'Business Management Suite',
+      themeMode: _store.themeMode,
       theme: ThemeData(
         colorScheme: ColorScheme.fromSeed(
           seedColor: Colors.deepPurple,
+          brightness: Brightness.light,
         ),
+        scaffoldBackgroundColor: const Color(0xFFF4F6FA),
+        useMaterial3: true,
+      ),
+      darkTheme: ThemeData(
+        colorScheme: ColorScheme.fromSeed(
+          seedColor: Colors.deepPurple,
+          brightness: Brightness.dark,
+        ),
+        scaffoldBackgroundColor: const Color(0xFF121218),
+        cardColor: const Color(0xFF1E1E26),
         useMaterial3: true,
       ),
       home: const AuthGate(),
@@ -56,4 +91,3 @@ class AuthGate extends StatelessWidget {
     return const MainShell();
   }
 }
-

@@ -49,11 +49,23 @@ class ClientsBodyState extends State<ClientsBody> {
           final bool isTablet = width >= 600 && width < 900;
           final double horizontalPadding = isDesktop ? 40 : isTablet ? 30 : 20;
 
-          return SingleChildScrollView(
-            padding: EdgeInsets.symmetric(horizontal: horizontalPadding, vertical: 20),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
+          return RefreshIndicator(
+            onRefresh: () async {
+              await _store.refreshFromSupabase();
+            },
+            child: SingleChildScrollView(
+              physics: const AlwaysScrollableScrollPhysics(),
+              padding: EdgeInsets.symmetric(horizontal: horizontalPadding, vertical: 20),
+              child: Center(
+                child: ConstrainedBox(
+                  constraints: const BoxConstraints(maxWidth: 1100),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      if (_store.isLoadingFromSupabase) ...[
+                        const LinearProgressIndicator(color: Colors.deepPurple),
+                        const SizedBox(height: 10),
+                      ],
                 // Header Stat Banner
                 Container(
                   width: double.infinity,
@@ -72,19 +84,25 @@ class ClientsBodyState extends State<ClientsBody> {
                         child: Icon(Icons.people_alt, color: Colors.white, size: 28),
                       ),
                       const SizedBox(width: 16),
-                      Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          const Text(
-                            'Client Overview',
-                            style: TextStyle(color: Colors.white70, fontSize: 14),
-                          ),
-                          const SizedBox(height: 4),
-                          Text(
-                            '${_store.clients.length} Total Clients • $activeClientsCount Active Accounts',
-                            style: const TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold),
-                          ),
-                        ],
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            const Text(
+                              'Client Overview',
+                              style: TextStyle(color: Colors.white70, fontSize: 14),
+                            ),
+                            const SizedBox(height: 4),
+                            FittedBox(
+                              fit: BoxFit.scaleDown,
+                              alignment: Alignment.centerLeft,
+                              child: Text(
+                                '${_store.clients.length} Total Clients • $activeClientsCount Active Accounts',
+                                style: const TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold),
+                              ),
+                            ),
+                          ],
+                        ),
                       ),
                     ],
                   ),
@@ -266,9 +284,12 @@ class ClientsBodyState extends State<ClientsBody> {
                       ),
               ],
             ),
-          );
-        },
-      );
+          ),
+        ),
+      ),
+    );
+  },
+);
   }
 
   // Public method called by MainShell's FAB via GlobalKey

@@ -46,11 +46,23 @@ class _HomeBodyState extends State<HomeBody> {
         final bool isTablet = width >= 600 && width < 900;
         final double hPad = isDesktop ? 40 : isTablet ? 28 : 16;
 
-        return SingleChildScrollView(
-          padding: EdgeInsets.symmetric(horizontal: hPad, vertical: 20),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
+        return RefreshIndicator(
+          onRefresh: () async {
+            await _store.refreshFromSupabase();
+          },
+          child: SingleChildScrollView(
+            physics: const AlwaysScrollableScrollPhysics(),
+            padding: EdgeInsets.symmetric(horizontal: hPad, vertical: 20),
+            child: Center(
+              child: ConstrainedBox(
+                constraints: const BoxConstraints(maxWidth: 1100),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    if (_store.isLoadingFromSupabase) ...[
+                      const LinearProgressIndicator(color: Colors.deepPurple),
+                      const SizedBox(height: 10),
+                    ],
               // ── Welcome ───────────────────────────────────
               const Text(
                 'Good Day 👋',
@@ -306,9 +318,12 @@ class _HomeBodyState extends State<HomeBody> {
               ),
             ],
           ),
-        );
-      },
-    );
+        ),
+      ),
+    ),
+  );
+},
+);
   }
 
   // ── Helper widgets ──────────────────────────────────────────

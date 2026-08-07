@@ -54,11 +54,23 @@ class EmployeesBodyState extends State<EmployeesBody> {
           final bool isTablet = width >= 600 && width < 900;
           final double horizontalPadding = isDesktop ? 40 : isTablet ? 30 : 20;
 
-          return SingleChildScrollView(
-            padding: EdgeInsets.symmetric(horizontal: horizontalPadding, vertical: 20),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
+          return RefreshIndicator(
+            onRefresh: () async {
+              await _store.refreshFromSupabase();
+            },
+            child: SingleChildScrollView(
+              physics: const AlwaysScrollableScrollPhysics(),
+              padding: EdgeInsets.symmetric(horizontal: horizontalPadding, vertical: 20),
+              child: Center(
+                child: ConstrainedBox(
+                  constraints: const BoxConstraints(maxWidth: 1100),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      if (_store.isLoadingFromSupabase) ...[
+                        const LinearProgressIndicator(color: Colors.deepPurple),
+                        const SizedBox(height: 10),
+                      ],
                 // Header Banner
                 Container(
                   width: double.infinity,
@@ -310,9 +322,12 @@ class EmployeesBodyState extends State<EmployeesBody> {
                       ),
               ],
             ),
-          );
-        },
-      );
+          ),
+        ),
+      ),
+    );
+  },
+);
   }
 
   // Public method called by MainShell's FAB via GlobalKey

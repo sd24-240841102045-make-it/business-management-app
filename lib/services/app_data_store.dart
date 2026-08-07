@@ -216,6 +216,230 @@ class LeaveRequest {
   }
 }
 
+class AdminModel {
+  final String id;
+  final String name;
+  final String email;
+  final String phone;
+  final String avatarUrl;
+
+  AdminModel({
+    required this.id,
+    required this.name,
+    required this.email,
+    this.phone = '',
+    this.avatarUrl = '',
+  });
+
+  Map<String, dynamic> toMap() {
+    return {
+      'id': id,
+      'name': name,
+      'email': email,
+      'phone': phone,
+      'avatar_url': avatarUrl,
+    };
+  }
+
+  factory AdminModel.fromMap(Map<String, dynamic> map) {
+    return AdminModel(
+      id: map['id'] ?? '',
+      name: map['name'] ?? '',
+      email: map['email'] ?? '',
+      phone: map['phone'] ?? '',
+      avatarUrl: map['avatar_url'] ?? '',
+    );
+  }
+}
+
+class ChatMessage {
+  final String id;
+  final String senderId;
+  final String senderName;
+  final String senderRole; // 'admin', 'employee', 'client'
+  final String receiverId;
+  final String receiverName;
+  final String message;
+  final String createdAt;
+
+  ChatMessage({
+    required this.id,
+    required this.senderId,
+    required this.senderName,
+    required this.senderRole,
+    required this.receiverId,
+    required this.receiverName,
+    required this.message,
+    required this.createdAt,
+  });
+
+  Map<String, dynamic> toMap() {
+    return {
+      'id': id,
+      'sender_id': senderId,
+      'sender_name': senderName,
+      'sender_role': senderRole,
+      'receiver_id': receiverId,
+      'receiver_name': receiverName,
+      'message': message,
+      'created_at': createdAt,
+    };
+  }
+
+  factory ChatMessage.fromMap(Map<String, dynamic> map) {
+    return ChatMessage(
+      id: map['id'] ?? '',
+      senderId: map['sender_id'] ?? '',
+      senderName: map['sender_name'] ?? '',
+      senderRole: map['sender_role'] ?? 'client',
+      receiverId: map['receiver_id'] ?? '',
+      receiverName: map['receiver_name'] ?? '',
+      message: map['message'] ?? '',
+      createdAt: map['created_at'] ?? DateTime.now().toIso8601String(),
+    );
+  }
+}
+
+class ProjectModel {
+  final String id;
+  final String name;
+  final String clientId;
+  final String clientName;
+  final String status;
+  final double budget;
+  final String deadline;
+  final List<String> teamMembers;
+
+  ProjectModel({
+    required this.id,
+    required this.name,
+    required this.clientId,
+    required this.clientName,
+    this.status = 'In Progress',
+    required this.budget,
+    required this.deadline,
+    this.teamMembers = const [],
+  });
+
+  Map<String, dynamic> toMap() {
+    return {
+      'id': id,
+      'name': name,
+      'client_id': clientId,
+      'client_name': clientName,
+      'status': status,
+      'budget': budget,
+      'deadline': deadline,
+      'team_members': teamMembers,
+    };
+  }
+
+  factory ProjectModel.fromMap(Map<String, dynamic> map) {
+    return ProjectModel(
+      id: map['id'] ?? '',
+      name: map['name'] ?? '',
+      clientId: map['client_id'] ?? '',
+      clientName: map['client_name'] ?? '',
+      status: map['status'] ?? 'In Progress',
+      budget: (map['budget'] as num?)?.toDouble() ?? 0.0,
+      deadline: map['deadline'] ?? '',
+      teamMembers: (map['team_members'] as List?)?.map((e) => e.toString()).toList() ?? [],
+    );
+  }
+}
+
+class TaskModel {
+  final String id;
+  final String title;
+  final String projectId;
+  final String projectName;
+  final String assignedToName;
+  final String status;
+  final String priority;
+  final String dueDate;
+
+  TaskModel({
+    required this.id,
+    required this.title,
+    this.projectId = '',
+    this.projectName = 'General Work',
+    required this.assignedToName,
+    this.status = 'To Do',
+    this.priority = 'Medium',
+    required this.dueDate,
+  });
+
+  Map<String, dynamic> toMap() {
+    return {
+      'id': id,
+      'title': title,
+      'project_id': projectId,
+      'project_name': projectName,
+      'assigned_to_name': assignedToName,
+      'status': status,
+      'priority': priority,
+      'due_date': dueDate,
+    };
+  }
+
+  factory TaskModel.fromMap(Map<String, dynamic> map) {
+    return TaskModel(
+      id: map['id'] ?? '',
+      title: map['title'] ?? '',
+      projectId: map['project_id'] ?? '',
+      projectName: map['project_name'] ?? 'General Work',
+      assignedToName: map['assigned_to_name'] ?? '',
+      status: map['status'] ?? 'To Do',
+      priority: map['priority'] ?? 'Medium',
+      dueDate: map['due_date'] ?? '',
+    );
+  }
+}
+
+class InvoiceModel {
+  final String id;
+  final String invoiceNumber;
+  final String clientName;
+  final double amount;
+  final String status;
+  final String issueDate;
+  final String dueDate;
+
+  InvoiceModel({
+    required this.id,
+    required this.invoiceNumber,
+    required this.clientName,
+    required this.amount,
+    this.status = 'Pending',
+    required this.issueDate,
+    required this.dueDate,
+  });
+
+  Map<String, dynamic> toMap() {
+    return {
+      'id': id,
+      'invoice_number': invoiceNumber,
+      'client_name': clientName,
+      'amount': amount,
+      'status': status,
+      'issue_date': issueDate,
+      'due_date': dueDate,
+    };
+  }
+
+  factory InvoiceModel.fromMap(Map<String, dynamic> map) {
+    return InvoiceModel(
+      id: map['id'] ?? '',
+      invoiceNumber: map['invoice_number'] ?? '',
+      clientName: map['client_name'] ?? '',
+      amount: (map['amount'] as num?)?.toDouble() ?? 0.0,
+      status: map['status'] ?? 'Pending',
+      issueDate: map['issue_date'] ?? '',
+      dueDate: map['due_date'] ?? '',
+    );
+  }
+}
+
 class AppDataStore extends ChangeNotifier {
   static final AppDataStore _instance = AppDataStore._internal();
   factory AppDataStore() => _instance;
@@ -225,20 +449,43 @@ class AppDataStore extends ChangeNotifier {
     refreshFromSupabase();
   }
 
+  final List<AdminModel> _admins = [];
   final List<Employee> _employees = [];
   final List<ClientModel> _clients = [];
+  final List<ProjectModel> _projects = [];
+  final List<TaskModel> _tasks = [];
+  final List<InvoiceModel> _invoices = [];
   final List<LeaveRequest> _leaveRequests = [];
+  final List<ChatMessage> _chatMessages = [];
 
   bool _isCheckedIn = false;
   DateTime? _checkInTime;
   bool _isLoadingFromSupabase = false;
+  ThemeMode _themeMode = ThemeMode.light;
 
+  List<AdminModel> get admins => List.unmodifiable(_admins);
   List<Employee> get employees => List.unmodifiable(_employees);
   List<ClientModel> get clients => List.unmodifiable(_clients);
+  List<ProjectModel> get projects => List.unmodifiable(_projects);
+  List<TaskModel> get tasks => List.unmodifiable(_tasks);
+  List<InvoiceModel> get invoices => List.unmodifiable(_invoices);
   List<LeaveRequest> get leaveRequests => List.unmodifiable(_leaveRequests);
+  List<ChatMessage> get chatMessages => List.unmodifiable(_chatMessages);
   bool get isCheckedIn => _isCheckedIn;
   DateTime? get checkInTime => _checkInTime;
   bool get isLoadingFromSupabase => _isLoadingFromSupabase;
+  ThemeMode get themeMode => _themeMode;
+  bool get isDarkMode => _themeMode == ThemeMode.dark;
+
+  void setThemeMode(ThemeMode mode) {
+    _themeMode = mode;
+    notifyListeners();
+  }
+
+  void toggleDarkMode(bool isDark) {
+    _themeMode = isDark ? ThemeMode.dark : ThemeMode.light;
+    notifyListeners();
+  }
 
   void _initInitialData() {
     _employees.addAll([
@@ -352,25 +599,57 @@ class AppDataStore extends ChangeNotifier {
     _isLoadingFromSupabase = true;
     notifyListeners();
 
-    final remoteEmployees = await SupabaseService().fetchEmployees();
-    if (remoteEmployees != null && remoteEmployees.isNotEmpty) {
-      _employees.clear();
-      _employees.addAll(remoteEmployees);
-    }
+    try {
+      final remoteEmployees = await SupabaseService().fetchEmployees();
+      if (remoteEmployees != null && remoteEmployees.isNotEmpty) {
+        _employees.clear();
+        _employees.addAll(remoteEmployees);
+      } else {
+        // Seed initial employees to Supabase
+        for (final emp in _employees) {
+          await SupabaseService().insertEmployee(emp);
+        }
+      }
 
-    final remoteClients = await SupabaseService().fetchClients();
-    if (remoteClients != null && remoteClients.isNotEmpty) {
-      _clients.clear();
-      _clients.addAll(remoteClients);
-    }
+      final remoteClients = await SupabaseService().fetchClients();
+      if (remoteClients != null && remoteClients.isNotEmpty) {
+        _clients.clear();
+        _clients.addAll(remoteClients);
+      } else {
+        // Seed initial clients to Supabase
+        for (final cli in _clients) {
+          await SupabaseService().insertClient(cli);
+        }
+      }
 
-    final remoteLeaves = await SupabaseService().fetchLeaveRequests();
-    if (remoteLeaves != null && remoteLeaves.isNotEmpty) {
-      _leaveRequests.clear();
-      _leaveRequests.addAll(remoteLeaves);
-    }
+      final remoteLeaves = await SupabaseService().fetchLeaveRequests();
+      if (remoteLeaves != null && remoteLeaves.isNotEmpty) {
+        _leaveRequests.clear();
+        _leaveRequests.addAll(remoteLeaves);
+      } else {
+        // Seed initial leave requests to Supabase
+        for (final req in _leaveRequests) {
+          await SupabaseService().insertLeaveRequest(req);
+        }
+      }
 
-    _isLoadingFromSupabase = false;
+      final remoteChats = await SupabaseService().fetchChatMessages();
+      if (remoteChats != null) {
+        _chatMessages.clear();
+        _chatMessages.addAll(remoteChats);
+      }
+    } catch (e) {
+      debugPrint('Error syncing with Supabase: $e');
+    } finally {
+      _isLoadingFromSupabase = false;
+      notifyListeners();
+    }
+  }
+
+  // --- CHAT MESSAGING ---
+  void addChatMessage(ChatMessage msg) {
+    _chatMessages.add(msg);
+    SupabaseService().sendChatMessage(msg);
     notifyListeners();
   }
 
