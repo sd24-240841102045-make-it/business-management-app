@@ -46,7 +46,7 @@ class HRRepository {
     try {
       final today = DateTime.now().toIso8601String().split('T')[0];
       await _client.from('attendance').upsert({
-        'organization_id': currentOrg.id,
+        'organization_id': currentOrg['id'],
         'user_id': currentUser.id,
         'date': today,
         'check_in': DateTime.now().toIso8601String(),
@@ -86,7 +86,7 @@ class HRRepository {
       final response = await _client
           .from('attendance')
           .select()
-          .eq('organization_id', currentOrg.id)
+          .eq('organization_id', currentOrg['id'])
           .eq('user_id', currentUser.id)
           .order('date', ascending: false);
 
@@ -110,7 +110,7 @@ class HRRepository {
 
     try {
       await _client.from('timesheets').insert({
-        'organization_id': currentOrg.id,
+        'organization_id': currentOrg['id'],
         'user_id': currentUser.id,
         'project_id': projectId,
         'task_id': taskId,

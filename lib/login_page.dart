@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'services/supabase_service.dart';
+import 'main.dart';
 
 enum AuthRole {
   admin,
@@ -60,6 +62,7 @@ class _LoginPageState extends State<LoginPage> {
   bool obscurePassword = true;
 
   bool isLoading = false;
+
 
   // ============================================================
   // DISPOSE
@@ -136,11 +139,28 @@ class _LoginPageState extends State<LoginPage> {
     // PASSWORD VALIDATION
     // ----------------------------------------------------------
 
-    if (password.length < 6) {
-      _showSnackBar(
-        'Password must be at least 6 characters long.',
-      );
-      return;
+    if (authMode == AuthMode.signIn) {
+      if (password.isEmpty) {
+        _showSnackBar('Please enter your password.');
+        return;
+      }
+    } else {
+      if (password.length < 8) {
+        _showSnackBar('Password must be at least 8 characters long.');
+        return;
+      }
+      if (!RegExp(r'[A-Z]').hasMatch(password)) {
+        _showSnackBar('Password must contain at least one uppercase letter.');
+        return;
+      }
+      if (!RegExp(r'[0-9]').hasMatch(password)) {
+        _showSnackBar('Password must contain at least one number.');
+        return;
+      }
+      if (!RegExp(r'[!@#\$&*~%\^\-\+]').hasMatch(password)) {
+        _showSnackBar('Password must contain at least one special character.');
+        return;
+      }
     }
 
     setState(() {
@@ -148,12 +168,13 @@ class _LoginPageState extends State<LoginPage> {
     });
 
     try {
+
       // ========================================================
       // CREATE BUSINESS
       // ========================================================
 
       if (authMode == AuthMode.createBusiness) {
-        await SupabaseService().signUpBusinessAdmin(
+        final response = await SupabaseService().signUpBusinessAdmin(
           email: email,
           password: password,
           fullName: fullNameController.text.trim(),
@@ -169,20 +190,28 @@ class _LoginPageState extends State<LoginPage> {
 
         if (!mounted) return;
 
+        if (response.session == null) {
+          // Email confirmation required — stay on login page
+          _showSnackBar(
+            'Business account created! Please check your email to confirm your account.',
+            isError: false,
+          );
+          return;
+        }
+
+        // Session is live — AuthGate will handle navigation via onAuthStateChange.
+        // Show a success message but DON'T return early, so the finally block runs
+        // and the auth state listener picks up the new session.
         _showSnackBar(
-          'Business account created successfully! Logged in as ${fullNameController.text.trim()} ($email)',
+          'Business account created successfully! Logging in...',
           isError: false,
         );
-
-        // AuthGate will handle the next screen.
-        return;
-      }
 
       // ========================================================
       // ACCEPT INVITATION
       // ========================================================
 
-      if (authMode == AuthMode.acceptInvite) {
+      } else if (authMode == AuthMode.acceptInvite) {
         await SupabaseService().acceptInvitation(
           token: inviteTokenController.text.trim(),
           email: email,
@@ -193,46 +222,44 @@ class _LoginPageState extends State<LoginPage> {
         if (!mounted) return;
 
         _showSnackBar(
-          'Invitation accepted successfully! Logged in as ${fullNameController.text.trim()} ($email)',
+          'Invitation accepted successfully! Logging in...',
           isError: false,
         );
-
-        // AuthGate handles navigation.
-        return;
-      }
+        // AuthGate will handle navigation via onAuthStateChange.
 
       // ========================================================
       // SIGN IN
       // ========================================================
 
-      await SupabaseService().signInWithEmail(
-        email: email,
-        password: password,
-      );
+      } else {
+        await SupabaseService().signInWithEmail(
+          email: email,
+          password: password,
+        );
 
-      final user = SupabaseService().currentUser;
-      final userName = user?.userMetadata?['full_name'] as String? ?? 'User';
+        final actualRole = SupabaseService().currentRole;
+        final expectedRoleStr = selectedRole.name;
 
-      if (!mounted) return;
+        if (actualRole != expectedRoleStr) {
+          await SupabaseService().client.auth.signOut();
+          throw Exception(
+              'Access denied. You are registered as an $actualRole, but tried to log in as a $expectedRoleStr.');
+        }
 
-      _showSnackBar(
-        'Welcome back, $userName ($email)!',
-        isError: false,
-      );
+        final user = SupabaseService().currentUser;
+        final userName = user?.userMetadata?['full_name'] as String? ?? 'User';
 
-      // Do NOT manually navigate here.
-      //
-      // AuthGate in main.dart will detect the Supabase session
-      // and load the correct shell based on the database role.
+        if (!mounted) return;
+
+        _showSnackBar(
+          'Welcome back, $userName ($email)!',
+          isError: false,
+        );
+      }
     } catch (e) {
       if (!mounted) return;
 
-      final message = e
-          .toString()
-          .replaceAll('AuthException:', '')
-          .replaceAll('AuthRetryableFetchException:', '')
-          .replaceAll('Exception:', '')
-          .trim();
+      final message = AuthErrorHandler.getFriendlyMessage(e);
 
       _showSnackBar(
         message.isEmpty
@@ -697,24 +724,19 @@ class _LoginPageState extends State<LoginPage> {
                           ),
 
                           // ==================================================
-                          // FORGOT PASSWORD
+                          // FORGOT PASSWORD & REMEMBER ME
                           // ==================================================
 
-                          if (authMode ==
-                              AuthMode.signIn)
+                          if (authMode == AuthMode.signIn)
                             Align(
-                              alignment:
-                                  Alignment.centerRight,
+                              alignment: Alignment.centerRight,
                               child: TextButton(
-                                onPressed:
-                                    _showForgotPasswordDialog,
+                                onPressed: _showForgotPasswordDialog,
                                 child: const Text(
                                   'Forgot Password?',
                                   style: TextStyle(
-                                    color:
-                                        Colors.deepPurple,
-                                    fontWeight:
-                                        FontWeight.w600,
+                                    color: Colors.deepPurple,
+                                    fontWeight: FontWeight.w600,
                                   ),
                                 ),
                               ),
@@ -826,13 +848,19 @@ class _LoginPageState extends State<LoginPage> {
         children: [
           _buildRoleTab(
             AuthRole.admin,
-            'Business / Admin',
+            'Admin',
             Icons.admin_panel_settings_outlined,
+          ),
+          
+          _buildRoleTab(
+            AuthRole.employee,
+            'Employee',
+            Icons.badge_outlined,
           ),
 
           _buildRoleTab(
             AuthRole.client,
-            'Client Portal',
+            'Client',
             Icons.business_center_outlined,
           ),
         ],

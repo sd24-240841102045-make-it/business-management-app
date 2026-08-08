@@ -1,6 +1,7 @@
 import 'package:flutter/foundation.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import '../models/saas_models.dart';
+import 'encryption_service.dart';
 import 'app_data_store.dart';
 
 class SupabaseService {
@@ -25,11 +26,20 @@ class SupabaseService {
 
   Map<String, dynamic>? _currentOrganization;
   Map<String, dynamic>? _currentMembership;
+  bool _isAuthActionInProgress = false;
+
+  bool get isAuthActionInProgress => _isAuthActionInProgress;
 
   Map<String, dynamic>? get currentOrganization => _currentOrganization;
   Map<String, dynamic>? get currentMembership => _currentMembership;
 
-  String get currentRole => _currentMembership?['role']?.toString() ?? 'admin';
+  String get currentRole {
+    if (_currentMembership != null && _currentMembership!['role'] != null) {
+      return _currentMembership!['role'].toString().toLowerCase();
+    }
+    return getUserRole();
+  }
+  
   String? get currentOrganizationId => _currentMembership?['organization_id']?.toString();
 
   String getUserRole([User? user]) {
@@ -40,7 +50,7 @@ class SupabaseService {
     if (u?.userMetadata != null && u!.userMetadata!.containsKey('role')) {
       return u.userMetadata!['role'].toString().toLowerCase();
     }
-    return 'admin';
+    return 'employee'; // Safest fallback
   }
 
   // ============================================================
@@ -57,37 +67,46 @@ class SupabaseService {
     required String phone,
     required String country,
   }) async {
-    final response = await client.auth.signUp(
-      email: email,
-      password: password,
-      data: {
-        'full_name': fullName,
-        'business_name': businessName,
-        'industry': industry,
-        'phone': phone,
-        'country': country,
-        'role': 'admin',
-      },
-    );
+    _isAuthActionInProgress = true;
+    try {
+      final response = await client.auth.signUp(
+        email: email,
+        password: password,
+        data: {
+          'full_name': fullName,
+          'business_name': businessName,
+          'industry': industry,
+          'phone': phone,
+          'country': country,
+          'role': 'admin',
+        },
+      );
 
-    if (response.user == null) {
-      throw Exception('Business account could not be created.');
+      if (response.user == null) {
+        throw Exception('Business account could not be created.');
+      }
+
+      if (response.session != null) {
+        await loadUserOrganizationContext();
+      }
+
+      return response;
+    } finally {
+      _isAuthActionInProgress = false;
     }
-
-    if (response.session != null) {
-      await loadUserOrganizationContext();
-    }
-
-    return response;
   }
 
-  /// Sign in existing user & populate multi-tenant context
   Future<AuthResponse> signInWithEmail({
     required String email,
     required String password,
   }) async {
+    final cleanEmail = email.trim().toLowerCase();
+    if (cleanEmail.isEmpty || password.isEmpty) {
+      throw Exception('Email and password cannot be empty.');
+    }
+
     final response = await client.auth.signInWithPassword(
-      email: email,
+      email: cleanEmail,
       password: password,
     );
 
@@ -96,6 +115,13 @@ class SupabaseService {
     }
 
     await loadUserOrganizationContext();
+
+    // Enforcement: Reject if no valid membership is found
+    if (_currentMembership == null || _currentMembership!['status'] != 'active') {
+       await client.auth.signOut();
+       throw Exception('Your account has no active organization membership.');
+    }
+
     return response;
   }
 
@@ -106,41 +132,62 @@ class SupabaseService {
     required String password,
     required String fullName,
   }) async {
-    final cleanToken = token.trim();
-    final cleanName = fullName.trim();
-    final targetEmail = email?.trim().toLowerCase();
+    _isAuthActionInProgress = true;
+    try {
+      final cleanToken = token.trim();
+      final cleanName = fullName.trim();
+      final targetEmail = email?.trim().toLowerCase();
 
-    if (cleanToken.isEmpty) {
-      throw Exception('Please enter your invitation code.');
+      if (cleanToken.isEmpty) {
+        throw Exception('Please enter your invitation code.');
+      }
+      if (targetEmail == null || targetEmail.isEmpty) {
+        throw Exception('Email is required.');
+      }
+
+      // 1. Verify the code FIRST before creating any account
+      final bool isValid = await client.rpc('verify_invite_code', params: {
+        'invite_code_param': cleanToken,
+      });
+
+      if (!isValid) {
+        throw Exception('Invalid or expired invitation code.');
+      }
+
+      // 2. Create Supabase Auth Account (The trigger creates a basic profile)
+      final response = await client.auth.signUp(
+        email: targetEmail,
+        password: password,
+        data: {
+          'full_name': cleanName,
+        },
+      );
+
+      if (response.user == null) {
+        throw Exception('Could not create account for invitation.');
+      }
+
+      // 3. Redeem the code to join the organization
+      try {
+        await client.rpc('redeem_invite_code', params: {
+          'invite_code_param': cleanToken,
+        });
+      } catch (e) {
+        // If redemption fails, the account was created but has no org membership.
+        // Clean up the session locally so they aren't incorrectly routed.
+        await client.auth.signOut();
+        rethrow;
+      }
+
+      // 4. Load the new multi-tenant context
+      if (response.session != null) {
+        await loadUserOrganizationContext();
+      }
+
+      return response;
+    } finally {
+      _isAuthActionInProgress = false;
     }
-    if (targetEmail == null || targetEmail.isEmpty) {
-      throw Exception('Email is required.');
-    }
-
-    // 1. Create Supabase Auth Account (The trigger creates a basic profile)
-    final response = await client.auth.signUp(
-      email: targetEmail,
-      password: password,
-      data: {
-        'full_name': cleanName,
-      },
-    );
-
-    if (response.user == null) {
-      throw Exception('Could not create account for invitation.');
-    }
-
-    // 2. Call the secure RPC to accept the invitation
-    await client.rpc('accept_invitation', params: {
-      'invite_code': cleanToken,
-    });
-
-    // 3. Load the new multi-tenant context
-    if (response.session != null) {
-      await loadUserOrganizationContext();
-    }
-
-    return response;
   }
 
   /// Load current organization & membership details for logged-in user
@@ -153,18 +200,61 @@ class SupabaseService {
     }
 
     try {
-      final result = await client
-          .from('organization_members')
-          .select('*, organizations(*)')
-          .eq('profile_id', user.id);
-
-      final List<dynamic> memberships = result as List<dynamic>;
+      int attempts = 0;
+      List<dynamic> memberships = [];
+      
+      while (attempts < 5) {
+        try {
+          // Use RPC to bypass RLS for membership lookup.
+          // This avoids the circular dependency where the SELECT RLS policy
+          // on organization_memberships uses current_user_org_ids() which
+          // itself queries organization_memberships.
+          final result = await client.rpc('get_my_memberships');
+          memberships = result as List<dynamic>;
+        } catch (rpcError) {
+          // Fallback: direct table query (works if RPC doesn't exist)
+          debugPrint('RPC get_my_memberships failed, falling back to direct query: $rpcError');
+          try {
+            final result = await client
+                .from('organization_memberships')
+                .select('*, organizations(*)')
+                .eq('user_id', user.id);
+            memberships = result as List<dynamic>;
+          } catch (directError) {
+            debugPrint('Direct membership query also failed: $directError');
+          }
+        }
+        
+        if (memberships.isNotEmpty) {
+          break; // Found it!
+        }
+        
+        attempts++;
+        if (attempts < 5) {
+          // Wait 1 second to allow PostgreSQL triggers to commit
+          await Future.delayed(const Duration(milliseconds: 1000));
+        }
+      }
 
       if (memberships.isNotEmpty) {
         final firstMem = Map<String, dynamic>.from(memberships.first);
         _currentMembership = firstMem;
         if (firstMem['organizations'] != null) {
           _currentOrganization = Map<String, dynamic>.from(firstMem['organizations']);
+        } else if (firstMem['organization_id'] != null) {
+          // RPC may not join organizations — fetch separately
+          try {
+            final orgResult = await client
+                .from('organizations')
+                .select()
+                .eq('id', firstMem['organization_id'])
+                .maybeSingle();
+            if (orgResult != null) {
+              _currentOrganization = Map<String, dynamic>.from(orgResult);
+            }
+          } catch (e) {
+            debugPrint('Error fetching organization details: $e');
+          }
         }
       } else {
         _currentMembership = null;
@@ -408,51 +498,75 @@ class SupabaseService {
     }
   }
 
-  Future<List<ChatMessage>?> fetchChatMessages() async {
+  Future<String?> getOrCreateDirectConversation(String otherUserId) async {
     try {
-      var query = client.from('messages').select('*, sender:profiles(*)').order('created_at', ascending: true);
-      final response = await query;
-      final list = (response as List).map((json) {
-        final senderProfile = json['sender'] as Map<String, dynamic>?;
-        return ChatMessage(
-          id: json['id']?.toString() ?? '',
-          senderId: json['sender_id']?.toString() ?? '',
-          senderName: senderProfile?['full_name']?.toString() ?? 'User',
-          senderRole: 'admin',
-          receiverId: '',
-          receiverName: 'General',
-          message: json['content']?.toString() ?? '',
-          createdAt: json['created_at']?.toString() ?? DateTime.now().toIso8601String(),
-        );
-      }).toList();
-      return list;
+      if (currentUser == null || currentOrganizationId == null) return null;
+      final myId = currentUser!.id;
+      
+      final res = await client
+          .from('conversations')
+          .select('id, conversation_members!inner(user_id)')
+          .eq('organization_id', currentOrganizationId!)
+          .eq('type', 'direct');
+      
+      for (final conv in (res as List)) {
+        final members = (conv['conversation_members'] as List).map((m) => m['user_id'] as String).toList();
+        if (members.length == 2 && members.contains(myId) && members.contains(otherUserId)) {
+          return conv['id'] as String;
+        }
+      }
+      
+      final newConv = await client.from('conversations').insert({
+        'organization_id': currentOrganizationId,
+        'type': 'direct',
+        'title': 'Direct Chat',
+      }).select().single();
+      
+      final convId = newConv['id'] as String;
+      
+      await client.from('conversation_members').insert([
+        {'conversation_id': convId, 'user_id': myId},
+        {'conversation_id': convId, 'user_id': otherUserId},
+      ]);
+      
+      return convId;
     } catch (e) {
-      debugPrint('Supabase fetchChatMessages error: $e');
+      debugPrint('Supabase getOrCreateDirectConversation error: $e');
       return null;
     }
   }
 
-  Future<bool> sendChatMessage(ChatMessage message) async {
+  Stream<List<ChatMessage>> getMessagesStream(String conversationId) {
+    return client
+        .from('messages')
+        .stream(primaryKey: ['id'])
+        .eq('conversation_id', conversationId)
+        .order('created_at', ascending: true)
+        .map((list) {
+          return list.map((json) {
+            final decryptedMessage = EncryptionService.decrypt(json['content']?.toString() ?? '');
+            return ChatMessage(
+              id: json['id']?.toString() ?? '',
+              senderId: json['sender_id']?.toString() ?? '',
+              senderName: 'User', // Re-mapped on UI
+              senderRole: 'client', // Re-mapped on UI
+              conversationId: conversationId,
+              message: decryptedMessage,
+              createdAt: json['created_at']?.toString() ?? DateTime.now().toIso8601String(),
+            );
+          }).toList();
+        });
+  }
+
+  Future<bool> sendChatMessage(String conversationId, String content) async {
     try {
       if (currentUser == null) return false;
-      final convs = await client.from('conversations').select('id').limit(1);
-      String convId;
-      if ((convs as List).isNotEmpty) {
-        convId = convs.first['id'];
-      } else {
-        if (currentOrganizationId == null) return false;
-        final newConv = await client.from('conversations').insert({
-          'organization_id': currentOrganizationId,
-          'type': 'direct',
-          'title': 'General Chat',
-        }).select().single();
-        convId = newConv['id'];
-      }
-
+      final encryptedContent = EncryptionService.encrypt(content);
+      
       await client.from('messages').insert({
-        'conversation_id': convId,
+        'conversation_id': conversationId,
         'sender_id': currentUser!.id,
-        'content': message.message,
+        'content': encryptedContent,
       });
       return true;
     } catch (e) {
@@ -502,6 +616,25 @@ class SupabaseService {
     } catch (e) {
       debugPrint('Error fetching invoices: $e');
       return [];
+    }
+  }
+}
+
+class AuthErrorHandler {
+  static String getFriendlyMessage(dynamic error) {
+    final str = error.toString();
+    if (str.contains('Invalid login credentials')) {
+      return 'Incorrect email or password.';
+    } else if (str.contains('User already registered') || str.contains('already exists')) {
+      return 'This email address is already registered.';
+    } else if (str.contains('Invalid or expired invitation code')) {
+      return 'The invitation code you entered is invalid or has already been used.';
+    } else if (str.contains('PostgrestException')) {
+      return 'Database access denied or configuration error.';
+    } else if (str.contains('Failed host lookup') || str.contains('SocketException')) {
+      return 'Network error. Please check your internet connection.';
+    } else {
+      return str.replaceAll('AuthException:', '').replaceAll('Exception:', '').trim();
     }
   }
 }

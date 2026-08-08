@@ -15,7 +15,7 @@ class ProjectRepository {
       final response = await _client
           .from('projects')
           .select('*, clients(*)')
-          .eq('organization_id', currentOrg.id)
+          .eq('organization_id', currentOrg['id'])
           .order('created_at', ascending: false);
 
       return (response as List).map((json) => ProjectDomainModel.fromMap(json)).toList();
@@ -39,7 +39,7 @@ class ProjectRepository {
 
     try {
       await _client.from('projects').insert({
-        'organization_id': currentOrg.id,
+        'organization_id': currentOrg['id'],
         'client_id': clientId,
         'manager_id': currentUser.id,
         'name': name,
@@ -90,7 +90,7 @@ class ProjectRepository {
 
     try {
       await _client.from('approvals').insert({
-        'organization_id': currentOrg.id,
+        'organization_id': currentOrg['id'],
         'project_id': approval.projectId,
         'task_id': approval.taskId,
         'title': approval.title,

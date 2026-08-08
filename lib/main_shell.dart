@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'home_page.dart';
+import 'pages/employee_dashboard_page.dart';
 import 'employees_page.dart';
 import 'clients.dart';
 import 'attendance_leave_page.dart';
@@ -15,6 +16,8 @@ import 'pages/invoice_page.dart';
 import 'pages/reports_page.dart';
 import 'pages/invite_page.dart';
 import 'services/supabase_service.dart';
+
+import 'pages/client_dashboard_page.dart';
 
 class MainShell extends StatefulWidget {
   const MainShell({super.key});
@@ -38,84 +41,101 @@ class _MainShellState extends State<MainShell> {
 
   @override
   Widget build(BuildContext context) {
-    final isAdmin = SupabaseService().currentRole == 'admin';
+    final role = SupabaseService().currentRole;
+    final isAdmin = role == 'admin';
+    final isEmployee = role == 'employee';
+    final isClient = role == 'client';
 
     // 1. Dynamic Main Navigation
-    final List<Widget> pages = [
-      HomeBody(onNavigate: _onItemTapped),
-      if (isAdmin) EmployeesBody(key: _employeesKey, onNavigate: _onItemTapped),
-      if (isAdmin) ClientsBody(key: _clientsKey),
-      AttendanceLeaveBody(key: _attendanceKey),
-      const ProfileBody(),
-    ];
+    final List<Widget> pages = [];
+    final List<String> titles = [];
+    final List<NavigationRailDestination> railDestinations = [];
+    final List<NavigationDestination> bottomDestinations = [];
 
-    final List<String> titles = [
-      'Dashboard',
-      if (isAdmin) 'Employees',
-      if (isAdmin) 'Clients',
-      'Attendance & Leave',
-      'Profile',
-    ];
+    // Dashboard
+    if (isAdmin) {
+      pages.add(HomeBody(onNavigate: _onItemTapped));
+      titles.add('Dashboard');
+    } else if (isEmployee) {
+      pages.add(const EmployeeDashboardPage());
+      titles.add('My Dashboard');
+    } else {
+      pages.add(const ClientDashboardPage());
+      titles.add('Client Portal');
+    }
+    
+    railDestinations.add(const NavigationRailDestination(
+      icon: Icon(Icons.dashboard_outlined),
+      selectedIcon: Icon(Icons.dashboard),
+      label: Text('Home'),
+    ));
+    bottomDestinations.add(const NavigationDestination(
+      icon: Icon(Icons.dashboard_outlined),
+      selectedIcon: Icon(Icons.dashboard),
+      label: 'Home',
+    ));
 
-    final List<NavigationRailDestination> railDestinations = [
-      const NavigationRailDestination(
-        icon: Icon(Icons.dashboard_outlined),
-        selectedIcon: Icon(Icons.dashboard),
-        label: Text('Home'),
-      ),
-      if (isAdmin)
-        const NavigationRailDestination(
-          icon: Icon(Icons.people_outline),
-          selectedIcon: Icon(Icons.people),
-          label: Text('Employees'),
-        ),
-      if (isAdmin)
-        const NavigationRailDestination(
-          icon: Icon(Icons.business_center_outlined),
-          selectedIcon: Icon(Icons.business_center),
-          label: Text('Clients'),
-        ),
-      const NavigationRailDestination(
+    // Admin Only: Employees
+    if (isAdmin) {
+      pages.add(EmployeesBody(key: _employeesKey, onNavigate: _onItemTapped));
+      titles.add('Employees');
+      railDestinations.add(const NavigationRailDestination(
+        icon: Icon(Icons.people_outline),
+        selectedIcon: Icon(Icons.people),
+        label: Text('Employees'),
+      ));
+      bottomDestinations.add(const NavigationDestination(
+        icon: Icon(Icons.people_outline),
+        selectedIcon: Icon(Icons.people),
+        label: 'Employees',
+      ));
+    }
+
+    // Admin Only: Clients
+    if (isAdmin) {
+      pages.add(ClientsBody(key: _clientsKey));
+      titles.add('Clients');
+      railDestinations.add(const NavigationRailDestination(
+        icon: Icon(Icons.business_center_outlined),
+        selectedIcon: Icon(Icons.business_center),
+        label: Text('Clients'),
+      ));
+      bottomDestinations.add(const NavigationDestination(
+        icon: Icon(Icons.business_center_outlined),
+        selectedIcon: Icon(Icons.business_center),
+        label: 'Clients',
+      ));
+    }
+
+    // Employee & Admin: Attendance
+    if (isAdmin || isEmployee) {
+      pages.add(AttendanceLeaveBody(key: _attendanceKey));
+      titles.add('Attendance & Leave');
+      railDestinations.add(const NavigationRailDestination(
         icon: Icon(Icons.calendar_month_outlined),
         selectedIcon: Icon(Icons.calendar_month),
         label: Text('Attendance'),
-      ),
-      const NavigationRailDestination(
-        icon: Icon(Icons.person_outline),
-        selectedIcon: Icon(Icons.person),
-        label: Text('Profile'),
-      ),
-    ];
-
-    final List<NavigationDestination> bottomDestinations = [
-      const NavigationDestination(
-        icon: Icon(Icons.dashboard_outlined),
-        selectedIcon: Icon(Icons.dashboard),
-        label: 'Home',
-      ),
-      if (isAdmin)
-        const NavigationDestination(
-          icon: Icon(Icons.people_outline),
-          selectedIcon: Icon(Icons.people),
-          label: 'Employees',
-        ),
-      if (isAdmin)
-        const NavigationDestination(
-          icon: Icon(Icons.business_center_outlined),
-          selectedIcon: Icon(Icons.business_center),
-          label: 'Clients',
-        ),
-      const NavigationDestination(
+      ));
+      bottomDestinations.add(const NavigationDestination(
         icon: Icon(Icons.calendar_month_outlined),
         selectedIcon: Icon(Icons.calendar_month),
         label: 'Attendance',
-      ),
-      const NavigationDestination(
-        icon: Icon(Icons.person_outline),
-        selectedIcon: Icon(Icons.person),
-        label: 'Profile',
-      ),
-    ];
+      ));
+    }
+
+    // All Roles: Profile
+    pages.add(const ProfileBody());
+    titles.add('Profile');
+    railDestinations.add(const NavigationRailDestination(
+      icon: Icon(Icons.person_outline),
+      selectedIcon: Icon(Icons.person),
+      label: Text('Profile'),
+    ));
+    bottomDestinations.add(const NavigationDestination(
+      icon: Icon(Icons.person_outline),
+      selectedIcon: Icon(Icons.person),
+      label: 'Profile',
+    ));
 
     // Ensure selectedIndex doesn't crash if we switch roles and shrink the array
     if (_selectedIndex >= pages.length) {

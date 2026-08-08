@@ -81,7 +81,7 @@ class InvitationService {
       final expiresAt = DateTime.now().add(const Duration(days: 7));
 
       final response = await _client.from('invitations').insert({
-        'organization_id': currentOrg.id,
+        'organization_id': currentOrg['id'],
         'email': email,
         'role': role,
         'token': token,
@@ -106,7 +106,7 @@ class InvitationService {
       final response = await _client
           .from('invitations')
           .select()
-          .eq('organization_id', currentOrg.id)
+          .eq('organization_id', currentOrg['id'])
           .order('created_at', ascending: false);
 
       return (response as List).map((json) => InvitationModel.fromMap(json)).toList();

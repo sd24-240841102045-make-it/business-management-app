@@ -13,9 +13,16 @@ class InvitePage extends StatefulWidget {
 
 class _InvitePageState extends State<InvitePage> {
   String _selectedRole = 'employee';
+  final TextEditingController _emailController = TextEditingController();
   bool _isLoading = false;
   String? _generatedCode;
   String? _errorMessage;
+
+  @override
+  void dispose() {
+    _emailController.dispose();
+    super.dispose();
+  }
 
   String _generateRandomCode(int length) {
     const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
@@ -33,6 +40,15 @@ class _InvitePageState extends State<InvitePage> {
       _errorMessage = null;
     });
 
+    final email = _emailController.text.trim();
+    if (email.isEmpty || !email.contains('@')) {
+      setState(() {
+        _errorMessage = 'Please enter a valid email address.';
+        _isLoading = false;
+      });
+      return;
+    }
+
     try {
       final orgId = SupabaseService().currentOrganizationId;
       if (orgId == null) throw Exception("No organization found. You must be an admin.");
@@ -42,15 +58,16 @@ class _InvitePageState extends State<InvitePage> {
       
       // Calculate expiration (e.g. 7 days from now)
       final expiresAt = DateTime.now().add(const Duration(days: 7)).toIso8601String();
-
+      
       // Insert into invitations table
       await SupabaseService().client.from('invitations').insert({
         'organization_id': orgId,
-        'code': code,
+        'token': code,
         'role': _selectedRole,
-        'created_by': SupabaseService().currentUser!.id,
+        'email': email,
+        'invited_by': SupabaseService().currentUser!.id,
         'expires_at': expiresAt,
-        'is_used': false,
+        'status': 'pending',
       });
 
       setState(() {
@@ -109,6 +126,25 @@ class _InvitePageState extends State<InvitePage> {
                       textAlign: TextAlign.center,
                     ),
                     const SizedBox(height: 32),
+
+                    // Email Input
+                    const Text(
+                      'Invitee Email',
+                      style: TextStyle(fontWeight: FontWeight.bold),
+                    ),
+                    const SizedBox(height: 12),
+                    TextField(
+                      controller: _emailController,
+                      decoration: InputDecoration(
+                        hintText: 'Enter email address',
+                        prefixIcon: const Icon(Icons.email_outlined),
+                        border: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                      ),
+                      keyboardType: TextInputType.emailAddress,
+                    ),
+                    const SizedBox(height: 24),
                     
                     // Role Selector
                     const Text(
@@ -156,25 +192,21 @@ class _InvitePageState extends State<InvitePage> {
                           ? const SizedBox(
                               height: 20,
                               width: 20,
-                              child: CircularProgressIndicator(
-                                color: Colors.white,
-                                strokeWidth: 2,
-                              ),
+                              child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2),
                             )
                           : const Text(
-                              'Generate Invite Code',
+                              'Generate Code',
                               style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
                             ),
                     ),
-
-                    // Error Message
+                    
                     if (_errorMessage != null) ...[
                       const SizedBox(height: 24),
                       Container(
                         padding: const EdgeInsets.all(12),
                         decoration: BoxDecoration(
-                          color: Colors.red.withOpacity(0.1),
-                          borderRadius: BorderRadius.circular(8),
+                          color: Colors.red.shade50,
+                          borderRadius: BorderRadius.circular(12),
                         ),
                         child: Text(
                           _errorMessage!,
@@ -184,69 +216,51 @@ class _InvitePageState extends State<InvitePage> {
                       ),
                     ],
 
-                    // Success Result
                     if (_generatedCode != null) ...[
                       const SizedBox(height: 32),
                       Container(
                         padding: const EdgeInsets.all(24),
                         decoration: BoxDecoration(
-                          gradient: const LinearGradient(
-                            colors: [Color(0xFF6C63FF), Color(0xFF8E7CFF)],
-                          ),
+                          color: Colors.green.shade50,
                           borderRadius: BorderRadius.circular(16),
-                          boxShadow: [
-                            BoxShadow(
-                              color: Colors.deepPurple.withOpacity(0.2),
-                              blurRadius: 10,
-                              offset: const Offset(0, 4),
-                            ),
-                          ],
+                          border: Border.all(color: Colors.green.shade200),
                         ),
                         child: Column(
                           children: [
                             const Text(
-                              'Your Invitation Code',
+                              'Invitation Code Created!',
                               style: TextStyle(
-                                color: Colors.white70,
+                                color: Colors.green,
                                 fontWeight: FontWeight.bold,
-                              ),
-                            ),
-                            const SizedBox(height: 12),
-                            SelectableText(
-                              _generatedCode!,
-                              style: const TextStyle(
-                                fontSize: 42,
-                                fontWeight: FontWeight.w900,
-                                color: Colors.white,
-                                letterSpacing: 4.0,
+                                fontSize: 16,
                               ),
                             ),
                             const SizedBox(height: 16),
-                            ElevatedButton.icon(
-                              onPressed: () {
-                                Clipboard.setData(ClipboardData(text: _generatedCode!));
-                                ScaffoldMessenger.of(context).showSnackBar(
-                                  const SnackBar(
-                                    content: Text('Code copied to clipboard!'),
-                                    backgroundColor: Colors.green,
-                                  ),
-                                );
-                              },
-                              icon: const Icon(Icons.copy, size: 18),
-                              label: const Text('Copy to Clipboard'),
-                              style: ElevatedButton.styleFrom(
-                                backgroundColor: Colors.white,
-                                foregroundColor: Colors.deepPurple,
-                                shape: RoundedRectangleBorder(
-                                  borderRadius: BorderRadius.circular(8),
-                                ),
+                            SelectableText(
+                              _generatedCode!,
+                              style: const TextStyle(
+                                fontSize: 40,
+                                fontWeight: FontWeight.w900,
+                                letterSpacing: 8,
+                                color: Colors.black87,
                               ),
                             ),
                             const SizedBox(height: 16),
                             const Text(
-                              'Share this code with your new team member. They can use it to sign up on the "Accept Invite" page. It will expire in 7 days.',
-                              style: TextStyle(color: Colors.white70, fontSize: 12),
+                              'Share this code with the user. It will expire in 7 days.',
+                              style: TextStyle(color: Colors.black54),
                               textAlign: TextAlign.center,
+                            ),
+                            const SizedBox(height: 16),
+                            OutlinedButton.icon(
+                              onPressed: () {
+                                Clipboard.setData(ClipboardData(text: _generatedCode!));
+                                ScaffoldMessenger.of(context).showSnackBar(
+                                  const SnackBar(content: Text('Code copied to clipboard')),
+                                );
+                              },
+                              icon: const Icon(Icons.copy),
+                              label: const Text('Copy Code'),
                             )
                           ],
                         ),
@@ -259,7 +273,7 @@ class _InvitePageState extends State<InvitePage> {
           ),
         ),
       ),
-      ),
+      )
     );
   }
 }

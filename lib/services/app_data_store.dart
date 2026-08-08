@@ -293,8 +293,7 @@ class ChatMessage {
   final String senderId;
   final String senderName;
   final String senderRole; // 'admin', 'employee', 'client'
-  final String receiverId;
-  final String receiverName;
+  final String conversationId;
   final String message;
   final String createdAt;
 
@@ -303,8 +302,7 @@ class ChatMessage {
     required this.senderId,
     required this.senderName,
     required this.senderRole,
-    required this.receiverId,
-    required this.receiverName,
+    required this.conversationId,
     required this.message,
     required this.createdAt,
   });
@@ -315,8 +313,7 @@ class ChatMessage {
       'sender_id': senderId,
       'sender_name': senderName,
       'sender_role': senderRole,
-      'receiver_id': receiverId,
-      'receiver_name': receiverName,
+      'conversation_id': conversationId,
       'message': message,
       'created_at': createdAt,
     };
@@ -328,8 +325,7 @@ class ChatMessage {
       senderId: map['sender_id'] ?? '',
       senderName: map['sender_name'] ?? '',
       senderRole: map['sender_role'] ?? 'client',
-      receiverId: map['receiver_id'] ?? '',
-      receiverName: map['receiver_name'] ?? '',
+      conversationId: map['conversation_id'] ?? '',
       message: map['message'] ?? '',
       createdAt: map['created_at'] ?? DateTime.now().toIso8601String(),
     );
@@ -481,9 +477,13 @@ class AppDataStore extends ChangeNotifier {
   factory AppDataStore() => _instance;
 
   AppDataStore._internal() {
-    _initInitialData();
-    refreshFromSupabase();
-    SupabaseService().subscribeToRealtimeChanges(refreshFromSupabase);
+    // Only start syncing if there's already an active user session.
+    // Otherwise, refreshFromSupabase() will be called after login by AuthGate.
+    final session = SupabaseService().currentSession;
+    if (session != null) {
+      refreshFromSupabase();
+      SupabaseService().subscribeToRealtimeChanges(refreshFromSupabase);
+    }
   }
 
   final List<AdminModel> _admins = [];
@@ -493,7 +493,6 @@ class AppDataStore extends ChangeNotifier {
   final List<TaskModel> _tasks = [];
   final List<InvoiceModel> _invoices = [];
   final List<LeaveRequest> _leaveRequests = [];
-  final List<ChatMessage> _chatMessages = [];
 
   bool _isCheckedIn = false;
   DateTime? _checkInTime;
@@ -507,7 +506,6 @@ class AppDataStore extends ChangeNotifier {
   List<TaskModel> get tasks => List.unmodifiable(_tasks);
   List<InvoiceModel> get invoices => List.unmodifiable(_invoices);
   List<LeaveRequest> get leaveRequests => List.unmodifiable(_leaveRequests);
-  List<ChatMessage> get chatMessages => List.unmodifiable(_chatMessages);
   bool get isCheckedIn => _isCheckedIn;
   DateTime? get checkInTime => _checkInTime;
   bool get isLoadingFromSupabase => _isLoadingFromSupabase;
@@ -524,113 +522,6 @@ class AppDataStore extends ChangeNotifier {
     notifyListeners();
   }
 
-  void _initInitialData() {
-    _employees.addAll([
-      Employee(
-        id: 'emp_1',
-        name: 'John Doe',
-        role: 'HR & Business Lead',
-        department: 'Human Resources',
-        email: 'john.doe@company.com',
-        phone: '+91 98765 00001',
-        status: 'Active',
-        joiningDate: '15 Jan 2023',
-      ),
-      Employee(
-        id: 'emp_2',
-        name: 'Priya Sharma',
-        role: 'Senior Account Manager',
-        department: 'Client Relations',
-        email: 'priya.s@company.com',
-        phone: '+91 98765 00002',
-        status: 'Active',
-        joiningDate: '01 Mar 2022',
-      ),
-      Employee(
-        id: 'emp_3',
-        name: 'Rohan Verma',
-        role: 'Technical Lead',
-        department: 'Engineering',
-        email: 'rohan.v@company.com',
-        phone: '+91 98765 00003',
-        status: 'On Leave',
-        joiningDate: '10 Aug 2021',
-      ),
-      Employee(
-        id: 'emp_4',
-        name: 'Ananya Roy',
-        role: 'UI/UX Designer',
-        department: 'Design',
-        email: 'ananya.r@company.com',
-        phone: '+91 98765 00004',
-        status: 'Active',
-        joiningDate: '05 Nov 2023',
-      ),
-    ]);
-
-    _clients.addAll([
-      ClientModel(
-        id: 'cli_1',
-        name: 'Rahul Sharma',
-        company: 'Sharma Technologies',
-        email: 'rahul@example.com',
-        phone: '+91 98765 43210',
-        status: 'Active',
-        assignedEmployeeId: 'emp_2',
-        assignedEmployeeName: 'Priya Sharma',
-        projectType: 'Mobile App Development',
-        budget: 15000,
-      ),
-      ClientModel(
-        id: 'cli_2',
-        name: 'Anjan Patel',
-        company: 'Patel Enterprises',
-        email: 'anjan@example.com',
-        phone: '+91 98765 12345',
-        status: 'Active',
-        assignedEmployeeId: 'emp_1',
-        assignedEmployeeName: 'John Doe',
-        projectType: 'ERP Integration',
-        budget: 28000,
-      ),
-      ClientModel(
-        id: 'cli_3',
-        name: 'Amit Shah',
-        company: 'Shah Solutions',
-        email: 'amit@example.com',
-        phone: '+91 99887 66554',
-        status: 'Inactive',
-        assignedEmployeeId: 'emp_3',
-        assignedEmployeeName: 'Rohan Verma',
-        projectType: 'Web Portal Design',
-        budget: 9500,
-      ),
-    ]);
-
-    _leaveRequests.addAll([
-      LeaveRequest(
-        id: 'lv_1',
-        employeeId: 'emp_3',
-        employeeName: 'Rohan Verma',
-        type: 'Sick',
-        startDate: '06 Aug 2026',
-        endDate: '08 Aug 2026',
-        reason: 'Viral Fever and rest recommended by doctor.',
-        status: 'Approved',
-      ),
-      LeaveRequest(
-        id: 'lv_2',
-        employeeId: 'emp_4',
-        employeeName: 'Ananya Roy',
-        type: 'Casual',
-        startDate: '12 Aug 2026',
-        endDate: '13 Aug 2026',
-        reason: 'Personal family event.',
-        status: 'Pending',
-      ),
-    ]);
-  }
-
   /// Sync database from Supabase
   Future<void> refreshFromSupabase() async {
     _isLoadingFromSupabase = true;
@@ -638,39 +529,21 @@ class AppDataStore extends ChangeNotifier {
 
     try {
       final remoteEmployees = await SupabaseService().fetchEmployees();
-      if (remoteEmployees != null && remoteEmployees.isNotEmpty) {
+      if (remoteEmployees != null) {
         _employees.clear();
         _employees.addAll(remoteEmployees);
-      } else if (SupabaseService().currentOrganization != null) {
-        for (final emp in _employees) {
-          await SupabaseService().insertEmployee(emp);
-        }
       }
 
       final remoteClients = await SupabaseService().fetchClients();
-      if (remoteClients != null && remoteClients.isNotEmpty) {
+      if (remoteClients != null) {
         _clients.clear();
         _clients.addAll(remoteClients);
-      } else if (SupabaseService().currentOrganization != null) {
-        for (final cli in _clients) {
-          await SupabaseService().insertClient(cli);
-        }
       }
 
       final remoteLeaves = await SupabaseService().fetchLeaveRequests();
-      if (remoteLeaves != null && remoteLeaves.isNotEmpty) {
+      if (remoteLeaves != null) {
         _leaveRequests.clear();
         _leaveRequests.addAll(remoteLeaves);
-      } else if (SupabaseService().currentOrganization != null) {
-        for (final req in _leaveRequests) {
-          await SupabaseService().insertLeaveRequest(req);
-        }
-      }
-
-      final remoteChats = await SupabaseService().fetchChatMessages();
-      if (remoteChats != null && remoteChats.isNotEmpty) {
-        _chatMessages.clear();
-        _chatMessages.addAll(remoteChats);
       }
 
       final remoteProjects = await SupabaseService().fetchProjects();
@@ -727,13 +600,6 @@ class AppDataStore extends ChangeNotifier {
       _isLoadingFromSupabase = false;
       notifyListeners();
     }
-  }
-
-  // --- CHAT MESSAGING ---
-  void addChatMessage(ChatMessage msg) {
-    _chatMessages.add(msg);
-    SupabaseService().sendChatMessage(msg);
-    notifyListeners();
   }
 
   // --- EMPLOYEE MANAGEMENT ---

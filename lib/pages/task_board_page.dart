@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import '../services/app_data_store.dart';
+import '../services/supabase_service.dart';
 
 class TaskBoardPage extends StatefulWidget {
   const TaskBoardPage({super.key});
@@ -9,52 +10,76 @@ class TaskBoardPage extends StatefulWidget {
 }
 
 class _TaskBoardPageState extends State<TaskBoardPage> {
-  final AppDataStore _store = AppDataStore();
-
-  final List<TaskModel> _sampleTasks = [
-    TaskModel(id: 't1', title: 'Setup Supabase RLS Policies', projectName: 'Database Security', assignedToName: 'John Doe', status: 'In Progress', priority: 'High', dueDate: '10 Aug'),
-    TaskModel(id: 't2', title: 'Design Client Portal Dashboard', projectName: 'Web Redesign', assignedToName: 'Sarah Jenkins', status: 'To Do', priority: 'Medium', dueDate: '12 Aug'),
-    TaskModel(id: 't3', title: 'Audit Attendance Punch Logs', projectName: 'Operations', assignedToName: 'Rohan Verma', status: 'In Review', priority: 'Low', dueDate: '08 Aug'),
-    TaskModel(id: 't4', title: 'Deploy Flutter Mobile APK Build', projectName: 'Release v1.2', assignedToName: 'John Doe', status: 'Completed', priority: 'High', dueDate: '06 Aug'),
-  ];
+  final _tasksStream = SupabaseService().client.from('tasks').stream(primaryKey: ['id']);
 
   @override
   Widget build(BuildContext context) {
-    final tasks = _store.tasks.isNotEmpty ? _store.tasks : _sampleTasks;
-
-    final toDo = tasks.where((t) => t.status == 'To Do').toList();
-    final inProgress = tasks.where((t) => t.status == 'In Progress').toList();
-    final inReview = tasks.where((t) => t.status == 'In Review').toList();
-    final completed = tasks.where((t) => t.status == 'Completed').toList();
-
     return Scaffold(
       appBar: AppBar(
         title: const Text('Task Kanban Board', style: TextStyle(fontWeight: FontWeight.bold)),
         backgroundColor: Colors.deepPurple,
         foregroundColor: Colors.white,
         elevation: 2,
-      ),
-      body: Padding(
-        padding: const EdgeInsets.all(16),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Expanded(
-              child: SingleChildScrollView(
-                scrollDirection: Axis.horizontal,
-                child: Row(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    _kanbanColumn('To Do', toDo, Colors.blue),
-                    _kanbanColumn('In Progress', inProgress, Colors.orange),
-                    _kanbanColumn('In Review', inReview, Colors.purple),
-                    _kanbanColumn('Completed', completed, Colors.green),
-                  ],
-                ),
-              ),
+        actions: [
+          if (SupabaseService().currentRole == 'admin')
+            IconButton(
+              icon: const Icon(Icons.add),
+              onPressed: () {
+                // Add task logic
+              },
             ),
-          ],
-        ),
+        ],
+      ),
+      body: StreamBuilder<List<Map<String, dynamic>>>(
+        stream: _tasksStream,
+        builder: (context, snapshot) {
+          if (snapshot.connectionState == ConnectionState.waiting) {
+            return const Center(child: CircularProgressIndicator());
+          }
+          if (snapshot.hasError) {
+            return Center(child: Text('Error: ${snapshot.error}'));
+          }
+
+          final data = snapshot.data ?? [];
+          
+          final tasks = data.map((row) => TaskModel(
+            id: row['id'],
+            title: row['title'],
+            projectName: 'Assigned Project',
+            assignedToName: 'Assigned Employee',
+            status: row['status'] ?? 'To Do',
+            priority: row['priority'] ?? 'Medium',
+            dueDate: row['due_date']?.toString() ?? 'No Due Date',
+          )).toList();
+
+          final toDo = tasks.where((t) => t.status == 'To Do').toList();
+          final inProgress = tasks.where((t) => t.status == 'In Progress').toList();
+          final inReview = tasks.where((t) => t.status == 'In Review').toList();
+          final completed = tasks.where((t) => t.status == 'Completed').toList();
+
+          return Padding(
+            padding: const EdgeInsets.all(16),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Expanded(
+                  child: SingleChildScrollView(
+                    scrollDirection: Axis.horizontal,
+                    child: Row(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        _kanbanColumn('To Do', toDo, Colors.blue),
+                        _kanbanColumn('In Progress', inProgress, Colors.orange),
+                        _kanbanColumn('In Review', inReview, Colors.purple),
+                        _kanbanColumn('Completed', completed, Colors.green),
+                      ],
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          );
+        }
       ),
     );
   }

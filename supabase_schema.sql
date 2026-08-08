@@ -410,6 +410,45 @@ CREATE TRIGGER on_auth_user_created
     AFTER INSERT ON auth.users
     FOR EACH ROW EXECUTE FUNCTION public.handle_new_user();
 
+-- Secure RPC to fetch current user's memberships (bypasses RLS)
+-- This solves the circular RLS dependency where the SELECT policy on
+-- organization_memberships uses current_user_org_ids() which itself
+-- queries organization_memberships.
+CREATE OR REPLACE FUNCTION public.get_my_memberships()
+RETURNS SETOF json
+LANGUAGE plpgsql
+SECURITY DEFINER
+AS $$
+BEGIN
+    RETURN QUERY
+    SELECT row_to_json(sub) FROM (
+        SELECT 
+            om.id,
+            om.organization_id,
+            om.user_id,
+            om.role,
+            om.status,
+            om.created_at,
+            json_build_object(
+                'id', o.id,
+                'name', o.name,
+                'slug', o.slug,
+                'industry', o.industry,
+                'phone', o.phone,
+                'country', o.country,
+                'logo_url', o.logo_url,
+                'plan_id', o.plan_id,
+                'subscription_status', o.subscription_status,
+                'created_at', o.created_at
+            ) AS organizations
+        FROM public.organization_memberships om
+        JOIN public.organizations o ON o.id = om.organization_id
+        WHERE om.user_id = auth.uid()
+          AND om.status = 'active'
+    ) sub;
+END;
+$$;
+
 -- ============================================================
 -- ROW LEVEL SECURITY (RLS) POLICIES
 -- ============================================================
@@ -463,6 +502,10 @@ CREATE POLICY "Profiles updateable by owner" ON public.profiles
 -- 4. ORGANIZATION MEMBERSHIPS
 CREATE POLICY "Memberships viewable by org members" ON public.organization_memberships
     FOR SELECT TO authenticated USING (organization_id IN (SELECT public.current_user_org_ids()));
+
+-- Users can always see their own membership rows (avoids circular RLS dependency)
+CREATE POLICY "Memberships viewable by self" ON public.organization_memberships
+    FOR SELECT TO authenticated USING (user_id = auth.uid());
 
 CREATE POLICY "Memberships insertable by org admin or self on creation" ON public.organization_memberships
     FOR INSERT TO public WITH CHECK (true);

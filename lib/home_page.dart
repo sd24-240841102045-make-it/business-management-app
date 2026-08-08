@@ -14,10 +14,46 @@ class HomeBody extends StatefulWidget {
 class _HomeBodyState extends State<HomeBody> {
   final AppDataStore _store = AppDataStore();
 
+  int? _totalClients;
+  int? _activeEmployees;
+  int? _staffOnLeave;
+  int? _pendingLeaves;
+  bool _isLoadingStats = true;
+
   @override
   void initState() {
     super.initState();
     _store.addListener(_onStoreUpdate);
+    _fetchStats();
+  }
+
+  Future<void> _fetchStats() async {
+    final client = SupabaseService().client;
+    final orgId = SupabaseService().currentOrganizationId;
+    if (orgId == null) {
+      if (mounted) setState(() => _isLoadingStats = false);
+      return;
+    }
+
+    try {
+      final clientsData = await client.from('clients').select('id').eq('organization_id', orgId);
+      final activeEmpData = await client.from('employees').select('id').eq('organization_id', orgId).eq('status', 'Active');
+      final leaveEmpData = await client.from('employees').select('id').eq('organization_id', orgId).eq('status', 'On Leave');
+      final leavesData = await client.from('leave_requests').select('id').eq('organization_id', orgId).eq('status', 'Pending');
+      
+      if (mounted) {
+        setState(() {
+          _totalClients = (clientsData as List).length;
+          _activeEmployees = (activeEmpData as List).length;
+          _staffOnLeave = (leaveEmpData as List).length;
+          _pendingLeaves = (leavesData as List).length;
+          _isLoadingStats = false;
+        });
+      }
+    } catch (e) {
+      debugPrint('Error fetching stats: $e');
+      if (mounted) setState(() => _isLoadingStats = false);
+    }
   }
 
   @override
@@ -54,13 +90,6 @@ class _HomeBodyState extends State<HomeBody> {
 
   @override
   Widget build(BuildContext context) {
-    final totalClients = _store.clients.length;
-    final activeEmployees =
-        _store.employees.where((e) => e.status == 'Active').length;
-    final staffOnLeave =
-        _store.employees.where((e) => e.status == 'On Leave').length;
-    final pendingLeaves =
-        _store.leaveRequests.where((r) => r.status == 'Pending').length;
 
     return LayoutBuilder(
       builder: (context, constraints) {
@@ -72,6 +101,7 @@ class _HomeBodyState extends State<HomeBody> {
         return RefreshIndicator(
           onRefresh: () async {
             await _store.refreshFromSupabase();
+            await _fetchStats();
           },
           child: SingleChildScrollView(
             physics: const AlwaysScrollableScrollPhysics(),
@@ -152,9 +182,9 @@ class _HomeBodyState extends State<HomeBody> {
                       style: TextStyle(color: Colors.white70, fontSize: 14),
                     ),
                     const SizedBox(height: 6),
-                    const Text(
-                      'Project Life Solutions',
-                      style: TextStyle(
+                    Text(
+                      SupabaseService().currentOrganization?['name'] ?? 'Your Organization',
+                      style: const TextStyle(
                         color: Colors.white,
                         fontSize: 22,
                         fontWeight: FontWeight.bold,
@@ -164,10 +194,10 @@ class _HomeBodyState extends State<HomeBody> {
                     Row(
                       mainAxisAlignment: MainAxisAlignment.spaceBetween,
                       children: [
-                        _overviewItem('Clients', '$totalClients'),
-                        _overviewItem('Active HR', '$activeEmployees'),
-                        _overviewItem('On Leave', '$staffOnLeave'),
-                        _overviewItem('Pending', '$pendingLeaves'),
+                        _overviewItem('Clients', _isLoadingStats ? '-' : '${_totalClients ?? 0}'),
+                        _overviewItem('Active HR', _isLoadingStats ? '-' : '${_activeEmployees ?? 0}'),
+                        _overviewItem('On Leave', _isLoadingStats ? '-' : '${_staffOnLeave ?? 0}'),
+                        _overviewItem('Pending', _isLoadingStats ? '-' : '${_pendingLeaves ?? 0}'),
                       ],
                     ),
                   ],
@@ -190,7 +220,7 @@ class _HomeBodyState extends State<HomeBody> {
                           child: _actionCard(
                             icon: Icons.people,
                             title: 'Clients (CRM)',
-                            subtitle: '$totalClients Accounts',
+                            subtitle: _isLoadingStats ? '...' : '${_totalClients ?? 0} Accounts',
                             color: Colors.blue,
                             onTap: () => widget.onNavigate(1),
                           ),
@@ -210,7 +240,7 @@ class _HomeBodyState extends State<HomeBody> {
                           child: _actionCard(
                             icon: Icons.calendar_month,
                             title: 'Attendance & Leave',
-                            subtitle: '$pendingLeaves Pending',
+                            subtitle: _isLoadingStats ? '...' : '${_pendingLeaves ?? 0} Pending',
                             color: Colors.green,
                             onTap: () => widget.onNavigate(3),
                           ),
@@ -235,7 +265,7 @@ class _HomeBodyState extends State<HomeBody> {
                               child: _actionCard(
                                 icon: Icons.people,
                                 title: 'Clients (CRM)',
-                                subtitle: '$totalClients Accounts',
+                                subtitle: _isLoadingStats ? '...' : '${_totalClients ?? 0} Accounts',
                                 color: Colors.blue,
                                 onTap: () => widget.onNavigate(1),
                               ),
@@ -260,7 +290,7 @@ class _HomeBodyState extends State<HomeBody> {
                               child: _actionCard(
                                 icon: Icons.calendar_month,
                                 title: 'Attendance & Leave',
-                                subtitle: '$pendingLeaves Pending',
+                                subtitle: _isLoadingStats ? '...' : '${_pendingLeaves ?? 0} Pending',
                                 color: Colors.green,
                                 onTap: () => widget.onNavigate(3),
                               ),

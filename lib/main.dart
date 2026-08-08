@@ -1,9 +1,7 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
-import 'package:firebase_core/firebase_core.dart';
-
-import 'firebase_options.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'login_page.dart';
 import 'client_shell.dart';
 import 'main_shell.dart';
@@ -18,11 +16,6 @@ Future<void> main() async {
   await Supabase.initialize(
     url: 'https://sgadxqxwavjgnxmofeaw.supabase.co',
     anonKey: 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InNnYWR4cXh3YXZqZ254bW9mZWF3Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODU5OTY5MDAsImV4cCI6MjEwMTU3MjkwMH0.MSJlyKMzEMtQPK56Wvd_4SLApclyVzrKvLVA9mHShZw',
-  );
-
-  // Initialize Firebase
-  await Firebase.initializeApp(
-    options: DefaultFirebaseOptions.currentPlatform,
   );
 
   runApp(const MyApp());
@@ -105,6 +98,7 @@ class _AuthGateState extends State<AuthGate> {
   bool _isLoading = true;
   String? _role;
   String? _error;
+  int _authRequestId = 0;
 
   @override
   void initState() {
@@ -123,6 +117,7 @@ class _AuthGateState extends State<AuthGate> {
   }
 
   Future<void> _initializeAuth() async {
+    final requestId = ++_authRequestId;
     try {
       final supabase = Supabase.instance.client;
 
@@ -140,16 +135,39 @@ class _AuthGateState extends State<AuthGate> {
         }
         return;
       }
-
       // --------------------------------------------------------
       // Load organization + role
       // --------------------------------------------------------
+      // Wait if the UI is actively creating an account or accepting an invite
+      while (SupabaseService().isAuthActionInProgress) {
+        await Future.delayed(const Duration(milliseconds: 500));
+        if (requestId != _authRequestId) return;
+      }
+
       await SupabaseService().loadUserOrganizationContext();
+
+      if (SupabaseService().currentMembership == null) {
+        // The user was deleted from their organization or has no valid role.
+        // Sign them out locally so they gracefully fall back to the login screen.
+        await supabase.auth.signOut();
+        if (mounted) {
+          setState(() {
+            _role = null;
+            _isLoading = false;
+          });
+        }
+        return;
+      }
 
       // --------------------------------------------------------
       // Refresh application data
       // --------------------------------------------------------
       await AppDataStore().refreshFromSupabase();
+
+      // Show the animation for a minimum amount of time to look cool
+      await Future.delayed(const Duration(milliseconds: 1500));
+
+      if (requestId != _authRequestId) return; // Prevent race conditions
 
       // --------------------------------------------------------
       // Get user's role
@@ -163,6 +181,7 @@ class _AuthGateState extends State<AuthGate> {
         });
       }
     } catch (e) {
+      if (requestId != _authRequestId) return;
       debugPrint('AuthGate error: $e');
 
       if (mounted) {
@@ -180,9 +199,45 @@ class _AuthGateState extends State<AuthGate> {
     // Loading
     // ----------------------------------------------------------
     if (_isLoading) {
-      return const Scaffold(
+      return Scaffold(
+        backgroundColor: Colors.deepPurple,
         body: Center(
-          child: CircularProgressIndicator(),
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              // Cool pulsing logo or icon
+              TweenAnimationBuilder<double>(
+                tween: Tween<double>(begin: 0.8, end: 1.2),
+                duration: const Duration(milliseconds: 800),
+                curve: Curves.easeInOutBack,
+                builder: (context, scale, child) {
+                  return Transform.scale(
+                    scale: scale,
+                    child: child,
+                  );
+                },
+                child: const Icon(
+                  Icons.business_center,
+                  size: 80,
+                  color: Colors.white,
+                ),
+              ),
+              const SizedBox(height: 30),
+              const Text(
+                'Preparing Workspace...',
+                style: TextStyle(
+                  color: Colors.white,
+                  fontSize: 20,
+                  fontWeight: FontWeight.bold,
+                  letterSpacing: 1.2,
+                ),
+              ),
+              const SizedBox(height: 20),
+              const CircularProgressIndicator(
+                valueColor: AlwaysStoppedAnimation<Color>(Colors.white70),
+              ),
+            ],
+          ),
         ),
       );
     }
