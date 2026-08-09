@@ -2,12 +2,11 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:shared_preferences/shared_preferences.dart';
-import 'login_page.dart';
-import 'client_shell.dart';
-import 'main_shell.dart';
-
-import 'services/supabase_service.dart';
-import 'services/app_data_store.dart';
+import 'package:business_managment_app/shared/login_page.dart';
+import 'package:business_managment_app/client/client_shell.dart';
+import 'package:business_managment_app/shared/main_shell.dart';
+import 'package:business_managment_app/services/supabase_service.dart';
+import 'package:business_managment_app/services/app_data_store.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -164,8 +163,8 @@ class _AuthGateState extends State<AuthGate> {
       // --------------------------------------------------------
       await AppDataStore().refreshFromSupabase();
 
-      // Show the animation for a minimum amount of time to look cool
-      await Future.delayed(const Duration(milliseconds: 1500));
+      // Fast load transition
+      await Future.delayed(const Duration(milliseconds: 100));
 
       if (requestId != _authRequestId) return; // Prevent race conditions
 

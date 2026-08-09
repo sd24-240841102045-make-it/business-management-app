@@ -3,6 +3,7 @@ import 'supabase_service.dart';
 
 class Employee {
   final String id;
+  final String userId; // auth.uid() — used for chat/conversation_members
   final String name;
   final String role;
   final String department;
@@ -15,6 +16,7 @@ class Employee {
 
   Employee({
     required this.id,
+    this.userId = '',
     required this.name,
     required this.role,
     required this.department,
@@ -28,6 +30,7 @@ class Employee {
 
   Employee copyWith({
     String? id,
+    String? userId,
     String? name,
     String? role,
     String? department,
@@ -40,6 +43,7 @@ class Employee {
   }) {
     return Employee(
       id: id ?? this.id,
+      userId: userId ?? this.userId,
       name: name ?? this.name,
       role: role ?? this.role,
       department: department ?? this.department,
@@ -132,6 +136,7 @@ class ClientModel {
     String? status,
     String? assignedEmployeeId,
     String? assignedEmployeeName,
+    bool clearAssignedEmployee = false,
     String? projectType,
     double? budget,
     bool? showProjects,
@@ -148,8 +153,8 @@ class ClientModel {
       email: email ?? this.email,
       phone: phone ?? this.phone,
       status: status ?? this.status,
-      assignedEmployeeId: assignedEmployeeId ?? this.assignedEmployeeId,
-      assignedEmployeeName: assignedEmployeeName ?? this.assignedEmployeeName,
+      assignedEmployeeId: clearAssignedEmployee ? null : (assignedEmployeeId ?? this.assignedEmployeeId),
+      assignedEmployeeName: clearAssignedEmployee ? null : (assignedEmployeeName ?? this.assignedEmployeeName),
       projectType: projectType ?? this.projectType,
       budget: budget ?? this.budget,
       showProjects: showProjects ?? this.showProjects,
@@ -536,8 +541,44 @@ class AppDataStore extends ChangeNotifier {
 
       final remoteClients = await SupabaseService().fetchClients();
       if (remoteClients != null) {
+        final uniqueClientsMap = <String, ClientModel>{};
+        for (final c in remoteClients) {
+          final key = c.email.isNotEmpty ? c.email.trim().toLowerCase() : c.id;
+          if (!uniqueClientsMap.containsKey(key)) {
+            uniqueClientsMap[key] = c;
+          } else {
+            // Keep the row with the most recent data
+            uniqueClientsMap[key] = c;
+          }
+        }
+
         _clients.clear();
-        _clients.addAll(remoteClients);
+        _clients.addAll(uniqueClientsMap.values);
+
+        // Auto-resolve assignedEmployeeName if ID is present but name is empty
+        for (int i = 0; i < _clients.length; i++) {
+          final c = _clients[i];
+          if (c.assignedEmployeeId != null &&
+              c.assignedEmployeeId!.isNotEmpty &&
+              (c.assignedEmployeeName == null || c.assignedEmployeeName!.isEmpty)) {
+            final emp = _employees.firstWhere(
+              (e) => e.id == c.assignedEmployeeId,
+              orElse: () => Employee(
+                id: '',
+                name: '',
+                role: '',
+                department: '',
+                email: '',
+                phone: '',
+                status: '',
+                joiningDate: '',
+              ),
+            );
+            if (emp.name.isNotEmpty) {
+              _clients[i] = c.copyWith(assignedEmployeeName: emp.name);
+            }
+          }
+        }
       }
 
       final remoteLeaves = await SupabaseService().fetchLeaveRequests();
@@ -649,26 +690,33 @@ class AppDataStore extends ChangeNotifier {
   void assignEmployeeToClient(String clientId, String? employeeId) {
     final clientIndex = _clients.indexWhere((c) => c.id == clientId);
     if (clientIndex != -1) {
-      String? empName;
-      if (employeeId != null && employeeId.isNotEmpty) {
-        final emp = _employees.firstWhere(
-          (e) => e.id == employeeId,
-          orElse: () => Employee(
-            id: '',
-            name: 'Unassigned',
-            role: '',
-            department: '',
-            email: '',
-            phone: '',
-            status: '',
-            joiningDate: '',
-          ),
+      if (employeeId == null || employeeId.isEmpty) {
+        final updated = _clients[clientIndex].copyWith(
+          clearAssignedEmployee: true,
         );
-        empName = emp.name;
+        _clients[clientIndex] = updated;
+        SupabaseService().updateClient(updated);
+        notifyListeners();
+        return;
       }
+
+      final emp = _employees.firstWhere(
+        (e) => e.id == employeeId,
+        orElse: () => Employee(
+          id: '',
+          name: '',
+          role: '',
+          department: '',
+          email: '',
+          phone: '',
+          status: '',
+          joiningDate: '',
+        ),
+      );
+
       final updated = _clients[clientIndex].copyWith(
         assignedEmployeeId: employeeId,
-        assignedEmployeeName: empName,
+        assignedEmployeeName: emp.name.isNotEmpty ? emp.name : null,
       );
       _clients[clientIndex] = updated;
       SupabaseService().updateClient(updated);

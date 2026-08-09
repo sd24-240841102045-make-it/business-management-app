@@ -80,6 +80,8 @@ CREATE TABLE IF NOT EXISTS public.clients (
     email TEXT NOT NULL,
     phone TEXT,
     address TEXT,
+    assigned_employee_id TEXT,
+    assigned_employee_name TEXT,
     created_at TIMESTAMPTZ DEFAULT timezone('utc'::text, now()) NOT NULL
 );
 

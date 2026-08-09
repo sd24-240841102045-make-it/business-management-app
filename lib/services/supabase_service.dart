@@ -116,10 +116,17 @@ class SupabaseService {
 
     await loadUserOrganizationContext();
 
-    // Enforcement: Reject if no valid membership is found
+    // Enforcement: Reject if no valid membership is found.
+    // This can happen if:
+    //   a) The user was removed from their organization, OR
+    //   b) They accepted an invite but the `redeem_invite_code` RPC failed
+    //      (account exists in auth but was never added to organization_memberships).
     if (_currentMembership == null || _currentMembership!['status'] != 'active') {
-       await client.auth.signOut();
-       throw Exception('Your account has no active organization membership.');
+      await client.auth.signOut();
+      throw Exception(
+        'Access denied: your account is not linked to any active organization. '
+        'If you joined via an invitation code, please use "Accept Invite" on the login screen and re-enter your code.',
+      );
     }
 
     return response;
@@ -134,7 +141,7 @@ class SupabaseService {
   }) async {
     _isAuthActionInProgress = true;
     try {
-      final cleanToken = token.trim();
+      final cleanToken = token.trim().toUpperCase();
       final cleanName = fullName.trim();
       final targetEmail = email?.trim().toLowerCase();
 
@@ -144,47 +151,183 @@ class SupabaseService {
       if (targetEmail == null || targetEmail.isEmpty) {
         throw Exception('Email is required.');
       }
-
-      // 1. Verify the code FIRST before creating any account
-      final bool isValid = await client.rpc('verify_invite_code', params: {
-        'invite_code_param': cleanToken,
-      });
-
-      if (!isValid) {
-        throw Exception('Invalid or expired invitation code.');
+      if (password.isEmpty) {
+        throw Exception('Password is required.');
       }
 
-      // 2. Create Supabase Auth Account (The trigger creates a basic profile)
-      final response = await client.auth.signUp(
-        email: targetEmail,
-        password: password,
-        data: {
-          'full_name': cleanName,
-        },
-      );
-
-      if (response.user == null) {
-        throw Exception('Could not create account for invitation.');
-      }
-
-      // 3. Redeem the code to join the organization
+      // 1. Create or Sign In to Supabase Auth Account FIRST
+      // This establishes an authenticated session so Supabase RLS permits database access.
+      AuthResponse? authResp;
       try {
-        await client.rpc('redeem_invite_code', params: {
-          'invite_code_param': cleanToken,
-        });
-      } catch (e) {
-        // If redemption fails, the account was created but has no org membership.
-        // Clean up the session locally so they aren't incorrectly routed.
+        authResp = await client.auth.signUp(
+          email: targetEmail,
+          password: password,
+          data: {
+            'full_name': cleanName,
+          },
+        );
+      } catch (signUpErr) {
+        final errStr = signUpErr.toString().toLowerCase();
+        if (errStr.contains('already registered') || errStr.contains('already exists')) {
+          try {
+            authResp = await client.auth.signInWithPassword(
+              email: targetEmail,
+              password: password,
+            );
+          } catch (signInErr) {
+            throw Exception('This email is already registered. Please enter your correct password to join.');
+          }
+        } else {
+          rethrow;
+        }
+      }
+
+      if (authResp == null || authResp.user == null) {
+        throw Exception('Could not authenticate user account for invitation.');
+      }
+
+      // 2. Ensure we have an active session
+      if (authResp.session == null) {
+        try {
+          authResp = await client.auth.signInWithPassword(
+            email: targetEmail,
+            password: password,
+          );
+        } catch (_) {
+          throw Exception(
+            'Account created! If email confirmation is enabled in your Supabase project, please confirm your email first.',
+          );
+        }
+      }
+
+      final userId = authResp.user!.id;
+
+      // 3. Redeem the invitation code (RPC first, direct query fallback second)
+      bool redeemed = false;
+      String? lastError;
+
+      // Method A: RPC redeem_invite_code
+      for (final paramName in ['invite_code_param', 'invite_code', 'code', 'token', 'p_code', 'p_token']) {
+        try {
+          await client.rpc('redeem_invite_code', params: {
+            paramName: cleanToken,
+          });
+          redeemed = true;
+          debugPrint('RPC redeem_invite_code succeeded with parameter "$paramName"');
+          break;
+        } catch (rpcErr) {
+          lastError = rpcErr.toString();
+          debugPrint('RPC redeem_invite_code with "$paramName" failed: $rpcErr');
+        }
+      }
+
+      // Method B: Direct database operations (Authenticated Context)
+      if (!redeemed) {
+        try {
+          Map<String, dynamic>? inv;
+
+          // Lookup invite by token / invite_code / code
+          for (final col in ['token', 'invite_code', 'code']) {
+            try {
+              final res = await client
+                  .from('invitations')
+                  .select()
+                  .eq(col, cleanToken)
+                  .maybeSingle();
+              if (res != null) {
+                inv = Map<String, dynamic>.from(res);
+                break;
+              }
+            } catch (e) {
+              debugPrint('Lookup by column $col error: $e');
+            }
+          }
+
+          // Case-insensitive fallback lookup if exact case didn't match
+          if (inv == null) {
+            try {
+              final allInv = await client.from('invitations').select();
+              for (final row in (allInv as List)) {
+                final t = row['token']?.toString() ?? row['invite_code']?.toString() ?? row['code']?.toString() ?? '';
+                if (t.trim().toUpperCase() == cleanToken) {
+                  inv = Map<String, dynamic>.from(row);
+                  break;
+                }
+              }
+            } catch (_) {}
+          }
+
+          if (inv != null) {
+            final orgId = inv['organization_id'];
+            final role = inv['role']?.toString() ?? 'employee';
+
+            // Insert or update organization_memberships
+            await client.from('organization_memberships').upsert({
+              'organization_id': orgId,
+              'user_id': userId,
+              'role': role,
+              'status': 'active',
+            });
+
+            // Automatically create corresponding employee or client record
+            if (role == 'employee') {
+              try {
+                await client.from('employees').upsert({
+                  'organization_id': orgId,
+                  'user_id': userId,
+                  'designation': 'Staff',
+                  'department': 'General',
+                  'status': 'Active',
+                });
+              } catch (e) {
+                debugPrint('Auto-creating employee record notice: $e');
+              }
+            } else if (role == 'client') {
+              try {
+                await client.from('clients').upsert({
+                  'organization_id': orgId,
+                  'user_id': userId,
+                  'contact_name': cleanName,
+                  'email': targetEmail,
+                  'status': 'Active',
+                });
+              } catch (e) {
+                debugPrint('Auto-creating client record notice: $e');
+              }
+            }
+
+            // Mark invitation as accepted
+            try {
+              final invId = inv['id'];
+              if (invId != null) {
+                await client.from('invitations').update({
+                  'status': 'accepted',
+                }).eq('id', invId);
+              }
+            } catch (_) {}
+
+            redeemed = true;
+          } else {
+            lastError = 'Invitation code "$cleanToken" was not found in the database. Please verify the code generated by your admin.';
+          }
+        } catch (fallbackErr) {
+          debugPrint('Direct membership insertion error: $fallbackErr');
+          lastError = fallbackErr.toString();
+        }
+      }
+
+      if (!redeemed) {
+        // Sign out if redemption failed so user isn't stuck in an unlinked auth state
         await client.auth.signOut();
-        rethrow;
+        throw Exception(
+          AuthErrorHandler.getFriendlyMessage(lastError ?? 'Invalid or expired invitation code.'),
+        );
       }
 
-      // 4. Load the new multi-tenant context
-      if (response.session != null) {
-        await loadUserOrganizationContext();
-      }
+      // 4. Load full organization and role context
+      await loadUserOrganizationContext();
 
-      return response;
+      return authResp;
     } finally {
       _isAuthActionInProgress = false;
     }
@@ -212,12 +355,12 @@ class SupabaseService {
           final result = await client.rpc('get_my_memberships');
           memberships = result as List<dynamic>;
         } catch (rpcError) {
-          // Fallback: direct table query (works if RPC doesn't exist)
+          // Fallback: direct table query (without joining organizations to avoid RLS 42501 error)
           debugPrint('RPC get_my_memberships failed, falling back to direct query: $rpcError');
           try {
             final result = await client
                 .from('organization_memberships')
-                .select('*, organizations(*)')
+                .select()
                 .eq('user_id', user.id);
             memberships = result as List<dynamic>;
           } catch (directError) {
@@ -242,7 +385,7 @@ class SupabaseService {
         if (firstMem['organizations'] != null) {
           _currentOrganization = Map<String, dynamic>.from(firstMem['organizations']);
         } else if (firstMem['organization_id'] != null) {
-          // RPC may not join organizations — fetch separately
+          // Fetch organization details separately with fallback for employee RLS
           try {
             final orgResult = await client
                 .from('organizations')
@@ -251,9 +394,18 @@ class SupabaseService {
                 .maybeSingle();
             if (orgResult != null) {
               _currentOrganization = Map<String, dynamic>.from(orgResult);
+            } else {
+              _currentOrganization = {
+                'id': firstMem['organization_id'],
+                'name': 'Enterprise Workspace',
+              };
             }
           } catch (e) {
             debugPrint('Error fetching organization details: $e');
+            _currentOrganization = {
+              'id': firstMem['organization_id'],
+              'name': 'Enterprise Workspace',
+            };
           }
         }
       } else {
@@ -303,15 +455,81 @@ class SupabaseService {
 
   Future<List<Employee>?> fetchEmployees() async {
     try {
-      var query = client.from('employees').select('*, profiles(*)');
-      if (currentOrganizationId != null) {
-        query = query.eq('organization_id', currentOrganizationId!);
+      if (currentOrganizationId == null) {
+        await loadUserOrganizationContext();
       }
-      final response = await query;
+      if (currentOrganizationId == null) {
+        return [];
+      }
+
+      // Fetch employees existing in employees table
+      final response = await client
+          .from('employees')
+          .select('*, profiles(*)')
+          .eq('organization_id', currentOrganizationId!);
+
+      // Auto-sync any members from organization_memberships missing in employees table
+      try {
+        final mems = await client
+            .from('organization_memberships')
+            .select('user_id, role')
+            .eq('organization_id', currentOrganizationId!);
+
+        final existingUserIds = (response as List)
+            .map((e) => e['user_id']?.toString())
+            .whereType<String>()
+            .toSet();
+
+        bool hasNew = false;
+        for (final mem in (mems as List)) {
+          final uId = mem['user_id']?.toString();
+          final r = mem['role']?.toString() ?? 'employee';
+          if (uId != null && uId.isNotEmpty && !existingUserIds.contains(uId) && r == 'employee') {
+            try {
+              await client.from('employees').upsert({
+                'organization_id': currentOrganizationId,
+                'user_id': uId,
+                'designation': 'Staff',
+                'department': 'General',
+                'status': 'Active',
+              });
+              hasNew = true;
+            } catch (e) {
+              debugPrint('Syncing missing employee error: $e');
+            }
+          }
+        }
+
+        if (hasNew) {
+          final fresh = await client
+              .from('employees')
+              .select('*, profiles(*)')
+              .eq('organization_id', currentOrganizationId!);
+          return (fresh as List).map((json) {
+            final profile = json['profiles'] as Map<String, dynamic>?;
+            return Employee(
+              id: json['id']?.toString() ?? '',
+              userId: json['user_id']?.toString() ?? '',
+              name: profile?['full_name']?.toString() ?? 'Team Member',
+              role: json['designation']?.toString() ?? 'Staff',
+              department: json['department']?.toString() ?? 'General',
+              email: profile?['email']?.toString() ?? '',
+              phone: profile?['phone']?.toString() ?? '',
+              avatarUrl: profile?['avatar_url']?.toString() ?? '',
+              status: json['status']?.toString() ?? 'Active',
+              joiningDate: json['joining_date']?.toString() ?? '',
+            );
+          }).toList();
+        }
+      } catch (syncErr) {
+        debugPrint('Employees auto-sync notice: $syncErr');
+      }
+
       final list = (response as List).map((json) {
         final profile = json['profiles'] as Map<String, dynamic>?;
         return Employee(
           id: json['id']?.toString() ?? '',
+          userId: json['user_id']?.toString() ?? '',
           name: profile?['full_name']?.toString() ?? 'Team Member',
           role: json['designation']?.toString() ?? 'Staff',
           department: json['department']?.toString() ?? 'General',
@@ -375,11 +593,16 @@ class SupabaseService {
 
   Future<List<ClientModel>?> fetchClients() async {
     try {
-      var query = client.from('clients').select();
-      if (currentOrganizationId != null) {
-        query = query.eq('organization_id', currentOrganizationId!);
+      if (currentOrganizationId == null) {
+        await loadUserOrganizationContext();
       }
-      final response = await query;
+      if (currentOrganizationId == null) {
+        return [];
+      }
+      final response = await client
+          .from('clients')
+          .select()
+          .eq('organization_id', currentOrganizationId!);
       final list = (response as List).map((json) {
         return ClientModel(
           id: json['id']?.toString() ?? '',
@@ -387,9 +610,11 @@ class SupabaseService {
           company: json['company_name']?.toString() ?? json['company']?.toString() ?? '',
           email: json['email']?.toString() ?? '',
           phone: json['phone']?.toString() ?? '',
-          status: 'Active',
-          projectType: 'General Consulting',
-          budget: 0.0,
+          status: json['status']?.toString() ?? 'Active',
+          assignedEmployeeId: json['assigned_employee_id']?.toString(),
+          assignedEmployeeName: json['assigned_employee_name']?.toString(),
+          projectType: json['project_type']?.toString() ?? 'General Consulting',
+          budget: (json['budget'] as num?)?.toDouble() ?? 0.0,
         );
       }).toList();
       return list;
@@ -409,6 +634,8 @@ class SupabaseService {
         'contact_name': clientData.name.isEmpty ? clientData.company : clientData.name,
         'email': clientData.email,
         'phone': clientData.phone,
+        'assigned_employee_id': clientData.assignedEmployeeId,
+        'assigned_employee_name': clientData.assignedEmployeeName,
       });
       return true;
     } catch (e) {
@@ -424,6 +651,8 @@ class SupabaseService {
         'contact_name': clientData.name,
         'email': clientData.email,
         'phone': clientData.phone,
+        'assigned_employee_id': clientData.assignedEmployeeId,
+        'assigned_employee_name': clientData.assignedEmployeeName,
       }).eq('id', clientData.id);
       return true;
     } catch (e) {
@@ -444,11 +673,16 @@ class SupabaseService {
 
   Future<List<LeaveRequest>?> fetchLeaveRequests() async {
     try {
-      var query = client.from('leave_requests').select('*, profiles(*)');
-      if (currentOrganizationId != null) {
-        query = query.eq('organization_id', currentOrganizationId!);
+      if (currentOrganizationId == null) {
+        await loadUserOrganizationContext();
       }
-      final response = await query;
+      if (currentOrganizationId == null) {
+        return [];
+      }
+      final response = await client
+          .from('leave_requests')
+          .select('*, profiles:profiles!leave_requests_user_id_fkey(*)')
+          .eq('organization_id', currentOrganizationId!);
       final list = (response as List).map((json) {
         final profile = json['profiles'] as Map<String, dynamic>?;
         return LeaveRequest(
@@ -589,6 +823,33 @@ class SupabaseService {
     }
   }
 
+  Future<void> assignProjectMembers(String projectId, List<String> userIds) async {
+    if (userIds.isEmpty) return;
+    try {
+      final membersToInsert = userIds.map((userId) => {
+        'project_id': projectId,
+        'user_id': userId,
+        'role_in_project': 'member',
+      }).toList();
+      await client.from('project_members').insert(membersToInsert);
+    } catch (e) {
+      debugPrint('Error assigning project members: $e');
+    }
+  }
+
+  Future<List<String>> fetchUserProjectIds(String userId) async {
+    try {
+      final response = await client
+          .from('project_members')
+          .select('project_id')
+          .eq('user_id', userId);
+      return (response as List).map((json) => json['project_id'].toString()).toList();
+    } catch (e) {
+      debugPrint('Error fetching user project ids: $e');
+      return [];
+    }
+  }
+
   Future<List<TaskDomainModel>> fetchTasks([String? projectId]) async {
     if (currentOrganizationId == null) return [];
     try {
@@ -630,7 +891,10 @@ class AuthErrorHandler {
     } else if (str.contains('Invalid or expired invitation code')) {
       return 'The invitation code you entered is invalid or has already been used.';
     } else if (str.contains('PostgrestException')) {
-      return 'Database access denied or configuration error.';
+      if (str.contains('42501') || str.contains('permission denied')) {
+        return 'Access restricted: Your employee account does not have permission for this database table. Please contact your organization administrator.';
+      }
+      return str.replaceAll('PostgrestException:', '').replaceAll('AuthException:', '').replaceAll('Exception:', '').trim();
     } else if (str.contains('Failed host lookup') || str.contains('SocketException')) {
       return 'Network error. Please check your internet connection.';
     } else {
