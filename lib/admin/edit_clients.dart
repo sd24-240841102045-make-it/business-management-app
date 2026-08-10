@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:business_managment_app/core/premium_theme.dart';
 
 class EditClientPage extends StatefulWidget {
   final Map<String, dynamic> client;
@@ -49,7 +50,6 @@ class _EditClientPageState extends State<EditClientPage> {
     companyController.dispose();
     emailController.dispose();
     phoneController.dispose();
-
     super.dispose();
   }
 
@@ -60,291 +60,266 @@ class _EditClientPageState extends State<EditClientPage> {
         phoneController.text.trim().isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
-          content: Text('Please fill all fields'),
+          content: Text('Please fill all required fields'),
+          backgroundColor: Colors.redAccent,
         ),
       );
-
       return;
     }
 
-    // Update the client data
     widget.client['name'] = nameController.text.trim();
-    widget.client['company'] =
-        companyController.text.trim();
-    widget.client['email'] =
-        emailController.text.trim();
-    widget.client['phone'] =
-        phoneController.text.trim();
+    widget.client['company'] = companyController.text.trim();
+    widget.client['email'] = emailController.text.trim();
+    widget.client['phone'] = phoneController.text.trim();
     widget.client['status'] = selectedStatus;
 
-    // Return updated client
     Navigator.pop(context, widget.client);
   }
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor: const Color(0xFFF5F6FA),
-
-      appBar: AppBar(
-        title: const Text(
-          'Edit Client',
-          style: TextStyle(
-            fontWeight: FontWeight.bold,
+    return PremiumBackground(
+      child: Scaffold(
+        backgroundColor: Colors.transparent,
+        appBar: AppBar(
+          title: const Text(
+            'Edit Client Profile',
+            style: TextStyle(
+              fontWeight: FontWeight.bold,
+              color: kPremiumGold,
+            ),
           ),
+          centerTitle: true,
+          backgroundColor: kPremiumBg,
+          foregroundColor: kPremiumGold,
+          elevation: 0,
         ),
+        body: SafeArea(
+          bottom: true,
+          child: SingleChildScrollView(
+            padding: EdgeInsets.only(
+              left: 20,
+              right: 20,
+              top: 20,
+              bottom: MediaQuery.of(context).padding.bottom + 50.0,
+            ),
+            child: Center(
+              child: ConstrainedBox(
+                constraints: const BoxConstraints(maxWidth: 800),
+                child: GlassCard(
+                  padding: const EdgeInsets.all(24),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      // Avatar
+                      Center(
+                        child: PremiumAvatar(
+                          label: nameController.text.isNotEmpty ? nameController.text : 'C',
+                          style: AvatarStyle.gradient,
+                          size: 80,
+                          radius: 40,
+                        ),
+                      ),
 
-        centerTitle: true,
+                      const SizedBox(height: 24),
 
-        backgroundColor: Colors.deepPurple,
-        foregroundColor: Colors.white,
-      ),
+                      const Text(
+                        'Client Account Details',
+                        style: TextStyle(
+                          fontSize: 18,
+                          fontWeight: FontWeight.bold,
+                          color: kPremiumGold,
+                        ),
+                      ),
 
-      body: SingleChildScrollView(
-        padding: const EdgeInsets.all(20),
+                      const SizedBox(height: 16),
 
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
+                      // Client Name
+                      TextField(
+                        controller: nameController,
+                        style: const TextStyle(color: kPremiumText),
+                        decoration: InputDecoration(
+                          labelText: 'Client Name',
+                          labelStyle: const TextStyle(color: kPremiumMuted),
+                          prefixIcon: const Icon(Icons.person_outline, color: kPremiumGold),
+                          filled: true,
+                          fillColor: kPremiumSurface.withOpacity(0.5),
+                          border: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(14),
+                            borderSide: BorderSide(color: Colors.white.withOpacity(0.1)),
+                          ),
+                          enabledBorder: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(14),
+                            borderSide: BorderSide(color: Colors.white.withOpacity(0.1)),
+                          ),
+                          focusedBorder: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(14),
+                            borderSide: const BorderSide(color: kPremiumGold),
+                          ),
+                        ),
+                      ),
 
-          children: [
+                      const SizedBox(height: 14),
 
-            // Profile Icon
-            Center(
-              child: CircleAvatar(
-                radius: 45,
+                      // Company Name
+                      TextField(
+                        controller: companyController,
+                        style: const TextStyle(color: kPremiumText),
+                        decoration: InputDecoration(
+                          labelText: 'Company Name',
+                          labelStyle: const TextStyle(color: kPremiumMuted),
+                          prefixIcon: const Icon(Icons.business_outlined, color: kPremiumGold),
+                          filled: true,
+                          fillColor: kPremiumSurface.withOpacity(0.5),
+                          border: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(14),
+                            borderSide: BorderSide(color: Colors.white.withOpacity(0.1)),
+                          ),
+                          enabledBorder: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(14),
+                            borderSide: BorderSide(color: Colors.white.withOpacity(0.1)),
+                          ),
+                          focusedBorder: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(14),
+                            borderSide: const BorderSide(color: kPremiumGold),
+                          ),
+                        ),
+                      ),
 
-                backgroundColor:
-                    Colors.deepPurple.withValues(
-                  alpha: 0.1,
-                ),
+                      const SizedBox(height: 14),
 
-                child: Text(
-                  nameController.text.isNotEmpty
-                      ? nameController.text[0]
-                          .toUpperCase()
-                      : '?',
+                      // Email Address
+                      TextField(
+                        controller: emailController,
+                        keyboardType: TextInputType.emailAddress,
+                        style: const TextStyle(color: kPremiumText),
+                        decoration: InputDecoration(
+                          labelText: 'Email Address',
+                          labelStyle: const TextStyle(color: kPremiumMuted),
+                          prefixIcon: const Icon(Icons.email_outlined, color: kPremiumGold),
+                          filled: true,
+                          fillColor: kPremiumSurface.withOpacity(0.5),
+                          border: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(14),
+                            borderSide: BorderSide(color: Colors.white.withOpacity(0.1)),
+                          ),
+                          enabledBorder: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(14),
+                            borderSide: BorderSide(color: Colors.white.withOpacity(0.1)),
+                          ),
+                          focusedBorder: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(14),
+                            borderSide: const BorderSide(color: kPremiumGold),
+                          ),
+                        ),
+                      ),
 
-                  style: const TextStyle(
-                    fontSize: 35,
-                    fontWeight: FontWeight.bold,
-                    color: Colors.deepPurple,
+                      const SizedBox(height: 14),
+
+                      // Phone Number
+                      TextField(
+                        controller: phoneController,
+                        keyboardType: TextInputType.phone,
+                        style: const TextStyle(color: kPremiumText),
+                        decoration: InputDecoration(
+                          labelText: 'Phone Number',
+                          labelStyle: const TextStyle(color: kPremiumMuted),
+                          prefixIcon: const Icon(Icons.phone_outlined, color: kPremiumGold),
+                          filled: true,
+                          fillColor: kPremiumSurface.withOpacity(0.5),
+                          border: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(14),
+                            borderSide: BorderSide(color: Colors.white.withOpacity(0.1)),
+                          ),
+                          enabledBorder: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(14),
+                            borderSide: BorderSide(color: Colors.white.withOpacity(0.1)),
+                          ),
+                          focusedBorder: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(14),
+                            borderSide: const BorderSide(color: kPremiumGold),
+                          ),
+                        ),
+                      ),
+
+                      const SizedBox(height: 14),
+
+                      // Account Status Dropdown
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+                        decoration: BoxDecoration(
+                          color: kPremiumSurface.withOpacity(0.5),
+                          borderRadius: BorderRadius.circular(14),
+                          border: Border.all(color: Colors.white.withOpacity(0.1)),
+                        ),
+                        child: Row(
+                          children: [
+                            const Icon(Icons.toggle_on_outlined, color: kPremiumGold),
+                            const SizedBox(width: 12),
+                            Expanded(
+                              child: DropdownButtonHideUnderline(
+                                child: DropdownButton<String>(
+                                  value: selectedStatus,
+                                  dropdownColor: kPremiumSurface,
+                                  isExpanded: true,
+                                  icon: const Icon(Icons.arrow_drop_down, color: kPremiumGold),
+                                  items: const [
+                                    DropdownMenuItem(
+                                      value: 'Active',
+                                      child: Text('Active Account', style: TextStyle(color: Colors.greenAccent, fontWeight: FontWeight.bold)),
+                                    ),
+                                    DropdownMenuItem(
+                                      value: 'Inactive',
+                                      child: Text('Inactive Account', style: TextStyle(color: Colors.redAccent, fontWeight: FontWeight.bold)),
+                                    ),
+                                  ],
+                                  onChanged: (value) {
+                                    if (value != null) {
+                                      setState(() {
+                                        selectedStatus = value;
+                                      });
+                                    }
+                                  },
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+
+                      const SizedBox(height: 28),
+
+                      // Save Action Button
+                      GoldButton(
+                        label: 'Save Changes',
+                        icon: Icons.save_outlined,
+                        onPressed: saveClient,
+                      ),
+
+                      const SizedBox(height: 12),
+
+                      // Cancel Button
+                      SizedBox(
+                        width: double.infinity,
+                        height: 48,
+                        child: OutlinedButton(
+                          onPressed: () => Navigator.pop(context),
+                          style: OutlinedButton.styleFrom(
+                            side: const BorderSide(color: kPremiumMuted),
+                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+                          ),
+                          child: const Text(
+                            'Cancel',
+                            style: TextStyle(color: kPremiumMuted, fontWeight: FontWeight.bold, fontSize: 15),
+                          ),
+                        ),
+                      ),
+                    ],
                   ),
                 ),
               ),
             ),
-
-            const SizedBox(height: 30),
-
-            const Text(
-              'Client Information',
-              style: TextStyle(
-                fontSize: 21,
-                fontWeight: FontWeight.bold,
-              ),
-            ),
-
-            const SizedBox(height: 15),
-
-            // Client Name
-            TextField(
-              controller: nameController,
-
-              decoration: InputDecoration(
-                labelText: 'Client Name',
-                prefixIcon: const Icon(
-                  Icons.person,
-                ),
-
-                filled: true,
-                fillColor: Colors.white,
-
-                border: OutlineInputBorder(
-                  borderRadius:
-                      BorderRadius.circular(15),
-                  borderSide: BorderSide.none,
-                ),
-              ),
-            ),
-
-            const SizedBox(height: 15),
-
-            // Company
-            TextField(
-              controller: companyController,
-
-              decoration: InputDecoration(
-                labelText: 'Company Name',
-                prefixIcon: const Icon(
-                  Icons.business,
-                ),
-
-                filled: true,
-                fillColor: Colors.white,
-
-                border: OutlineInputBorder(
-                  borderRadius:
-                      BorderRadius.circular(15),
-                  borderSide: BorderSide.none,
-                ),
-              ),
-            ),
-
-            const SizedBox(height: 15),
-
-            // Email
-            TextField(
-              controller: emailController,
-
-              keyboardType:
-                  TextInputType.emailAddress,
-
-              decoration: InputDecoration(
-                labelText: 'Email Address',
-                prefixIcon: const Icon(
-                  Icons.email,
-                ),
-
-                filled: true,
-                fillColor: Colors.white,
-
-                border: OutlineInputBorder(
-                  borderRadius:
-                      BorderRadius.circular(15),
-                  borderSide: BorderSide.none,
-                ),
-              ),
-            ),
-
-            const SizedBox(height: 15),
-
-            // Phone
-            TextField(
-              controller: phoneController,
-
-              keyboardType:
-                  TextInputType.phone,
-
-              decoration: InputDecoration(
-                labelText: 'Phone Number',
-                prefixIcon: const Icon(
-                  Icons.phone,
-                ),
-
-                filled: true,
-                fillColor: Colors.white,
-
-                border: OutlineInputBorder(
-                  borderRadius:
-                      BorderRadius.circular(15),
-                  borderSide: BorderSide.none,
-                ),
-              ),
-            ),
-
-            const SizedBox(height: 15),
-
-            // Status
-            Container(
-              padding: const EdgeInsets.symmetric(
-                horizontal: 15,
-              ),
-
-              decoration: BoxDecoration(
-                color: Colors.white,
-                borderRadius:
-                    BorderRadius.circular(15),
-              ),
-
-              child: DropdownButtonHideUnderline(
-                child: DropdownButton<String>(
-                  value: selectedStatus,
-
-                  isExpanded: true,
-
-                  icon: const Icon(
-                    Icons.arrow_drop_down,
-                  ),
-
-                  items: const [
-                    DropdownMenuItem(
-                      value: 'Active',
-                      child: Text('Active'),
-                    ),
-
-                    DropdownMenuItem(
-                      value: 'Inactive',
-                      child: Text('Inactive'),
-                    ),
-                  ],
-
-                  onChanged: (value) {
-                    if (value != null) {
-                      setState(() {
-                        selectedStatus = value;
-                      });
-                    }
-                  },
-                ),
-              ),
-            ),
-
-            const SizedBox(height: 30),
-
-            // Save Button
-            SizedBox(
-              width: double.infinity,
-              height: 52,
-
-              child: ElevatedButton.icon(
-                onPressed: saveClient,
-
-                icon: const Icon(
-                  Icons.save,
-                ),
-
-                label: const Text(
-                  'Save Changes',
-                  style: TextStyle(
-                    fontSize: 16,
-                    fontWeight: FontWeight.bold,
-                  ),
-                ),
-
-                style:
-                    ElevatedButton.styleFrom(
-                  backgroundColor:
-                      Colors.deepPurple,
-
-                  foregroundColor:
-                      Colors.white,
-
-                  shape:
-                      RoundedRectangleBorder(
-                    borderRadius:
-                        BorderRadius.circular(15),
-                  ),
-                ),
-              ),
-            ),
-
-            const SizedBox(height: 15),
-
-            // Cancel
-            SizedBox(
-              width: double.infinity,
-              height: 52,
-
-              child: OutlinedButton(
-                onPressed: () {
-                  Navigator.pop(context);
-                },
-
-                child: const Text(
-                  'Cancel',
-                ),
-              ),
-            ),
-          ],
+          ),
         ),
       ),
     );

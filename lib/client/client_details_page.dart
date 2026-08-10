@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:business_managment_app/services/app_data_store.dart';
+import 'package:business_managment_app/core/premium_theme.dart';
 
 class ClientDetailsPage extends StatelessWidget {
   final ClientModel client;
@@ -9,35 +10,29 @@ class ClientDetailsPage extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
+      backgroundColor: Colors.transparent,
       appBar: AppBar(
         title: Text('${client.name} Details'),
-        backgroundColor: Colors.indigo,
-        foregroundColor: Colors.white,
       ),
       body: SingleChildScrollView(
         padding: const EdgeInsets.all(20),
         child: Center(
           child: ConstrainedBox(
             constraints: const BoxConstraints(maxWidth: 800),
-            child: Card(
-              elevation: 4,
-              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-              child: Padding(
-                padding: const EdgeInsets.all(24),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Row(
-                      children: [
-                        CircleAvatar(
-                          radius: 36,
-                          backgroundColor: Colors.indigo,
-                          child: Text(
-                            client.name.substring(0, 1),
-                            style: const TextStyle(fontSize: 32, color: Colors.white, fontWeight: FontWeight.bold),
-                          ),
-                        ),
-                        const SizedBox(width: 20),
+            child: GlassCard(
+              padding: const EdgeInsets.all(24),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    children: [
+                      PremiumAvatar(
+                        label: client.name,
+                        style: AvatarStyle.gradient,
+                        size: 72,
+                        radius: 36,
+                      ),
+                      const SizedBox(width: 20),
                         Expanded(
                           child: Column(
                             crossAxisAlignment: CrossAxisAlignment.start,

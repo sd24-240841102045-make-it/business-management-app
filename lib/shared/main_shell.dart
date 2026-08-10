@@ -17,6 +17,7 @@ import 'package:business_managment_app/admin/reports_page.dart';
 import 'package:business_managment_app/admin/invite_page.dart';
 import 'package:business_managment_app/client/client_dashboard_page.dart';
 import 'package:business_managment_app/services/supabase_service.dart';
+import 'package:business_managment_app/core/premium_theme.dart';
 
 class MainShell extends StatefulWidget {
   const MainShell({super.key});
@@ -151,9 +152,7 @@ class _MainShellState extends State<MainShell> {
               titles[_selectedIndex],
               style: const TextStyle(fontWeight: FontWeight.bold),
             ),
-            backgroundColor: Colors.deepPurple,
-            foregroundColor: Colors.white,
-            elevation: 2,
+            backgroundColor: Colors.transparent,
             actions: [
               Builder(
                 builder: (drawerContext) => IconButton(
@@ -195,26 +194,66 @@ class _MainShellState extends State<MainShell> {
                       selectedIndex: _selectedIndex,
                       onDestinationSelected: _onItemTapped,
                       labelType: NavigationRailLabelType.all,
-                      selectedIconTheme: const IconThemeData(color: Colors.deepPurple, size: 28),
+                      selectedIconTheme: const IconThemeData(color: kPremiumGold, size: 28),
                       selectedLabelTextStyle: const TextStyle(
-                        color: Colors.deepPurple,
+                        color: kPremiumGold,
                         fontWeight: FontWeight.bold,
                       ),
-                      unselectedIconTheme: const IconThemeData(color: Colors.grey),
+                      unselectedIconTheme: const IconThemeData(color: kPremiumMuted),
                       destinations: railDestinations,
                     ),
                     const VerticalDivider(thickness: 1, width: 1),
                     Expanded(
-                      child: IndexedStack(
-                        index: _selectedIndex,
-                        children: pages,
+                      child: SafeArea(
+                        bottom: true,
+                        child: AnimatedSwitcher(
+                          duration: const Duration(milliseconds: 280),
+                          switchInCurve: Curves.easeOutCubic,
+                          switchOutCurve: Curves.easeInCubic,
+                          transitionBuilder: (child, animation) {
+                            return FadeTransition(
+                              opacity: animation,
+                              child: SlideTransition(
+                                position: Tween<Offset>(
+                                  begin: const Offset(0, 0.04),
+                                  end: Offset.zero,
+                                ).animate(animation),
+                                child: child,
+                              ),
+                            );
+                          },
+                          child: KeyedSubtree(
+                            key: ValueKey<int>(_selectedIndex),
+                            child: pages[_selectedIndex],
+                          ),
+                        ),
                       ),
                     ),
                   ],
                 )
-              : IndexedStack(
-                  index: _selectedIndex,
-                  children: pages,
+              : SafeArea(
+                  bottom: true,
+                  child: AnimatedSwitcher(
+                    duration: const Duration(milliseconds: 280),
+                    switchInCurve: Curves.easeOutCubic,
+                    switchOutCurve: Curves.easeInCubic,
+                    transitionBuilder: (child, animation) {
+                      return FadeTransition(
+                        opacity: animation,
+                        child: SlideTransition(
+                          position: Tween<Offset>(
+                            begin: const Offset(0, 0.04),
+                            end: Offset.zero,
+                          ).animate(animation),
+                          child: child,
+                        ),
+                      );
+                    },
+                    child: KeyedSubtree(
+                      key: ValueKey<int>(_selectedIndex),
+                      child: pages[_selectedIndex],
+                    ),
+                  ),
                 ),
           bottomNavigationBar: isWideScreen
               ? null
@@ -239,44 +278,42 @@ class _MainShellState extends State<MainShell> {
           // Drawer Header
           UserAccountsDrawerHeader(
             decoration: const BoxDecoration(
-              gradient: LinearGradient(
-                colors: [Color(0xFF4A148C), Color(0xFF6A1B9A), Color(0xFF8E24AA)],
-                begin: Alignment.topLeft,
-                end: Alignment.bottomRight,
-              ),
+              gradient: kGradBg,
             ),
             accountName: Text(
               orgName,
-              style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 18),
+              style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 18, color: kPremiumText),
             ),
             accountEmail: Row(
               children: [
                 Expanded(
                   child: Text(
                     user?.email ?? 'user@organization.com',
-                    style: const TextStyle(fontSize: 12, color: Colors.white70),
+                    style: const TextStyle(fontSize: 12, color: kPremiumMuted),
                     overflow: TextOverflow.ellipsis,
                   ),
                 ),
                 Container(
                   padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
                   decoration: BoxDecoration(
-                    color: Colors.white24,
+                    color: kPremiumGold.withOpacity(0.2),
                     borderRadius: BorderRadius.circular(10),
+                    border: Border.all(color: kPremiumGold.withOpacity(0.4)),
                   ),
                   child: Text(
                     role.toUpperCase(),
-                    style: const TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: Colors.white),
+                    style: const TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: kPremiumGold),
                   ),
                 ),
               ],
             ),
-            currentAccountPicture: CircleAvatar(
-              backgroundColor: Colors.white,
-              child: Text(
-                orgName.isNotEmpty ? orgName[0].toUpperCase() : 'E',
-                style: const TextStyle(fontSize: 24, fontWeight: FontWeight.bold, color: Colors.deepPurple),
-              ),
+            currentAccountPicture: PremiumAvatar(
+              label: orgName,
+              icon: Icons.business_center_rounded,
+              style: AvatarStyle.glowIcon,
+              gradient: kGradGold,
+              size: 54,
+              radius: 18,
             ),
           ),
 

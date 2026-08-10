@@ -659,10 +659,14 @@ class AppDataStore extends ChangeNotifier {
     }
   }
 
-  void deleteEmployee(String id) {
-    _employees.removeWhere((e) => e.id == id);
-    SupabaseService().deleteEmployee(id);
+  Future<void> deleteEmployee(String id) async {
+    final target = _employees.firstWhere(
+      (e) => e.id == id,
+      orElse: () => Employee(id: id, name: '', role: '', department: '', email: '', phone: '', status: '', joiningDate: ''),
+    );
+    _employees.removeWhere((e) => e.id == id || (target.email.isNotEmpty && e.email.toLowerCase() == target.email.toLowerCase()));
     notifyListeners();
+    await SupabaseService().deleteEmployee(id, email: target.email);
   }
 
   // --- CLIENT MANAGEMENT ---
@@ -681,10 +685,14 @@ class AppDataStore extends ChangeNotifier {
     }
   }
 
-  void deleteClient(String id) {
-    _clients.removeWhere((c) => c.id == id);
-    SupabaseService().deleteClient(id);
+  Future<void> deleteClient(String id) async {
+    final target = _clients.firstWhere(
+      (c) => c.id == id,
+      orElse: () => ClientModel(id: id, name: '', company: '', email: '', phone: '', status: ''),
+    );
+    _clients.removeWhere((c) => c.id == id || (target.email.isNotEmpty && c.email.toLowerCase() == target.email.toLowerCase()));
     notifyListeners();
+    await SupabaseService().deleteClient(id, email: target.email);
   }
 
   void assignEmployeeToClient(String clientId, String? employeeId) {

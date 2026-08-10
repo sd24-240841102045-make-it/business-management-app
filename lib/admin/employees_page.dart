@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:business_managment_app/services/app_data_store.dart';
 import 'package:business_managment_app/employee/emp_profile.dart';
+import 'package:business_managment_app/core/premium_theme.dart';
 
 class EmployeesBody extends StatefulWidget {
   final void Function(int index)? onNavigate;
@@ -61,7 +62,12 @@ class EmployeesBodyState extends State<EmployeesBody> {
             },
             child: SingleChildScrollView(
               physics: const AlwaysScrollableScrollPhysics(),
-              padding: EdgeInsets.symmetric(horizontal: horizontalPadding, vertical: 20),
+              padding: EdgeInsets.only(
+                left: horizontalPadding,
+                right: horizontalPadding,
+                top: 20,
+                bottom: MediaQuery.of(context).padding.bottom + 80.0,
+              ),
               child: Center(
                 child: ConstrainedBox(
                   constraints: const BoxConstraints(maxWidth: 1100),
@@ -69,45 +75,13 @@ class EmployeesBodyState extends State<EmployeesBody> {
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       if (_store.isLoadingFromSupabase) ...[
-                        const LinearProgressIndicator(color: Colors.deepPurple),
+                        const LinearProgressIndicator(color: kPremiumGold),
                         const SizedBox(height: 10),
                       ],
-                // Header Banner
-                Container(
-                  width: double.infinity,
-                  padding: const EdgeInsets.all(20),
-                  decoration: BoxDecoration(
-                    gradient: const LinearGradient(
-                      colors: [Color(0xFFFF9F43), Color(0xFFFFC048)],
-                    ),
-                    borderRadius: BorderRadius.circular(20),
-                  ),
-                  child: Row(
-                    children: [
-                      const CircleAvatar(
-                        radius: 28,
-                        backgroundColor: Colors.white24,
-                        child: Icon(Icons.badge, color: Colors.white, size: 32),
-                      ),
-                      const SizedBox(width: 16),
-                      Expanded(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            const Text(
-                              'Human Resource Directory',
-                              style: TextStyle(color: Colors.white, fontSize: 20, fontWeight: FontWeight.bold),
-                            ),
-                            const SizedBox(height: 4),
-                            Text(
-                              '${_store.employees.length} Total Workforce • ${_store.employees.where((e) => e.status == "Active").length} Active Now',
-                              style: const TextStyle(color: Colors.white70, fontSize: 14),
-                            ),
-                          ],
-                        ),
-                      ),
-                    ],
-                  ),
+                HeroBanner(
+                  title: 'Human Resource Directory',
+                  subtitle: '${_store.employees.length} Total Workforce • ${_store.employees.where((e) => e.status == "Active").length} Active Now',
+                  badge: 'HR Directory',
                 ),
 
                 const SizedBox(height: 20),
@@ -117,18 +91,8 @@ class EmployeesBodyState extends State<EmployeesBody> {
                   onChanged: (val) => setState(() => _searchText = val),
                   decoration: InputDecoration(
                     hintText: 'Search by employee name, role, or department...',
-                    prefixIcon: const Icon(Icons.search, color: Colors.deepPurple),
-                    filled: true,
-                    fillColor: Colors.white,
+                    prefixIcon: Icon(Icons.search, color: kPremiumGold),
                     contentPadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
-                    border: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(16),
-                      borderSide: BorderSide.none,
-                    ),
-                    enabledBorder: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(16),
-                      borderSide: BorderSide.none,
-                    ),
                   ),
                 ),
 
@@ -138,19 +102,17 @@ class EmployeesBodyState extends State<EmployeesBody> {
                 Row(
                   children: [
                     Expanded(
-                      child: Container(
+                      child: GlassCard(
+                        margin: EdgeInsets.zero,
                         padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 4),
-                        decoration: BoxDecoration(
-                          color: Colors.white,
-                          borderRadius: BorderRadius.circular(14),
-                        ),
                         child: DropdownButtonHideUnderline(
                           child: DropdownButton<String>(
                             value: _selectedDepartment,
                             isExpanded: true,
-                            icon: const Icon(Icons.filter_list, color: Colors.deepPurple),
+                            dropdownColor: kPremiumSurface,
+                            icon: const Icon(Icons.filter_list, color: kPremiumGold),
                             items: _departments.map((dept) {
-                              return DropdownMenuItem(value: dept, child: Text(dept, style: const TextStyle(fontSize: 13)));
+                              return DropdownMenuItem(value: dept, child: Text(dept, style: const TextStyle(fontSize: 13, color: kPremiumText)));
                             }).toList(),
                             onChanged: (val) => setState(() => _selectedDepartment = val!),
                           ),
@@ -159,19 +121,17 @@ class EmployeesBodyState extends State<EmployeesBody> {
                     ),
                     const SizedBox(width: 12),
                     Expanded(
-                      child: Container(
+                      child: GlassCard(
+                        margin: EdgeInsets.zero,
                         padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 4),
-                        decoration: BoxDecoration(
-                          color: Colors.white,
-                          borderRadius: BorderRadius.circular(14),
-                        ),
                         child: DropdownButtonHideUnderline(
                           child: DropdownButton<String>(
                             value: _selectedStatus,
                             isExpanded: true,
-                            icon: const Icon(Icons.tune, color: Colors.deepPurple),
+                            dropdownColor: kPremiumSurface,
+                            icon: const Icon(Icons.tune, color: kPremiumGold),
                             items: _statuses.map((status) {
-                              return DropdownMenuItem(value: status, child: Text(status, style: const TextStyle(fontSize: 13)));
+                              return DropdownMenuItem(value: status, child: Text(status, style: const TextStyle(fontSize: 13, color: kPremiumText)));
                             }).toList(),
                             onChanged: (val) => setState(() => _selectedStatus = val!),
                           ),
@@ -185,15 +145,13 @@ class EmployeesBodyState extends State<EmployeesBody> {
 
                 // Employee Cards Grid / List
                 filteredEmployees.isEmpty
-                    ? Container(
-                        width: double.infinity,
+                    ? GlassCard(
                         padding: const EdgeInsets.all(40),
-                        decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(20)),
                         child: Column(
                           children: const [
-                            Icon(Icons.people_outline, size: 60, color: Colors.grey),
+                            Icon(Icons.people_outline, size: 60, color: kPremiumMuted),
                             SizedBox(height: 12),
-                            Text('No employees found matching filter', style: TextStyle(color: Colors.grey, fontSize: 16)),
+                            Text('No employees found matching filter', style: TextStyle(color: kPremiumMuted, fontSize: 16)),
                           ],
                         ),
                       )
@@ -202,7 +160,7 @@ class EmployeesBodyState extends State<EmployeesBody> {
                         physics: const NeverScrollableScrollPhysics(),
                         gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
                           crossAxisCount: isDesktop ? 3 : isTablet ? 2 : 1,
-                          mainAxisExtent: 150,
+                          mainAxisExtent: 160,
                           crossAxisSpacing: 16,
                           mainAxisSpacing: 16,
                         ),
@@ -211,38 +169,30 @@ class EmployeesBodyState extends State<EmployeesBody> {
                           final emp = filteredEmployees[index];
                           final assignedClients = _store.clients.where((c) => c.assignedEmployeeId == emp.id).length;
 
-                          return InkWell(
-                            onTap: () {
-                              Navigator.push(
-                                context,
-                                MaterialPageRoute(
-                                  builder: (context) => EmployeeProfilePage(employee: emp),
-                                ),
-                              );
-                            },
-                            borderRadius: BorderRadius.circular(18),
-                            child: Container(
+                          return FadeInSlide(
+                            delay: Duration(milliseconds: 50 * (index % 6)),
+                            child: GlassCard(
+                              margin: EdgeInsets.zero,
                               padding: const EdgeInsets.all(16),
-                              decoration: BoxDecoration(
-                                color: Colors.white,
-                                borderRadius: BorderRadius.circular(18),
-                                boxShadow: [
-                                  BoxShadow(color: Colors.black.withOpacity(0.04), blurRadius: 8, offset: const Offset(0, 3)),
-                                ],
-                              ),
+                              onTap: () {
+                                Navigator.push(
+                                  context,
+                                  MaterialPageRoute(
+                                    builder: (context) => EmployeeProfilePage(employee: emp),
+                                  ),
+                                );
+                              },
                               child: Column(
                                 crossAxisAlignment: CrossAxisAlignment.start,
                                 mainAxisSize: MainAxisSize.min,
                                 children: [
                                   Row(
                                     children: [
-                                      CircleAvatar(
+                                      PremiumAvatar(
+                                        label: emp.name,
+                                        style: AvatarStyle.gradient,
+                                        size: 44,
                                         radius: 22,
-                                        backgroundColor: Colors.deepPurple.shade50,
-                                        child: Text(
-                                          emp.name.isNotEmpty ? emp.name[0].toUpperCase() : 'E',
-                                          style: const TextStyle(color: Colors.deepPurple, fontWeight: FontWeight.bold, fontSize: 18),
-                                        ),
                                       ),
                                       const SizedBox(width: 10),
                                       Expanded(
@@ -251,14 +201,14 @@ class EmployeesBodyState extends State<EmployeesBody> {
                                           children: [
                                             Text(
                                               emp.name,
-                                              style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 15),
+                                              style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 15, color: kPremiumText),
                                               maxLines: 1,
                                               overflow: TextOverflow.ellipsis,
                                             ),
                                             const SizedBox(height: 2),
                                             Text(
                                               emp.role,
-                                              style: const TextStyle(color: Colors.grey, fontSize: 12),
+                                              style: const TextStyle(color: kPremiumMuted, fontSize: 12),
                                               maxLines: 1,
                                               overflow: TextOverflow.ellipsis,
                                             ),
@@ -269,14 +219,15 @@ class EmployeesBodyState extends State<EmployeesBody> {
                                         padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
                                         decoration: BoxDecoration(
                                           color: emp.status == 'Active'
-                                              ? Colors.green.withOpacity(0.12)
-                                              : Colors.orange.withOpacity(0.12),
+                                              ? Colors.green.withOpacity(0.15)
+                                              : Colors.orange.withOpacity(0.15),
                                           borderRadius: BorderRadius.circular(10),
+                                          border: Border.all(color: emp.status == 'Active' ? Colors.green.withOpacity(0.3) : Colors.orange.withOpacity(0.3)),
                                         ),
                                         child: Text(
                                           emp.status,
                                           style: TextStyle(
-                                            color: emp.status == 'Active' ? Colors.green : Colors.orange,
+                                            color: emp.status == 'Active' ? Colors.greenAccent : Colors.orangeAccent,
                                             fontWeight: FontWeight.bold,
                                             fontSize: 11,
                                           ),
@@ -293,14 +244,14 @@ class EmployeesBodyState extends State<EmployeesBody> {
                                     ],
                                   ),
 
-                                  const Divider(height: 18),
+                                  const Divider(height: 18, color: Colors.white10),
 
                                   Row(
                                     children: [
-                                      const Icon(Icons.business_center_outlined, size: 15, color: Colors.grey),
+                                      const Icon(Icons.business_center_outlined, size: 15, color: kPremiumMuted),
                                       const SizedBox(width: 6),
                                       Expanded(
-                                        child: Text(emp.department, style: const TextStyle(fontSize: 12, color: Colors.black87)),
+                                        child: Text(emp.department, style: const TextStyle(fontSize: 12, color: kPremiumMuted)),
                                       ),
                                     ],
                                   ),
@@ -309,12 +260,12 @@ class EmployeesBodyState extends State<EmployeesBody> {
 
                                   Row(
                                     children: [
-                                      const Icon(Icons.people_alt_outlined, size: 15, color: Colors.deepPurple),
+                                      const Icon(Icons.people_alt_outlined, size: 15, color: kPremiumGold),
                                       const SizedBox(width: 6),
                                       Expanded(
                                         child: Text(
                                           '$assignedClients Assigned Client${assignedClients == 1 ? '' : 's'}',
-                                          style: const TextStyle(fontSize: 12, color: Colors.deepPurple, fontWeight: FontWeight.w600),
+                                          style: const TextStyle(fontSize: 12, color: kPremiumGold, fontWeight: FontWeight.w600),
                                         ),
                                       ),
                                     ],
@@ -392,7 +343,7 @@ class EmployeesBodyState extends State<EmployeesBody> {
               child: const Text('Cancel'),
             ),
             ElevatedButton(
-              style: ElevatedButton.styleFrom(backgroundColor: Colors.deepPurple, foregroundColor: Colors.white),
+              style: ElevatedButton.styleFrom(backgroundColor: kPremiumGold, foregroundColor: kPremiumBg),
               onPressed: () {
                 if (nameController.text.trim().isNotEmpty) {
                   final newEmp = Employee(
@@ -421,16 +372,26 @@ class EmployeesBodyState extends State<EmployeesBody> {
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
-        title: const Text('Delete Employee?'),
-        content: Text('Are you sure you want to remove ${emp.name} from HR directory?'),
+        backgroundColor: kPremiumSurface,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(18), side: const BorderSide(color: Colors.white10)),
+        title: const Text('Delete Employee?', style: TextStyle(color: kPremiumGold, fontWeight: FontWeight.bold)),
+        content: Text('Are you sure you want to remove ${emp.name} from the HR directory?', style: const TextStyle(color: kPremiumText)),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(context), child: const Text('Cancel')),
+          TextButton(onPressed: () => Navigator.pop(context), child: const Text('Cancel', style: TextStyle(color: kPremiumMuted))),
           TextButton(
-            onPressed: () {
-              _store.deleteEmployee(emp.id);
+            onPressed: () async {
               Navigator.pop(context);
+              await _store.deleteEmployee(emp.id);
+              if (mounted) {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  SnackBar(
+                    content: Text('Employee ${emp.name} deleted successfully'),
+                    backgroundColor: Colors.redAccent,
+                  ),
+                );
+              }
             },
-            child: const Text('Delete', style: TextStyle(color: Colors.red)),
+            child: const Text('Delete', style: TextStyle(color: Colors.redAccent, fontWeight: FontWeight.bold)),
           ),
         ],
       ),

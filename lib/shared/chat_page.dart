@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:business_managment_app/services/app_data_store.dart';
 import 'package:business_managment_app/services/supabase_service.dart';
+import 'package:business_managment_app/core/premium_theme.dart';
 
 class ChatPage extends StatefulWidget {
   final String? initialTargetId;
@@ -170,7 +171,7 @@ class _ChatPageState extends State<ChatPage> {
                   onChanged: (val) => setState(() => _searchQuery = val),
                   decoration: InputDecoration(
                     hintText: 'Search employees or client accounts...',
-                    prefixIcon: const Icon(Icons.search, color: Colors.deepPurple),
+                    prefixIcon: Icon(Icons.search, color: kPremiumGold),
                     filled: true,
                     fillColor: Theme.of(context).cardColor,
                     contentPadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 14),
@@ -294,10 +295,10 @@ class _ChatPageState extends State<ChatPage> {
       if (canPop) {
         return Scaffold(
           appBar: AppBar(
-            title: const Text('Enterprise Messages', style: TextStyle(fontWeight: FontWeight.bold)),
-            backgroundColor: Colors.deepPurple,
-            foregroundColor: Colors.white,
-            elevation: 2,
+            title: const Text('Enterprise Messages', style: TextStyle(fontWeight: FontWeight.bold, color: kPremiumGold)),
+            backgroundColor: kPremiumBg,
+            foregroundColor: kPremiumGold,
+            elevation: 0,
           ),
           body: inboxView,
         );
@@ -320,7 +321,7 @@ class _ChatPageState extends State<ChatPage> {
           child: Row(
             children: [
               IconButton(
-                icon: const Icon(Icons.arrow_back, color: Colors.deepPurple),
+                icon: const Icon(Icons.arrow_back, color: kPremiumGold),
                 tooltip: 'Back to all chats',
                 onPressed: _backToInbox,
               ),
@@ -371,7 +372,7 @@ class _ChatPageState extends State<ChatPage> {
               Expanded(
                 child: Container(
                   padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
-                  color: Theme.of(context).brightness == Brightness.dark ? const Color(0xFF121218) : const Color(0xFFF4F6FA),
+                  color: Colors.transparent,
                   child: _isLoadingConversation
                       ? const Center(child: CircularProgressIndicator())
                       : _activeConversationId == null

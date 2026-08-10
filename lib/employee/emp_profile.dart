@@ -4,6 +4,7 @@ import 'package:business_managment_app/services/supabase_service.dart';
 import 'package:business_managment_app/services/app_data_store.dart';
 import 'package:business_managment_app/shared/login_page.dart';
 import 'package:business_managment_app/shared/settings_page.dart';
+import 'package:business_managment_app/core/premium_theme.dart';
 
 class ProfileBody extends StatefulWidget {
   const ProfileBody({super.key});
@@ -163,76 +164,67 @@ class _ProfileBodyState extends State<ProfileBody> {
           },
           child: SingleChildScrollView(
             physics: const AlwaysScrollableScrollPhysics(),
-            padding: EdgeInsets.symmetric(horizontal: horizontalPadding, vertical: 20),
+            padding: EdgeInsets.only(
+              left: horizontalPadding,
+              right: horizontalPadding,
+              top: 20,
+              bottom: MediaQuery.of(context).padding.bottom + 80.0,
+            ),
             child: Center(
               child: ConstrainedBox(
                 constraints: const BoxConstraints(maxWidth: 1100),
                 child: Column(
                   children: [
                 // Profile Header Banner
-                Container(
+                SizedBox(
                   width: double.infinity,
-                  padding: const EdgeInsets.all(24),
-                  decoration: BoxDecoration(
-                    gradient: const LinearGradient(
-                      colors: [Color(0xFF6C63FF), Color(0xFF8E7CFF)],
-                    ),
-                    borderRadius: BorderRadius.circular(22),
-                    boxShadow: [
-                      BoxShadow(
-                        color: Colors.deepPurple.withOpacity(0.25),
-                        blurRadius: 15,
-                        offset: const Offset(0, 6),
-                      ),
-                    ],
-                  ),
-                  child: Column(
-                    children: [
-                      CircleAvatar(
-                        radius: 45,
-                        backgroundColor: Colors.white,
-                        child: Text(
-                          userName.isNotEmpty ? userName[0].toUpperCase() : 'A',
-                          style: const TextStyle(fontSize: 40, fontWeight: FontWeight.bold, color: Colors.deepPurple),
+                  child: GlassCard(
+                    padding: const EdgeInsets.all(24),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.center,
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        PremiumAvatar(
+                          label: userName,
+                          style: AvatarStyle.gradient,
+                          size: 80,
+                          radius: 40,
                         ),
-                      ),
-                      const SizedBox(height: 15),
-                      Text(
-                        userName,
-                        style: const TextStyle(
-                          color: Colors.white,
-                          fontSize: 24,
-                          fontWeight: FontWeight.bold,
-                        ),
-                      ),
-                      const SizedBox(height: 5),
-                      Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 4),
-                        decoration: BoxDecoration(
-                          color: Colors.white.withOpacity(0.2),
-                          borderRadius: BorderRadius.circular(12),
-                        ),
-                        child: Text(
-                          '$userRole • $empDept',
+                        const SizedBox(height: 15),
+                        Text(
+                          userName,
+                          textAlign: TextAlign.center,
                           style: const TextStyle(
-                            color: Colors.white,
-                            fontSize: 13,
-                            fontWeight: FontWeight.w600,
+                            color: kPremiumText,
+                            fontSize: 24,
+                            fontWeight: FontWeight.bold,
                           ),
                         ),
-                      ),
-                      const SizedBox(height: 18),
-                      OutlinedButton.icon(
-                        onPressed: () => user != null ? _editProfileDialog(user, matchingEmp) : null,
-                        icon: const Icon(Icons.edit, color: Colors.white),
-                        label: const Text('Edit Profile'),
-                        style: OutlinedButton.styleFrom(
-                          foregroundColor: Colors.white,
-                          side: const BorderSide(color: Colors.white),
-                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                        const SizedBox(height: 5),
+                        Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 4),
+                          decoration: BoxDecoration(
+                            color: kPremiumGold.withOpacity(0.15),
+                            borderRadius: BorderRadius.circular(12),
+                            border: Border.all(color: kPremiumGold.withOpacity(0.3)),
+                          ),
+                          child: Text(
+                            '$userRole • $empDept',
+                            style: const TextStyle(
+                              color: kPremiumGold,
+                              fontSize: 13,
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
                         ),
-                      ),
-                    ],
+                        const SizedBox(height: 18),
+                        GoldButton(
+                          label: 'Edit Profile',
+                          icon: Icons.edit,
+                          onPressed: () => user != null ? _editProfileDialog(user, matchingEmp) : null,
+                        ),
+                      ],
+                    ),
                   ),
                 ),
 
@@ -361,7 +353,7 @@ class _ProfileBodyState extends State<ProfileBody> {
       alignment: Alignment.centerLeft,
       child: Text(
         title,
-        style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+        style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: kPremiumGold),
       ),
     );
   }
@@ -371,34 +363,24 @@ class _ProfileBodyState extends State<ProfileBody> {
     required String title,
     required String subtitle,
   }) {
-    return Container(
+    return GlassCard(
       margin: const EdgeInsets.only(bottom: 10),
       padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(16),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withOpacity(0.04),
-            blurRadius: 8,
-            offset: const Offset(0, 2),
-          ),
-        ],
-      ),
       child: Row(
         children: [
-          CircleAvatar(
-            backgroundColor: Colors.deepPurple.withOpacity(0.1),
-            child: Icon(icon, color: Colors.deepPurple),
+          PremiumAvatar(
+            icon: icon,
+            style: AvatarStyle.glowIcon,
+            size: 40,
           ),
           const SizedBox(width: 15),
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(title, style: const TextStyle(fontWeight: FontWeight.bold)),
+                Text(title, style: const TextStyle(fontWeight: FontWeight.bold, color: kPremiumText)),
                 const SizedBox(height: 4),
-                Text(subtitle, style: const TextStyle(color: Colors.grey)),
+                Text(subtitle, style: const TextStyle(color: kPremiumMuted)),
               ],
             ),
           ),
@@ -413,28 +395,19 @@ class _ProfileBodyState extends State<ProfileBody> {
     required String subtitle,
     required VoidCallback onTap,
   }) {
-    return Container(
+    return GlassCard(
       margin: const EdgeInsets.only(bottom: 10),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(16),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withOpacity(0.04),
-            blurRadius: 8,
-            offset: const Offset(0, 2),
-          ),
-        ],
-      ),
+      padding: EdgeInsets.zero,
+      onTap: onTap,
       child: ListTile(
-        onTap: onTap,
-        leading: CircleAvatar(
-          backgroundColor: Colors.deepPurple.withOpacity(0.1),
-          child: Icon(icon, color: Colors.deepPurple),
+        leading: PremiumAvatar(
+          icon: icon,
+          style: AvatarStyle.glowIcon,
+          size: 40,
         ),
-        title: Text(title, style: const TextStyle(fontWeight: FontWeight.bold)),
-        subtitle: Text(subtitle),
-        trailing: const Icon(Icons.arrow_forward_ios, size: 16),
+        title: Text(title, style: const TextStyle(fontWeight: FontWeight.bold, color: kPremiumText)),
+        subtitle: Text(subtitle, style: const TextStyle(color: kPremiumMuted)),
+        trailing: const Icon(Icons.arrow_forward_ios, size: 16, color: kPremiumGold),
       ),
     );
   }
@@ -576,90 +549,87 @@ class _EmployeeProfilePageState extends State<EmployeeProfilePage> {
 
     return Scaffold(
       appBar: AppBar(
-        title: Text('${_currentEmp.name}\'s Profile', style: const TextStyle(fontWeight: FontWeight.bold)),
-        backgroundColor: Colors.deepPurple,
-        foregroundColor: Colors.white,
-        elevation: 2,
+        title: Text('${_currentEmp.name}\'s Profile', style: const TextStyle(fontWeight: FontWeight.bold, color: kPremiumGold)),
+        backgroundColor: kPremiumBg,
+        foregroundColor: kPremiumGold,
+        elevation: 0,
         actions: [
           IconButton(
-            icon: const Icon(Icons.edit),
+            icon: const Icon(Icons.edit, color: kPremiumGold),
             tooltip: 'Edit Profile',
             onPressed: _editEmployeeDialog,
           ),
         ],
       ),
-      body: SingleChildScrollView(
-        padding: const EdgeInsets.all(20),
-        child: Center(
+      body: SafeArea(
+        bottom: true,
+        child: SingleChildScrollView(
+          padding: EdgeInsets.only(
+            left: 20,
+            right: 20,
+            top: 20,
+            bottom: MediaQuery.of(context).padding.bottom + 80.0,
+          ),
+          child: Center(
           child: ConstrainedBox(
             constraints: const BoxConstraints(maxWidth: 900),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 // Header Profile Card
-                Container(
+                SizedBox(
                   width: double.infinity,
-                  padding: const EdgeInsets.all(24),
-                  decoration: BoxDecoration(
-                    color: Colors.white,
-                    borderRadius: BorderRadius.circular(22),
-                    boxShadow: [
-                      BoxShadow(
-                        color: Colors.black.withOpacity(0.05),
-                        blurRadius: 10,
-                        offset: const Offset(0, 4),
-                      ),
-                    ],
-                  ),
-                  child: Column(
-                    children: [
-                      CircleAvatar(
-                        radius: 45,
-                        backgroundColor: Colors.deepPurple.shade100,
-                        child: Text(
-                          _currentEmp.name.isNotEmpty ? _currentEmp.name[0].toUpperCase() : 'E',
-                          style: const TextStyle(fontSize: 36, color: Colors.deepPurple, fontWeight: FontWeight.bold),
+                  child: GlassCard(
+                    padding: const EdgeInsets.all(24),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.center,
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        PremiumAvatar(
+                          label: _currentEmp.name,
+                          style: AvatarStyle.gradient,
+                          size: 80,
+                          radius: 40,
                         ),
-                      ),
-                      const SizedBox(height: 14),
-                      Text(
-                        _currentEmp.name,
-                        style: const TextStyle(fontSize: 22, fontWeight: FontWeight.bold),
-                      ),
-                      const SizedBox(height: 4),
-                      Text(
-                        '${_currentEmp.role} • ${_currentEmp.department}',
-                        style: TextStyle(color: Colors.deepPurple.shade700, fontWeight: FontWeight.w600, fontSize: 14),
-                      ),
-                      const SizedBox(height: 12),
-                      Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 5),
-                        decoration: BoxDecoration(
-                          color: statusColor.withOpacity(0.12),
-                          borderRadius: BorderRadius.circular(12),
+                        const SizedBox(height: 14),
+                        Text(
+                          _currentEmp.name,
+                          textAlign: TextAlign.center,
+                          style: const TextStyle(fontSize: 22, fontWeight: FontWeight.bold, color: kPremiumText),
                         ),
-                        child: Text(
-                          'Status: ${_currentEmp.status}',
-                          style: TextStyle(color: statusColor, fontWeight: FontWeight.bold, fontSize: 12),
+                        const SizedBox(height: 4),
+                        Text(
+                          '${_currentEmp.role} • ${_currentEmp.department}',
+                          textAlign: TextAlign.center,
+                          style: const TextStyle(color: kPremiumMuted, fontWeight: FontWeight.w600, fontSize: 14),
                         ),
-                      ),
-                      const SizedBox(height: 16),
-                      OutlinedButton.icon(
-                        onPressed: _editEmployeeDialog,
-                        icon: const Icon(Icons.edit, color: Colors.deepPurple, size: 18),
-                        label: const Text('Edit Employee Details', style: TextStyle(color: Colors.deepPurple)),
-                        style: OutlinedButton.styleFrom(
-                          side: const BorderSide(color: Colors.deepPurple),
-                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                        const SizedBox(height: 12),
+                        Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 5),
+                          decoration: BoxDecoration(
+                            color: statusColor.withOpacity(0.15),
+                            borderRadius: BorderRadius.circular(12),
+                            border: Border.all(color: statusColor.withOpacity(0.3)),
+                          ),
+                          child: Text(
+                            'Status: ${_currentEmp.status}',
+                            style: TextStyle(color: statusColor, fontWeight: FontWeight.bold, fontSize: 12),
+                          ),
                         ),
-                      ),
-                    ],
+                        const SizedBox(height: 16),
+                        GoldButton(
+                          label: 'Edit Employee Details',
+                          icon: Icons.edit,
+                          onPressed: _editEmployeeDialog,
+                        ),
+                      ],
+                    ),
                   ),
                 ),
                 const SizedBox(height: 24),
 
                 // Personal & Work Information
-                const Text('Workforce Information', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+                const Text('Workforce Information', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: kPremiumGold)),
                 const SizedBox(height: 12),
                 _buildInfoCard(Icons.fingerprint, 'Employee ID', _currentEmp.id),
                 _buildInfoCard(Icons.email_outlined, 'Email Address', _currentEmp.email),
@@ -674,16 +644,14 @@ class _EmployeeProfilePageState extends State<EmployeeProfilePage> {
                 Row(
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
-                    Text('Assigned Client Accounts (${assignedClients.length})', style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+                    Text('Assigned Client Accounts (${assignedClients.length})', style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: kPremiumGold)),
                   ],
                 ),
                 const SizedBox(height: 12),
                 assignedClients.isEmpty
-                    ? Container(
-                        width: double.infinity,
+                    ? GlassCard(
                         padding: const EdgeInsets.all(20),
-                        decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(16)),
-                        child: const Text('No clients currently assigned to this employee.', style: TextStyle(color: Colors.grey)),
+                        child: const Text('No clients currently assigned to this employee.', style: TextStyle(color: kPremiumMuted)),
                       )
                     : ListView.builder(
                         shrinkWrap: true,
@@ -691,21 +659,24 @@ class _EmployeeProfilePageState extends State<EmployeeProfilePage> {
                         itemCount: assignedClients.length,
                         itemBuilder: (context, index) {
                           final c = assignedClients[index];
-                          return Card(
+                          return GlassCard(
                             margin: const EdgeInsets.only(bottom: 10),
-                            elevation: 2,
-                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
                             child: ListTile(
-                              leading: const CircleAvatar(
-                                backgroundColor: Color(0xFFEDE7F6),
-                                child: Icon(Icons.business, color: Colors.deepPurple),
+                              leading: PremiumAvatar(
+                                icon: Icons.business,
+                                style: AvatarStyle.glowIcon,
+                                size: 40,
                               ),
-                              title: Text(c.name, style: const TextStyle(fontWeight: FontWeight.bold)),
-                              subtitle: Text(c.company),
-                              trailing: Chip(
-                                label: Text(c.status),
-                                backgroundColor: c.status == 'Active' ? Colors.green.withOpacity(0.12) : Colors.orange.withOpacity(0.12),
-                                labelStyle: TextStyle(color: c.status == 'Active' ? Colors.green : Colors.orange, fontWeight: FontWeight.bold, fontSize: 11),
+                              title: Text(c.name, style: const TextStyle(fontWeight: FontWeight.bold, color: kPremiumText)),
+                              subtitle: Text(c.company, style: const TextStyle(color: kPremiumMuted)),
+                              trailing: Container(
+                                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                                decoration: BoxDecoration(
+                                  color: c.status == 'Active' ? Colors.green.withOpacity(0.15) : Colors.orange.withOpacity(0.15),
+                                  borderRadius: BorderRadius.circular(8),
+                                  border: Border.all(color: c.status == 'Active' ? Colors.green.withOpacity(0.3) : Colors.orange.withOpacity(0.3)),
+                                ),
+                                child: Text(c.status, style: TextStyle(color: c.status == 'Active' ? Colors.greenAccent : Colors.orangeAccent, fontWeight: FontWeight.bold, fontSize: 11)),
                               ),
                             ),
                           );
@@ -715,14 +686,12 @@ class _EmployeeProfilePageState extends State<EmployeeProfilePage> {
                 const SizedBox(height: 24),
 
                 // Leave History
-                Text('Leave & Attendance History (${leaveHistory.length})', style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+                const Text('Leave & Attendance History', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: kPremiumGold)),
                 const SizedBox(height: 12),
                 leaveHistory.isEmpty
-                    ? Container(
-                        width: double.infinity,
+                    ? GlassCard(
                         padding: const EdgeInsets.all(20),
-                        decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(16)),
-                        child: const Text('No leave applications recorded for this employee.', style: TextStyle(color: Colors.grey)),
+                        child: const Text('No leave applications recorded for this employee.', style: TextStyle(color: kPremiumMuted)),
                       )
                     : ListView.builder(
                         shrinkWrap: true,
@@ -730,17 +699,20 @@ class _EmployeeProfilePageState extends State<EmployeeProfilePage> {
                         itemCount: leaveHistory.length,
                         itemBuilder: (context, index) {
                           final req = leaveHistory[index];
-                          Color lColor = req.status == 'Approved' ? Colors.green : (req.status == 'Rejected' ? Colors.red : Colors.orange);
-                          return Card(
+                          Color lColor = req.status == 'Approved' ? Colors.greenAccent : (req.status == 'Rejected' ? Colors.redAccent : Colors.orangeAccent);
+                          return GlassCard(
                             margin: const EdgeInsets.only(bottom: 10),
-                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
                             child: ListTile(
-                              title: Text('${req.type} Leave (${req.startDate} - ${req.endDate})', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
-                              subtitle: Text('Reason: ${req.reason}'),
-                              trailing: Chip(
-                                label: Text(req.status),
-                                backgroundColor: lColor.withOpacity(0.12),
-                                labelStyle: TextStyle(color: lColor, fontWeight: FontWeight.bold, fontSize: 11),
+                              title: Text('${req.type} Leave (${req.startDate} - ${req.endDate})', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14, color: kPremiumText)),
+                              subtitle: Text('Reason: ${req.reason}', style: const TextStyle(color: kPremiumMuted)),
+                              trailing: Container(
+                                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                                decoration: BoxDecoration(
+                                  color: lColor.withOpacity(0.15),
+                                  borderRadius: BorderRadius.circular(8),
+                                  border: Border.all(color: lColor.withOpacity(0.3)),
+                                ),
+                                child: Text(req.status, style: TextStyle(color: lColor, fontWeight: FontWeight.bold, fontSize: 11)),
                               ),
                             ),
                           );
@@ -751,38 +723,29 @@ class _EmployeeProfilePageState extends State<EmployeeProfilePage> {
           ),
         ),
       ),
-    );
+    ),
+  );
   }
 
   Widget _buildInfoCard(IconData icon, String title, String value) {
-    return Container(
+    return GlassCard(
       margin: const EdgeInsets.only(bottom: 10),
       padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(16),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withOpacity(0.03),
-            blurRadius: 8,
-            offset: const Offset(0, 2),
-          ),
-        ],
-      ),
       child: Row(
         children: [
-          CircleAvatar(
-            backgroundColor: Colors.deepPurple.withOpacity(0.08),
-            child: Icon(icon, color: Colors.deepPurple, size: 20),
+          PremiumAvatar(
+            icon: icon,
+            style: AvatarStyle.glowIcon,
+            size: 40,
           ),
           const SizedBox(width: 14),
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(title, style: const TextStyle(fontSize: 12, color: Colors.grey)),
+                Text(title, style: const TextStyle(fontSize: 12, color: kPremiumMuted)),
                 const SizedBox(height: 2),
-                Text(value, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
+                Text(value, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14, color: kPremiumText)),
               ],
             ),
           ),

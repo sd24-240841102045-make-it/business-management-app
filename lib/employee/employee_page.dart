@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:business_managment_app/services/app_data_store.dart';
 import 'package:business_managment_app/employee/employee_details_page.dart';
+import 'package:business_managment_app/core/premium_theme.dart';
 
 class EmployeePage extends StatefulWidget {
   const EmployeePage({super.key});
@@ -30,51 +31,99 @@ class _EmployeePageState extends State<EmployeePage> {
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      body: RefreshIndicator(
-        onRefresh: () async {
-          await _store.refreshFromSupabase();
-        },
-        child: SingleChildScrollView(
-          padding: const EdgeInsets.all(20),
-          child: Center(
-            child: ConstrainedBox(
-              constraints: const BoxConstraints(maxWidth: 1100),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  const Text('Employee Staff Directory', style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold)),
-                  const SizedBox(height: 16),
-                  ListView.builder(
-                    shrinkWrap: true,
-                    physics: const NeverScrollableScrollPhysics(),
-                    itemCount: _store.employees.length,
-                    itemBuilder: (context, index) {
-                      final emp = _store.employees[index];
-                      return Card(
-                        margin: const EdgeInsets.only(bottom: 12),
-                        elevation: 2,
-                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-                        child: ListTile(
-                          contentPadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
-                          leading: CircleAvatar(
-                            backgroundColor: Colors.deepPurple.shade100,
-                            child: Text(emp.name.substring(0, 1), style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.deepPurple)),
+    return PremiumBackground(
+      child: Scaffold(
+        backgroundColor: Colors.transparent,
+        appBar: AppBar(
+          title: const Text('Employee Staff Directory', style: TextStyle(fontWeight: FontWeight.bold, color: kPremiumGold)),
+          backgroundColor: kPremiumBg,
+          foregroundColor: kPremiumGold,
+          elevation: 0,
+        ),
+        body: SafeArea(
+          bottom: true,
+          child: RefreshIndicator(
+            color: kPremiumGold,
+            onRefresh: () async {
+              await _store.refreshFromSupabase();
+            },
+            child: SingleChildScrollView(
+              padding: EdgeInsets.only(
+                left: 20,
+                right: 20,
+                top: 20,
+                bottom: MediaQuery.of(context).padding.bottom + 80.0,
+              ),
+              child: Center(
+                child: ConstrainedBox(
+                  constraints: const BoxConstraints(maxWidth: 1100),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      FadeInSlide(
+                        index: 0,
+                        child: HeroBanner(
+                          title: 'Staff Directory',
+                          subtitle: '${_store.employees.length} Team Members Registered',
+                          badge: 'Workforce',
+                        ),
+                      ),
+                      const SizedBox(height: 20),
+
+                      if (_store.employees.isEmpty)
+                        const Padding(
+                          padding: EdgeInsets.symmetric(vertical: 40),
+                          child: Center(
+                            child: Text('No employees found in directory.', style: TextStyle(color: kPremiumMuted, fontSize: 16)),
                           ),
-                          title: Text(emp.name, style: const TextStyle(fontWeight: FontWeight.bold)),
-                          subtitle: Text('${emp.role} • ${emp.department}'),
-                          trailing: const Icon(Icons.arrow_forward_ios, size: 16),
-                          onTap: () {
-                            Navigator.push(
-                              context,
-                              MaterialPageRoute(builder: (context) => EmployeeDetailsPage(employee: emp)),
+                        )
+                      else
+                        ListView.builder(
+                          shrinkWrap: true,
+                          physics: const NeverScrollableScrollPhysics(),
+                          itemCount: _store.employees.length,
+                          itemBuilder: (context, index) {
+                            final emp = _store.employees[index];
+                            return FadeInSlide(
+                              index: index + 1,
+                              child: Container(
+                                margin: const EdgeInsets.only(bottom: 12),
+                                child: GlassCard(
+                                  padding: const EdgeInsets.all(16),
+                                  child: ListTile(
+                                    contentPadding: EdgeInsets.zero,
+                                    leading: PremiumAvatar(
+                                      label: emp.name,
+                                      style: AvatarStyle.gradient,
+                                      size: 48,
+                                    ),
+                                    title: Text(
+                                      emp.name,
+                                      style: const TextStyle(fontWeight: FontWeight.bold, color: kPremiumGold, fontSize: 16),
+                                    ),
+                                    subtitle: Padding(
+                                      padding: const EdgeInsets.only(top: 4),
+                                      child: Text(
+                                        '${emp.role} • ${emp.department}',
+                                        style: const TextStyle(color: kPremiumMuted, fontSize: 13),
+                                      ),
+                                    ),
+                                    trailing: const Icon(Icons.arrow_forward_ios_rounded, size: 16, color: kPremiumGold),
+                                    onTap: () {
+                                      Navigator.push(
+                                        context,
+                                        MaterialPageRoute(builder: (context) => EmployeeDetailsPage(employee: emp)),
+                                      );
+                                    },
+                                  ),
+                                ),
+                              ),
                             );
                           },
                         ),
-                      );
-                    },
+                    ],
                   ),
-                ],
+                ),
               ),
             ),
           ),

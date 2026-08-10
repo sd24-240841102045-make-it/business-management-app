@@ -3,6 +3,7 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:business_managment_app/services/app_data_store.dart';
 import 'package:business_managment_app/services/hr_repository.dart';
 import 'package:business_managment_app/services/supabase_service.dart';
+import 'package:business_managment_app/core/premium_theme.dart';
 
 class AttendanceLeaveBody extends StatefulWidget {
   const AttendanceLeaveBody({super.key});
@@ -19,6 +20,7 @@ class AttendanceLeaveBodyState extends State<AttendanceLeaveBody> {
   bool _isLoadingLogs = false;
   DateTime? _checkInTime;
   String _searchQuery = '';
+  int _activeTab = 0;
   final DateTime _selectedFilterDate = DateTime.now();
 
   @override
@@ -393,218 +395,247 @@ class AttendanceLeaveBodyState extends State<AttendanceLeaveBody> {
       onRefresh: _loadAttendanceData,
       child: SingleChildScrollView(
         physics: const AlwaysScrollableScrollPhysics(),
-        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
+        padding: EdgeInsets.only(
+          left: 16,
+          right: 16,
+          top: 16,
+          bottom: MediaQuery.of(context).padding.bottom + 80.0,
+        ),
         child: Center(
           child: ConstrainedBox(
             constraints: const BoxConstraints(maxWidth: 1100),
-            child: DefaultTabController(
-              length: 2,
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  // ── Daily Attendance Punch Banner (Always Available) ────────────
-                  Container(
-                    width: double.infinity,
-                    padding: const EdgeInsets.all(20),
-                    decoration: BoxDecoration(
-                      gradient: LinearGradient(
-                        colors: _store.isCheckedIn
-                            ? [const Color(0xFF10B981), const Color(0xFF059669)]
-                            : [const Color(0xFF6C63FF), const Color(0xFF4A148C)],
-                        begin: Alignment.topLeft,
-                        end: Alignment.bottomRight,
-                      ),
-                      borderRadius: BorderRadius.circular(22),
-                      boxShadow: [
-                        BoxShadow(color: Colors.deepPurple.withOpacity(0.2), blurRadius: 12, offset: const Offset(0, 4)),
-                      ],
-                    ),
-                    child: Column(
-                      children: [
-                        Row(
-                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                          children: [
-                            Expanded(
-                              child: Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  const Text('Workday Attendance Punch', style: TextStyle(color: Colors.white70, fontSize: 13)),
-                                  const SizedBox(height: 4),
-                                  Text(
-                                    _store.isCheckedIn ? 'Checked In' : 'Checked Out',
-                                    style: const TextStyle(color: Colors.white, fontSize: 22, fontWeight: FontWeight.bold),
-                                  ),
-                                  const SizedBox(height: 2),
-                                  Text(
-                                    _store.isCheckedIn ? 'Active shift in progress...' : 'Ready to start shift today',
-                                    style: const TextStyle(color: Colors.white70, fontSize: 11),
-                                  ),
-                                ],
-                              ),
-                            ),
-                            CircleAvatar(
-                              radius: 24,
-                              backgroundColor: Colors.white.withOpacity(0.2),
-                              child: Icon(
-                                _store.isCheckedIn ? Icons.check_circle : Icons.timer,
-                                color: Colors.white,
-                                size: 26,
-                              ),
-                            ),
-                          ],
-                        ),
-                        const SizedBox(height: 16),
-                        ElevatedButton.icon(
-                          style: ElevatedButton.styleFrom(
-                            backgroundColor: Colors.white,
-                            foregroundColor: _store.isCheckedIn ? Colors.redAccent : Colors.deepPurple,
-                            minimumSize: const Size(double.infinity, 46),
-                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
-                            elevation: 2,
-                          ),
-                          onPressed: _handlePunchAction,
-                          icon: Icon(_store.isCheckedIn ? Icons.logout : Icons.login, size: 18),
-                          label: Text(
-                            _store.isCheckedIn ? 'Punch Out Shift' : 'Punch In Shift Now',
-                            style: const TextStyle(fontSize: 15, fontWeight: FontWeight.bold),
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-
-                  const SizedBox(height: 20),
-
-                  // ── Overflow-Safe Responsive Header Bar ──────────────────────────
-                  Wrap(
-                    alignment: WrapAlignment.spaceBetween,
-                    crossAxisAlignment: WrapCrossAlignment.center,
-                    spacing: 12,
-                    runSpacing: 10,
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const HeroBanner(
+                  title: 'Attendance & Leave Operations',
+                  subtitle: 'Real-time punch records, shift tracking, and leave management',
+                  badge: 'Workforce Operations',
+                ),
+                const SizedBox(height: 20),
+                GlassCard(
+                  padding: const EdgeInsets.all(20),
+                  child: Column(
                     children: [
-                      Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
                         children: [
-                          const Text('Attendance & Leave Suite', style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold)),
-                          Text('Live Employee Check-In & Check-Out Times', style: TextStyle(color: Colors.grey.shade600, fontSize: 12)),
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                const Text('Workday Attendance Punch', style: TextStyle(color: kPremiumMuted, fontSize: 13)),
+                                const SizedBox(height: 4),
+                                Text(
+                                  _store.isCheckedIn ? 'Checked In' : 'Checked Out',
+                                  style: const TextStyle(color: kPremiumText, fontSize: 22, fontWeight: FontWeight.bold),
+                                ),
+                                const SizedBox(height: 2),
+                                Text(
+                                  _store.isCheckedIn ? 'Active shift in progress...' : 'Ready to start shift today',
+                                  style: const TextStyle(color: kPremiumMuted, fontSize: 11),
+                                ),
+                              ],
+                            ),
+                          ),
+                          PremiumAvatar(
+                            icon: _store.isCheckedIn ? Icons.check_circle_rounded : Icons.timer_outlined,
+                            style: AvatarStyle.glowIcon,
+                            size: 48,
+                          ),
                         ],
                       ),
-                      Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-                        decoration: BoxDecoration(
-                          color: Colors.deepPurple.withOpacity(0.08),
-                          borderRadius: BorderRadius.circular(16),
-                          border: Border.all(color: Colors.deepPurple.withOpacity(0.25)),
-                        ),
-                        child: Row(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            const Icon(Icons.calendar_today, size: 14, color: Colors.deepPurple),
-                            const SizedBox(width: 6),
-                            Text(dateStr, style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.deepPurple, fontSize: 12)),
-                          ],
-                        ),
+                      const SizedBox(height: 16),
+                      GoldButton(
+                        label: _store.isCheckedIn ? 'Punch Out Shift' : 'Punch In Shift Now',
+                        icon: _store.isCheckedIn ? Icons.logout : Icons.login,
+                        onPressed: _handlePunchAction,
                       ),
                     ],
                   ),
+                ),
 
-                  const SizedBox(height: 16),
+                const SizedBox(height: 20),
 
-                  // ── KPI Summary Cards Banner ────────────────────────────────────
-                  LayoutBuilder(
-                    builder: (context, constraints) {
-                      final bool isMobile = constraints.maxWidth < 600;
-                      return isMobile
-                          ? Column(
-                              children: [
-                                Row(
-                                  children: [
-                                    Expanded(child: _metricCard('Total Staff', '${_store.employees.length}', Colors.deepPurple, Icons.people)),
-                                    const SizedBox(width: 8),
-                                    Expanded(child: _metricCard('Present', '$presentCount', Colors.green, Icons.how_to_reg)),
-                                  ],
-                                ),
-                                const SizedBox(height: 8),
-                                Row(
-                                  children: [
-                                    Expanded(child: _metricCard('On Leave', '$onLeaveCount', Colors.blue, Icons.beach_access)),
-                                    const SizedBox(width: 8),
-                                    Expanded(child: _metricCard('Pending', '$pendingCount', Colors.orange, Icons.pending_actions)),
-                                  ],
-                                ),
-                              ],
-                            )
-                          : Row(
-                              children: [
-                                Expanded(child: _metricCard('Total Staff', '${_store.employees.length}', Colors.deepPurple, Icons.people)),
-                                const SizedBox(width: 12),
-                                Expanded(child: _metricCard('Present Today', '$presentCount', Colors.green, Icons.how_to_reg)),
-                                const SizedBox(width: 12),
-                                Expanded(child: _metricCard('On Leave', '$onLeaveCount', Colors.blue, Icons.beach_access)),
-                                const SizedBox(width: 12),
-                                Expanded(child: _metricCard('Pending Leaves', '$pendingCount', Colors.orange, Icons.pending_actions)),
-                              ],
-                            );
-                    },
-                  ),
-
-                  const SizedBox(height: 24),
-
-                  // ── Tab Bar Navigation ──────────────────────────────────────────
-                  Container(
-                    decoration: BoxDecoration(
-                      color: Theme.of(context).cardColor,
-                      borderRadius: BorderRadius.circular(16),
-                      boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.03), blurRadius: 6)],
-                    ),
-                    child: const TabBar(
-                      isScrollable: true,
-                      tabAlignment: TabAlignment.center,
-                      labelColor: Colors.deepPurple,
-                      indicatorColor: Colors.deepPurple,
-                      indicatorWeight: 3,
-                      tabs: [
-                        Tab(
-                          icon: Icon(Icons.people_alt, size: 20),
-                          child: FittedBox(child: Text('Staff Roster & Times')),
-                        ),
-                        Tab(
-                          icon: Icon(Icons.event_available, size: 20),
-                          child: FittedBox(child: Text('Leave Applications')),
-                        ),
+                // ── Overflow-Safe Responsive Header Bar ──────────────────────────
+                Wrap(
+                  alignment: WrapAlignment.spaceBetween,
+                  crossAxisAlignment: WrapCrossAlignment.center,
+                  spacing: 12,
+                  runSpacing: 10,
+                  children: [
+                    Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: const [
+                        Text('Attendance & Leave Suite', style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: kPremiumText)),
+                        Text('Live Employee Check-In & Check-Out Times', style: TextStyle(color: kPremiumMuted, fontSize: 12)),
                       ],
                     ),
-                  ),
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                      decoration: BoxDecoration(
+                        color: kPremiumGold.withOpacity(0.12),
+                        borderRadius: BorderRadius.circular(16),
+                        border: Border.all(color: kPremiumGold.withOpacity(0.3)),
+                      ),
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          const Icon(Icons.calendar_today, size: 14, color: kPremiumGold),
+                          const SizedBox(width: 6),
+                          Text(dateStr, style: const TextStyle(fontWeight: FontWeight.bold, color: kPremiumGold, fontSize: 12)),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
 
-                  const SizedBox(height: 16),
+                const SizedBox(height: 16),
 
+                // ── KPI Summary Cards Banner ────────────────────────────────────
+                LayoutBuilder(
+                  builder: (context, constraints) {
+                    final bool isMobile = constraints.maxWidth < 600;
+                    return isMobile
+                        ? Column(
+                            children: [
+                              Row(
+                                children: [
+                                  Expanded(child: _metricCard('Total Staff', '${_store.employees.length}', kPremiumGold, Icons.people)),
+                                  const SizedBox(width: 8),
+                                  Expanded(child: _metricCard('Present', '$presentCount', Colors.greenAccent, Icons.how_to_reg)),
+                                ],
+                              ),
+                              const SizedBox(height: 8),
+                              Row(
+                                children: [
+                                  Expanded(child: _metricCard('On Leave', '$onLeaveCount', kPremiumBlue, Icons.beach_access)),
+                                  const SizedBox(width: 8),
+                                  Expanded(child: _metricCard('Pending', '$pendingCount', Colors.orangeAccent, Icons.pending_actions)),
+                                ],
+                              ),
+                            ],
+                          )
+                        : Row(
+                            children: [
+                              Expanded(child: _metricCard('Total Staff', '${_store.employees.length}', kPremiumGold, Icons.people)),
+                              const SizedBox(width: 12),
+                              Expanded(child: _metricCard('Present Today', '$presentCount', Colors.greenAccent, Icons.how_to_reg)),
+                              const SizedBox(width: 12),
+                              Expanded(child: _metricCard('On Leave', '$onLeaveCount', kPremiumBlue, Icons.beach_access)),
+                              const SizedBox(width: 12),
+                              Expanded(child: _metricCard('Pending Leaves', '$pendingCount', Colors.orangeAccent, Icons.pending_actions)),
+                            ],
+                          );
+                  },
+                ),
+
+                const SizedBox(height: 24),
+
+                // ── Interactive Tab Selector ──────────────────────────────────────────
+                Row(
+                  children: [
+                    Expanded(
+                      child: InkWell(
+                        onTap: () => setState(() => _activeTab = 0),
+                        borderRadius: BorderRadius.circular(14),
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 8),
+                          decoration: BoxDecoration(
+                            color: _activeTab == 0 ? kPremiumGold.withOpacity(0.15) : kPremiumSurface.withOpacity(0.4),
+                            borderRadius: BorderRadius.circular(14),
+                            border: Border.all(
+                              color: _activeTab == 0 ? kPremiumGold : Colors.white.withOpacity(0.1),
+                            ),
+                          ),
+                          child: Row(
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            children: [
+                              Icon(Icons.people_alt, size: 18, color: _activeTab == 0 ? kPremiumGold : kPremiumMuted),
+                              const SizedBox(width: 6),
+                              Flexible(
+                                child: FittedBox(
+                                  fit: BoxFit.scaleDown,
+                                  child: Text(
+                                    'Staff Roster & Times',
+                                    style: TextStyle(
+                                      fontWeight: FontWeight.bold,
+                                      color: _activeTab == 0 ? kPremiumGold : kPremiumText,
+                                      fontSize: 13,
+                                    ),
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 10),
+                    Expanded(
+                      child: InkWell(
+                        onTap: () => setState(() => _activeTab = 1),
+                        borderRadius: BorderRadius.circular(14),
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 8),
+                          decoration: BoxDecoration(
+                            color: _activeTab == 1 ? kPremiumGold.withOpacity(0.15) : kPremiumSurface.withOpacity(0.4),
+                            borderRadius: BorderRadius.circular(14),
+                            border: Border.all(
+                              color: _activeTab == 1 ? kPremiumGold : Colors.white.withOpacity(0.1),
+                            ),
+                          ),
+                          child: Row(
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            children: [
+                              Icon(Icons.event_available, size: 18, color: _activeTab == 1 ? kPremiumGold : kPremiumMuted),
+                              const SizedBox(width: 6),
+                              Flexible(
+                                child: FittedBox(
+                                  fit: BoxFit.scaleDown,
+                                  child: Text(
+                                    'Leave Applications',
+                                    style: TextStyle(
+                                      fontWeight: FontWeight.bold,
+                                      color: _activeTab == 1 ? kPremiumGold : kPremiumText,
+                                      fontSize: 13,
+                                    ),
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+
+                const SizedBox(height: 16),
+
+                if (_activeTab == 0) ...[
                   // ── Search Bar ─────────────────────────────────────────
                   TextField(
                     onChanged: (val) => setState(() => _searchQuery = val),
+                    style: const TextStyle(color: kPremiumText),
                     decoration: InputDecoration(
                       hintText: 'Search employee name or department...',
-                      prefixIcon: const Icon(Icons.search, color: Colors.deepPurple, size: 20),
+                      hintStyle: const TextStyle(color: kPremiumMuted),
+                      prefixIcon: const Icon(Icons.search, color: kPremiumGold, size: 20),
                       filled: true,
-                      fillColor: Theme.of(context).cardColor,
-                      contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
-                      border: OutlineInputBorder(borderRadius: BorderRadius.circular(14), borderSide: BorderSide.none),
+                      fillColor: kPremiumSurface.withOpacity(0.5),
+                      contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                      border: OutlineInputBorder(borderRadius: BorderRadius.circular(14), borderSide: BorderSide(color: Colors.white.withOpacity(0.1))),
+                      enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(14), borderSide: BorderSide(color: Colors.white.withOpacity(0.1))),
+                      focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(14), borderSide: const BorderSide(color: kPremiumGold)),
                     ),
                   ),
-
-                  const SizedBox(height: 14),
-
-                  // ── Tab Bar Views ───────────────────────────────────────────────
-                  SizedBox(
-                    height: 550,
-                    child: TabBarView(
-                      children: [
-                        _buildEmployeeAttendanceRoster(context, dateStr),
-                        _buildLeaveApplicationsTab(context, isAdmin),
-                      ],
-                    ),
-                  ),
+                  const SizedBox(height: 16),
+                  _buildEmployeeAttendanceRoster(context, dateStr),
+                ] else ...[
+                  _buildLeaveApplicationsTab(context, isAdmin),
                 ],
-              ),
+              ],
             ),
           ),
         ),
@@ -619,15 +650,15 @@ class AttendanceLeaveBodyState extends State<AttendanceLeaveBody> {
     }).toList();
 
     if (filteredEmployees.isEmpty) {
-      return Card(
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+      return GlassCard(
+        padding: const EdgeInsets.all(30),
         child: const Center(
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              Icon(Icons.person_search_outlined, size: 40, color: Colors.grey),
+              Icon(Icons.person_search_outlined, size: 40, color: kPremiumMuted),
               SizedBox(height: 8),
-              Text('No employees found matching your search.', style: TextStyle(color: Colors.grey, fontSize: 13)),
+              Text('No employees found matching your search.', style: TextStyle(color: kPremiumMuted, fontSize: 13)),
             ],
           ),
         ),
@@ -635,6 +666,8 @@ class AttendanceLeaveBodyState extends State<AttendanceLeaveBody> {
     }
 
     return ListView.builder(
+      shrinkWrap: true,
+      physics: const NeverScrollableScrollPhysics(),
       itemCount: filteredEmployees.length,
       itemBuilder: (context, index) {
         final emp = filteredEmployees[index];
@@ -660,139 +693,127 @@ class AttendanceLeaveBodyState extends State<AttendanceLeaveBody> {
             ? 'On Leave'
             : (record?.status ?? 'Present (On Time)');
 
-        Color statusColor = Colors.green;
-        if (isOnLeave) statusColor = Colors.blue;
-        if (statusTag.contains('Late')) statusColor = Colors.orange;
+        Color statusColor = Colors.greenAccent;
+        if (isOnLeave) statusColor = kPremiumBlue;
+        if (statusTag.contains('Late')) statusColor = Colors.orangeAccent;
 
-        return Card(
+        return GlassCard(
           margin: const EdgeInsets.only(bottom: 10),
-          elevation: 1.5,
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-          child: Padding(
-            padding: const EdgeInsets.all(12),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Row(
-                  children: [
-                    Stack(
+          padding: const EdgeInsets.all(14),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                children: [
+                  PremiumAvatar(
+                    label: emp.name,
+                    style: AvatarStyle.gradient,
+                    size: 40,
+                    radius: 20,
+                  ),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        CircleAvatar(
-                          radius: 20,
-                          backgroundColor: statusColor.withOpacity(0.15),
-                          child: Text(
-                            emp.name.isNotEmpty ? emp.name[0].toUpperCase() : 'E',
-                            style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16, color: statusColor),
-                          ),
-                        ),
-                        Positioned(
-                          right: 0,
-                          bottom: 0,
-                          child: Container(
-                            width: 10,
-                            height: 10,
-                            decoration: BoxDecoration(color: statusColor, shape: BoxShape.circle, border: Border.all(color: Colors.white, width: 2)),
-                          ),
-                        ),
-                      ],
-                    ),
-                    const SizedBox(width: 10),
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Row(
-                            children: [
-                              Expanded(
-                                child: Text(
-                                  emp.name,
-                                  maxLines: 1,
-                                  overflow: TextOverflow.ellipsis,
-                                  style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
-                                ),
+                        Row(
+                          children: [
+                            Expanded(
+                              child: Text(
+                                emp.name,
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                                style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14, color: kPremiumText),
                               ),
-                              const SizedBox(width: 6),
-                              Container(
-                                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-                                decoration: BoxDecoration(
-                                  color: statusColor.withOpacity(0.12),
-                                  borderRadius: BorderRadius.circular(10),
-                                ),
+                            ),
+                            const SizedBox(width: 6),
+                            Container(
+                              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                              decoration: BoxDecoration(
+                                color: statusColor.withOpacity(0.15),
+                                borderRadius: BorderRadius.circular(10),
+                                border: Border.all(color: statusColor.withOpacity(0.3)),
+                              ),
+                              child: FittedBox(
+                                fit: BoxFit.scaleDown,
                                 child: Text(
                                   statusTag,
                                   style: TextStyle(color: statusColor, fontWeight: FontWeight.bold, fontSize: 10),
                                 ),
                               ),
-                            ],
-                          ),
-                          const SizedBox(height: 2),
-                          Text(
-                            '${emp.role} • ${emp.department}',
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                            style: const TextStyle(fontSize: 11, color: Colors.grey),
-                          ),
-                        ],
-                      ),
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 2),
+                        Text(
+                          '${emp.role} • ${emp.department}',
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: const TextStyle(fontSize: 11, color: kPremiumMuted),
+                        ),
+                      ],
                     ),
-                  ],
-                ),
-                const Divider(height: 16),
+                  ),
+                ],
+              ),
+              const Divider(height: 16, color: Colors.white10),
 
-                // 100% Overflow-Safe Responsive Time Pills Bar
-                Wrap(
-                  spacing: 8,
-                  runSpacing: 6,
-                  children: [
-                    Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-                      decoration: BoxDecoration(
-                        color: Colors.green.withOpacity(0.08),
-                        borderRadius: BorderRadius.circular(10),
-                      ),
-                      child: Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          const Icon(Icons.login, size: 14, color: Colors.green),
-                          const SizedBox(width: 6),
-                          Text('In: $checkInDisplay', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 12, color: Colors.green)),
-                        ],
-                      ),
+              // Overflow-Safe Time Pills Bar
+              Wrap(
+                spacing: 8,
+                runSpacing: 6,
+                children: [
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                    decoration: BoxDecoration(
+                      color: Colors.green.withOpacity(0.12),
+                      borderRadius: BorderRadius.circular(10),
+                      border: Border.all(color: Colors.green.withOpacity(0.3)),
                     ),
-                    Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-                      decoration: BoxDecoration(
-                        color: Colors.red.withOpacity(0.08),
-                        borderRadius: BorderRadius.circular(10),
-                      ),
-                      child: Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          const Icon(Icons.logout, size: 14, color: Colors.redAccent),
-                          const SizedBox(width: 6),
-                          Text('Out: $checkOutDisplay', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 12, color: Colors.redAccent)),
-                        ],
-                      ),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        const Icon(Icons.login, size: 14, color: Colors.greenAccent),
+                        const SizedBox(width: 6),
+                        Text('In: $checkInDisplay', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 12, color: Colors.greenAccent)),
+                      ],
                     ),
-                    Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-                      decoration: BoxDecoration(
-                        color: Colors.deepPurple.withOpacity(0.08),
-                        borderRadius: BorderRadius.circular(10),
-                      ),
-                      child: Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          const Icon(Icons.event, size: 14, color: Colors.deepPurple),
-                          const SizedBox(width: 6),
-                          Text(dateStr, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 12, color: Colors.deepPurple)),
-                        ],
-                      ),
+                  ),
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                    decoration: BoxDecoration(
+                      color: Colors.red.withOpacity(0.12),
+                      borderRadius: BorderRadius.circular(10),
+                      border: Border.all(color: Colors.red.withOpacity(0.3)),
                     ),
-                  ],
-                ),
-              ],
-            ),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        const Icon(Icons.logout, size: 14, color: Colors.redAccent),
+                        const SizedBox(width: 6),
+                        Text('Out: $checkOutDisplay', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 12, color: Colors.redAccent)),
+                      ],
+                    ),
+                  ),
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                    decoration: BoxDecoration(
+                      color: kPremiumGold.withOpacity(0.12),
+                      borderRadius: BorderRadius.circular(10),
+                      border: Border.all(color: kPremiumGold.withOpacity(0.3)),
+                    ),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        const Icon(Icons.event, size: 14, color: kPremiumGold),
+                        const SizedBox(width: 6),
+                        Text(dateStr, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 12, color: kPremiumGold)),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+            ],
           ),
         );
       },
@@ -801,111 +822,119 @@ class AttendanceLeaveBodyState extends State<AttendanceLeaveBody> {
 
   Widget _buildLeaveApplicationsTab(BuildContext context, bool isAdmin) {
     return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Row(
-          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+        Wrap(
+          alignment: WrapAlignment.spaceBetween,
+          crossAxisAlignment: WrapCrossAlignment.center,
+          spacing: 12,
+          runSpacing: 8,
           children: [
-            const Expanded(
-              child: Text('Employee Leave Requests', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 15)),
-            ),
+            const Text('Employee Leave Requests', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16, color: kPremiumGold)),
             if (!isAdmin)
-              ElevatedButton.icon(
-              onPressed: _showApplyLeaveDialog,
-              icon: const Icon(Icons.add, size: 16),
-              label: const Text('Apply Leave'),
-              style: ElevatedButton.styleFrom(
-                backgroundColor: Colors.deepPurple,
-                foregroundColor: Colors.white,
-                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+              GoldButton(
+                label: 'Apply Leave',
+                icon: Icons.add,
+                onPressed: _showApplyLeaveDialog,
               ),
-            ),
           ],
         ),
-        const SizedBox(height: 10),
-        Expanded(
-          child: _store.leaveRequests.isEmpty
-              ? Card(
-                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-                  child: const Center(child: Text('No leave applications recorded.')),
-                )
-              : ListView.builder(
-                  itemCount: _store.leaveRequests.length,
-                  itemBuilder: (context, index) {
-                    final req = _store.leaveRequests[index];
-                    Color statusColor = Colors.orange;
-                    if (req.status == 'Approved') statusColor = Colors.green;
-                    if (req.status == 'Rejected') statusColor = Colors.red;
+        const SizedBox(height: 14),
+        _store.leaveRequests.isEmpty
+            ? GlassCard(
+                padding: const EdgeInsets.all(30),
+                child: const Center(
+                  child: Text('No leave applications recorded.', style: TextStyle(color: kPremiumMuted)),
+                ),
+              )
+            : ListView.builder(
+                shrinkWrap: true,
+                physics: const NeverScrollableScrollPhysics(),
+                itemCount: _store.leaveRequests.length,
+                itemBuilder: (context, index) {
+                  final req = _store.leaveRequests[index];
+                  Color statusColor = Colors.orangeAccent;
+                  if (req.status == 'Approved') statusColor = Colors.greenAccent;
+                  if (req.status == 'Rejected') statusColor = Colors.redAccent;
 
-                    return Card(
-                      margin: const EdgeInsets.only(bottom: 8),
-                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
-                      child: Padding(
-                        padding: const EdgeInsets.all(12),
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
+                  return GlassCard(
+                    margin: const EdgeInsets.only(bottom: 10),
+                    padding: const EdgeInsets.all(14),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Row(
+                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
                           children: [
-                            Row(
-                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                              children: [
-                                Expanded(child: Text(req.employeeName, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14), maxLines: 1, overflow: TextOverflow.ellipsis)),
-                                Container(
-                                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-                                  decoration: BoxDecoration(color: statusColor.withOpacity(0.12), borderRadius: BorderRadius.circular(8)),
-                                  child: Text(req.status, style: TextStyle(color: statusColor, fontWeight: FontWeight.bold, fontSize: 10)),
-                                ),
-                              ],
-                            ),
-                            const SizedBox(height: 4),
-                            Text('Type: ${req.type} Leave  •  ${req.startDate} to ${req.endDate}', style: const TextStyle(fontSize: 11, color: Colors.grey)),
-                            const SizedBox(height: 4),
-                            Text('Reason: ${req.reason}', style: const TextStyle(fontSize: 12)),
-                            if (req.status == 'Pending' && isAdmin) ...[
-                              const SizedBox(height: 8),
-                              Row(
-                                mainAxisAlignment: MainAxisAlignment.end,
-                                children: [
-                                  OutlinedButton(
-                                    onPressed: () => _store.updateLeaveStatus(req.id, 'Rejected'),
-                                    style: OutlinedButton.styleFrom(foregroundColor: Colors.red, padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6)),
-                                    child: const Text('Reject', style: TextStyle(fontSize: 12)),
-                                  ),
-                                  const SizedBox(width: 8),
-                                  ElevatedButton(
-                                    onPressed: () => _store.updateLeaveStatus(req.id, 'Approved'),
-                                    style: ElevatedButton.styleFrom(backgroundColor: Colors.green, foregroundColor: Colors.white, padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6)),
-                                    child: const Text('Approve', style: TextStyle(fontSize: 12)),
-                                  ),
-                                ],
+                            Expanded(child: Text(req.employeeName, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 15, color: kPremiumText), maxLines: 1, overflow: TextOverflow.ellipsis)),
+                            const SizedBox(width: 8),
+                            Container(
+                              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                              decoration: BoxDecoration(
+                                color: statusColor.withOpacity(0.15),
+                                borderRadius: BorderRadius.circular(8),
+                                border: Border.all(color: statusColor.withOpacity(0.3)),
                               ),
-                            ],
+                              child: FittedBox(
+                                fit: BoxFit.scaleDown,
+                                child: Text(req.status, style: TextStyle(color: statusColor, fontWeight: FontWeight.bold, fontSize: 11)),
+                              ),
+                            ),
                           ],
                         ),
-                      ),
-                    );
-                  },
-                ),
-        ),
+                        const SizedBox(height: 6),
+                        Text('Type: ${req.type} Leave  •  ${req.startDate} to ${req.endDate}', style: const TextStyle(fontSize: 12, color: kPremiumMuted)),
+                        const SizedBox(height: 4),
+                        Text('Reason: ${req.reason}', style: const TextStyle(fontSize: 12, color: kPremiumMuted)),
+                        if (req.status == 'Pending' && isAdmin) ...[
+                          const SizedBox(height: 12),
+                          Row(
+                            mainAxisAlignment: MainAxisAlignment.end,
+                            children: [
+                              OutlinedButton(
+                                onPressed: () => _store.updateLeaveStatus(req.id, 'Rejected'),
+                                style: OutlinedButton.styleFrom(
+                                  foregroundColor: Colors.redAccent,
+                                  side: const BorderSide(color: Colors.redAccent),
+                                  padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+                                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                                ),
+                                child: const Text('Reject', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold)),
+                              ),
+                              const SizedBox(width: 8),
+                              ElevatedButton(
+                                onPressed: () => _store.updateLeaveStatus(req.id, 'Approved'),
+                                style: ElevatedButton.styleFrom(
+                                  backgroundColor: Colors.green,
+                                  foregroundColor: Colors.white,
+                                  padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+                                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                                ),
+                                child: const Text('Approve', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold)),
+                              ),
+                            ],
+                          ),
+                        ],
+                      ],
+                    ),
+                  );
+                },
+              ),
       ],
     );
   }
 
   Widget _metricCard(String label, String count, Color color, IconData icon) {
-    return Container(
+    return GlassCard(
+      margin: EdgeInsets.zero,
       padding: const EdgeInsets.all(12),
-      decoration: BoxDecoration(
-        color: Theme.of(context).cardColor,
-        borderRadius: BorderRadius.circular(16),
-        boxShadow: [
-          BoxShadow(color: Colors.black.withOpacity(0.03), blurRadius: 6, offset: const Offset(0, 2)),
-        ],
-      ),
       child: Column(
         children: [
           Icon(icon, color: color, size: 22),
           const SizedBox(height: 4),
           FittedBox(fit: BoxFit.scaleDown, child: Text(count, style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: color))),
           const SizedBox(height: 2),
-          FittedBox(fit: BoxFit.scaleDown, child: Text(label, textAlign: TextAlign.center, style: const TextStyle(fontSize: 11, color: Colors.grey))),
+          FittedBox(fit: BoxFit.scaleDown, child: Text(label, textAlign: TextAlign.center, style: const TextStyle(fontSize: 11, color: kPremiumMuted))),
         ],
       ),
     );

@@ -5,6 +5,7 @@ import 'package:business_managment_app/services/app_data_store.dart';
 import 'package:business_managment_app/shared/login_page.dart';
 import 'package:business_managment_app/shared/settings_page.dart';
 import 'package:business_managment_app/shared/chat_page.dart';
+import 'package:business_managment_app/core/premium_theme.dart';
 
 class ClientShell extends StatefulWidget {
   const ClientShell({super.key});
@@ -116,9 +117,7 @@ class _ClientShellState extends State<ClientShell> {
               titles[_selectedIndex],
               style: const TextStyle(fontWeight: FontWeight.bold),
             ),
-            backgroundColor: Colors.indigo,
-            foregroundColor: Colors.white,
-            elevation: 2,
+            backgroundColor: Colors.transparent,
             actions: [
               IconButton(
                 icon: const Icon(Icons.chat_bubble_outline),

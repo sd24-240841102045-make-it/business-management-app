@@ -7,6 +7,7 @@ import 'package:business_managment_app/client/client_shell.dart';
 import 'package:business_managment_app/shared/main_shell.dart';
 import 'package:business_managment_app/services/supabase_service.dart';
 import 'package:business_managment_app/services/app_data_store.dart';
+import 'package:business_managment_app/core/premium_theme.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -53,28 +54,12 @@ class _MyAppState extends State<MyApp> {
     return MaterialApp(
       debugShowCheckedModeBanner: false,
       title: 'Business Management Suite',
-
       themeMode: _store.themeMode,
-
-      theme: ThemeData(
-        colorScheme: ColorScheme.fromSeed(
-          seedColor: Colors.deepPurple,
-          brightness: Brightness.light,
-        ),
-        scaffoldBackgroundColor: const Color(0xFFF4F6FA),
-        useMaterial3: true,
-      ),
-
-      darkTheme: ThemeData(
-        colorScheme: ColorScheme.fromSeed(
-          seedColor: Colors.deepPurple,
-          brightness: Brightness.dark,
-        ),
-        scaffoldBackgroundColor: const Color(0xFF121218),
-        cardColor: const Color(0xFF1E1E26),
-        useMaterial3: true,
-      ),
-
+      theme: premiumTheme(),
+      darkTheme: premiumTheme(),
+      builder: (context, child) {
+        return PremiumBackground(child: child ?? const SizedBox());
+      },
       home: const AuthGate(),
     );
   }
@@ -303,7 +288,7 @@ class _AuthErrorPage extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: const Color(0xFFF4F6FA),
+      backgroundColor: Colors.transparent,
       body: Center(
         child: Padding(
           padding: const EdgeInsets.all(24),

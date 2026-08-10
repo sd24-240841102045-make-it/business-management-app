@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:business_managment_app/core/premium_theme.dart';
 
 class ReportsPage extends StatelessWidget {
   const ReportsPage({super.key});
@@ -13,11 +14,9 @@ class ReportsPage extends StatelessWidget {
         final double hPad = isDesktop ? 36 : isTablet ? 24 : 16;
 
         return Scaffold(
+          backgroundColor: Colors.transparent,
           appBar: AppBar(
             title: const Text('Reports & Analytics', style: TextStyle(fontWeight: FontWeight.bold)),
-            backgroundColor: Colors.indigo,
-            foregroundColor: Colors.white,
-            elevation: 2,
           ),
           body: SingleChildScrollView(
             padding: EdgeInsets.symmetric(horizontal: hPad, vertical: 20),
@@ -27,8 +26,12 @@ class ReportsPage extends StatelessWidget {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    const Text('Analytics & Operations Reports', style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold)),
-                    const SizedBox(height: 16),
+                    const HeroBanner(
+                      title: 'Executive Analytics',
+                      subtitle: 'Generate operation summaries, revenue audits, and progress reports',
+                      badge: 'Analytics Suite',
+                    ),
+                    const SizedBox(height: 20),
                     _reportCard(context, 'Monthly Revenue Summary', 'Detailed revenue, billing breakdown, and project profits', Icons.analytics),
                     _reportCard(context, 'Employee Attendance & Leave Report', 'Audit logs for punch times, sick leaves, and approvals', Icons.fact_check),
                     _reportCard(context, 'Client Account Audit', 'Contract statuses, budget usage, and account lead assignments', Icons.business),
@@ -44,84 +47,76 @@ class ReportsPage extends StatelessWidget {
   }
 
   Widget _reportCard(BuildContext context, String title, String subtitle, IconData icon) {
-    return Card(
-      elevation: 2,
+    return GlassCard(
       margin: const EdgeInsets.only(bottom: 14),
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-      child: Padding(
-        padding: const EdgeInsets.all(16),
-        child: LayoutBuilder(
-          builder: (context, box) {
-            if (box.maxWidth < 500) {
-              // Mobile compact column layout
-              return Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Row(
-                    children: [
-                      CircleAvatar(
-                        backgroundColor: Colors.indigo.shade100,
-                        child: Icon(icon, color: Colors.indigo),
-                      ),
-                      const SizedBox(width: 12),
-                      Expanded(
-                        child: Text(title, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 15)),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 8),
-                  Text(subtitle, style: const TextStyle(fontSize: 12, color: Colors.grey)),
-                  const SizedBox(height: 12),
-                  SizedBox(
-                    width: double.infinity,
-                    child: ElevatedButton.icon(
-                      onPressed: () {},
-                      icon: const Icon(Icons.download, size: 16),
-                      label: const Text('Export PDF Report'),
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: Colors.indigo,
-                        foregroundColor: Colors.white,
-                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-                      ),
-                    ),
-                  ),
-                ],
-              );
-            }
-
-            // Desktop & Tablet row layout
-            return Row(
+      padding: const EdgeInsets.all(18),
+      child: LayoutBuilder(
+        builder: (context, box) {
+          if (box.maxWidth < 500) {
+            return Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                CircleAvatar(
-                  backgroundColor: Colors.indigo.shade100,
-                  child: Icon(icon, color: Colors.indigo),
+                Row(
+                  children: [
+                    PremiumAvatar(
+                      icon: icon,
+                      style: AvatarStyle.glowIcon,
+                      size: 44,
+                    ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: Text(title, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 15)),
+                    ),
+                  ],
                 ),
-                const SizedBox(width: 14),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(title, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 15)),
-                      const SizedBox(height: 2),
-                      Text(subtitle, style: const TextStyle(fontSize: 12, color: Colors.grey)),
-                    ],
-                  ),
-                ),
-                const SizedBox(width: 14),
-                ElevatedButton.icon(
-                  onPressed: () {},
-                  icon: const Icon(Icons.download, size: 16),
-                  label: const Text('Export PDF'),
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: Colors.indigo,
-                    foregroundColor: Colors.white,
-                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-                  ),
+                const SizedBox(height: 8),
+                Text(subtitle, style: const TextStyle(fontSize: 12, color: kPremiumMuted)),
+                const SizedBox(height: 14),
+                GoldButton(
+                  label: 'Export PDF Report',
+                  icon: Icons.download_rounded,
+                  expand: true,
+                  onPressed: () {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      SnackBar(content: Text('Generating PDF for $title...')),
+                    );
+                  },
                 ),
               ],
             );
-          },
-        ),
+          }
+
+          return Row(
+            children: [
+              PremiumAvatar(
+                icon: icon,
+                style: AvatarStyle.glowIcon,
+                size: 48,
+              ),
+              const SizedBox(width: 14),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(title, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 15)),
+                    const SizedBox(height: 2),
+                    Text(subtitle, style: const TextStyle(fontSize: 12, color: kPremiumMuted)),
+                  ],
+                ),
+              ),
+              const SizedBox(width: 14),
+              GoldButton(
+                label: 'Export PDF',
+                icon: Icons.download_rounded,
+                onPressed: () {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(content: Text('Generating PDF for $title...')),
+                  );
+                },
+              ),
+            ],
+          );
+        },
       ),
     );
   }

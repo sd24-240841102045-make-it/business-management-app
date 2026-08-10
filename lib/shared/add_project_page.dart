@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:business_managment_app/services/app_data_store.dart';
 import 'package:business_managment_app/services/supabase_service.dart';
+import 'package:business_managment_app/core/premium_theme.dart';
 
 class AddProjectPage extends StatefulWidget {
   const AddProjectPage({super.key});
@@ -56,18 +57,16 @@ class _AddProjectPageState extends State<AddProjectPage> {
       firstDate: DateTime(2000),
       lastDate: DateTime(2100),
     );
-    if (pickedDate != null) {
-      if (mounted) {
-        final pickedTime = await showTimePicker(
-          context: context,
-          initialTime: _startTime,
-        );
-        if (pickedTime != null) {
-          setState(() {
-            _startDate = pickedDate;
-            _startTime = pickedTime;
-          });
-        }
+    if (pickedDate != null && mounted) {
+      final pickedTime = await showTimePicker(
+        context: context,
+        initialTime: _startTime,
+      );
+      if (pickedTime != null && mounted) {
+        setState(() {
+          _startDate = pickedDate;
+          _startTime = pickedTime;
+        });
       }
     }
   }
@@ -79,18 +78,16 @@ class _AddProjectPageState extends State<AddProjectPage> {
       firstDate: DateTime(2000),
       lastDate: DateTime(2100),
     );
-    if (pickedDate != null) {
-      if (mounted) {
-        final pickedTime = await showTimePicker(
-          context: context,
-          initialTime: _endTime,
-        );
-        if (pickedTime != null) {
-          setState(() {
-            _endDate = pickedDate;
-            _endTime = pickedTime;
-          });
-        }
+    if (pickedDate != null && mounted) {
+      final pickedTime = await showTimePicker(
+        context: context,
+        initialTime: _endTime,
+      );
+      if (pickedTime != null && mounted) {
+        setState(() {
+          _endDate = pickedDate;
+          _endTime = pickedTime;
+        });
       }
     }
   }
@@ -118,7 +115,9 @@ class _AddProjectPageState extends State<AddProjectPage> {
     if (!_formKey.currentState!.validate()) return;
     
     if (_selectedClientId == null) {
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Please select a client.')));
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Please select a client account.'), backgroundColor: Colors.redAccent),
+      );
       return;
     }
 
@@ -146,19 +145,22 @@ class _AddProjectPageState extends State<AddProjectPage> {
 
       final newProjectId = response['id'].toString();
       
-      // Assign team members
       if (_selectedTeamMemberIds.isNotEmpty) {
         await SupabaseService().assignProjectMembers(newProjectId, _selectedTeamMemberIds);
       }
 
       if (mounted) {
         Navigator.pop(context);
-        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Project added successfully!'), backgroundColor: Colors.green));
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Project added successfully!'), backgroundColor: Colors.green),
+        );
       }
     } catch (e) {
       debugPrint('Error inserting project: $e');
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Failed to add project: $e'), backgroundColor: Colors.red));
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Failed to add project: $e'), backgroundColor: Colors.redAccent),
+        );
       }
     } finally {
       if (mounted) {
@@ -169,258 +171,297 @@ class _AddProjectPageState extends State<AddProjectPage> {
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(
-        title: const Text('Add New Project', style: TextStyle(fontWeight: FontWeight.bold)),
-        backgroundColor: Colors.teal,
-        foregroundColor: Colors.white,
-        elevation: 2,
-      ),
-      body: SingleChildScrollView(
-        padding: const EdgeInsets.all(24.0),
-        child: Center(
-          child: ConstrainedBox(
-            constraints: const BoxConstraints(maxWidth: 800),
-            child: Card(
-              elevation: 4,
-              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-              child: Padding(
-                padding: const EdgeInsets.all(32.0),
-                child: Form(
-                  key: _formKey,
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      const Text('Project Details', style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold, color: Colors.teal)),
-                      const SizedBox(height: 24),
-                      
-                      TextFormField(
-                        controller: _nameCtrl,
-                        decoration: InputDecoration(
-                          labelText: 'Project Name *',
-                          prefixIcon: const Icon(Icons.folder),
-                          border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+    return PremiumBackground(
+      child: Scaffold(
+        backgroundColor: Colors.transparent,
+        appBar: AppBar(
+          title: const Text('Add New Project', style: TextStyle(fontWeight: FontWeight.bold, color: kPremiumGold)),
+          backgroundColor: kPremiumBg,
+          foregroundColor: kPremiumGold,
+          elevation: 0,
+        ),
+        body: SafeArea(
+          bottom: true,
+          child: SingleChildScrollView(
+            padding: EdgeInsets.only(
+              left: 20,
+              right: 20,
+              top: 20,
+              bottom: MediaQuery.of(context).padding.bottom + 80.0,
+            ),
+            child: Center(
+              child: ConstrainedBox(
+                constraints: const BoxConstraints(maxWidth: 800),
+                child: GlassCard(
+                  padding: const EdgeInsets.all(28.0),
+                  child: Form(
+                    key: _formKey,
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        const Text('Project Specifications', style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: kPremiumGold)),
+                        const SizedBox(height: 20),
+                          
+                        TextFormField(
+                          controller: _nameCtrl,
+                          style: const TextStyle(color: kPremiumText),
+                          decoration: InputDecoration(
+                            labelText: 'Project Name *',
+                            labelStyle: const TextStyle(color: kPremiumMuted),
+                            prefixIcon: const Icon(Icons.folder_outlined, color: kPremiumGold),
+                            filled: true,
+                            fillColor: kPremiumSurface.withOpacity(0.5),
+                            border: OutlineInputBorder(borderRadius: BorderRadius.circular(14)),
+                          ),
+                          validator: (value) => value == null || value.trim().isEmpty ? 'Project name is required' : null,
                         ),
-                        validator: (value) => value == null || value.trim().isEmpty ? 'Project name is required' : null,
-                      ),
-                      const SizedBox(height: 20),
-                      
-                      TextFormField(
-                        controller: _descCtrl,
-                        maxLines: 3,
-                        decoration: InputDecoration(
-                          labelText: 'Description',
-                          prefixIcon: const Icon(Icons.description),
-                          border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+                        const SizedBox(height: 16),
+                        
+                        TextFormField(
+                          controller: _descCtrl,
+                          maxLines: 3,
+                          style: const TextStyle(color: kPremiumText),
+                          decoration: InputDecoration(
+                            labelText: 'Description',
+                            labelStyle: const TextStyle(color: kPremiumMuted),
+                            prefixIcon: const Icon(Icons.description_outlined, color: kPremiumGold),
+                            filled: true,
+                            fillColor: kPremiumSurface.withOpacity(0.5),
+                            border: OutlineInputBorder(borderRadius: BorderRadius.circular(14)),
+                          ),
                         ),
-                      ),
-                      const SizedBox(height: 20),
+                        const SizedBox(height: 16),
 
-                      DropdownButtonFormField<String>(
-                        isExpanded: true,
-                        value: _selectedClientId,
-                        decoration: InputDecoration(
-                          labelText: 'Client Account *',
-                          prefixIcon: const Icon(Icons.business),
-                          border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
-                        ),
-                        items: _store.clients.fold<Map<String, DropdownMenuItem<String>>>({}, (map, c) {
-                          map[c.id] = DropdownMenuItem(value: c.id, child: Text(c.name));
-                          return map;
-                        }).values.toList(),
-                        onChanged: (val) => setState(() => _selectedClientId = val),
-                        validator: (value) => value == null ? 'Client is required' : null,
-                      ),
-                      const SizedBox(height: 20),
-                      DropdownButtonFormField<String>(
-                        isExpanded: true,
-                        value: _selectedManagerId,
-                        decoration: InputDecoration(
-                          labelText: 'Project Manager',
-                          prefixIcon: const Icon(Icons.person),
-                          border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
-                        ),
-                        items: [
-                          const DropdownMenuItem(value: null, child: Text('None / Unassigned')),
-                          ..._store.employees.where((e) => e.userId.isNotEmpty).fold<Map<String, DropdownMenuItem<String>>>({}, (map, e) {
-                            map[e.userId] = DropdownMenuItem(value: e.userId, child: Text(e.name));
+                        DropdownButtonFormField<String>(
+                          isExpanded: true,
+                          value: _selectedClientId,
+                          dropdownColor: kPremiumSurface,
+                          style: const TextStyle(color: kPremiumText, fontWeight: FontWeight.bold),
+                          decoration: InputDecoration(
+                            labelText: 'Client Account *',
+                            labelStyle: const TextStyle(color: kPremiumMuted),
+                            prefixIcon: const Icon(Icons.business_outlined, color: kPremiumGold),
+                            filled: true,
+                            fillColor: kPremiumSurface.withOpacity(0.5),
+                            border: OutlineInputBorder(borderRadius: BorderRadius.circular(14)),
+                          ),
+                          items: _store.clients.fold<Map<String, DropdownMenuItem<String>>>({}, (map, c) {
+                            map[c.id] = DropdownMenuItem(value: c.id, child: Text(c.name, style: const TextStyle(color: kPremiumText)));
                             return map;
-                          }).values,
-                        ],
-                        onChanged: (val) => setState(() => _selectedManagerId = val),
-                      ),
-                      const SizedBox(height: 20),
-
-                      const Text('Team Members', style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600)),
-                      const SizedBox(height: 8),
-                      Container(
-                        width: double.infinity,
-                        padding: const EdgeInsets.all(12),
-                        decoration: BoxDecoration(
-                          border: Border.all(color: Colors.grey.shade400),
-                          borderRadius: BorderRadius.circular(12),
+                          }).values.toList(),
+                          onChanged: (val) => setState(() => _selectedClientId = val),
+                          validator: (value) => value == null ? 'Client is required' : null,
                         ),
-                        child: _store.employees.where((e) => e.userId.isNotEmpty).isEmpty
-                            ? const Text('No assignable team members found.', style: TextStyle(color: Colors.grey))
-                            : Wrap(
-                                spacing: 8.0,
-                                runSpacing: 4.0,
-                                children: _store.employees
-                                    .where((e) => e.userId.isNotEmpty)
-                                    .fold<Map<String, Employee>>({}, (map, e) {
-                                      map[e.userId] = e;
-                                      return map;
-                                    })
-                                    .values
-                                    .map((e) {
-                                      final isSelected = _selectedTeamMemberIds.contains(e.userId);
-                                      return FilterChip(
-                                        label: Text(e.name),
-                                        selected: isSelected,
-                                        onSelected: (selected) {
-                                          setState(() {
-                                            if (selected) {
-                                              _selectedTeamMemberIds.add(e.userId);
-                                            } else {
-                                              _selectedTeamMemberIds.remove(e.userId);
-                                            }
-                                          });
-                                        },
-                                        selectedColor: Colors.teal.withOpacity(0.2),
-                                        checkmarkColor: Colors.teal,
-                                      );
-                                    }).toList(),
-                              ),
-                      ),
-                      const SizedBox(height: 20),
-                      DropdownButtonFormField<String>(
-                        isExpanded: true,
-                        value: _selectedStatus,
-                        decoration: InputDecoration(
-                          labelText: 'Status',
-                          prefixIcon: const Icon(Icons.flag),
-                          border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
-                        ),
-                        items: const [
-                          DropdownMenuItem(value: 'In Progress', child: Text('In Progress')),
-                          DropdownMenuItem(value: 'Completed', child: Text('Completed')),
-                          DropdownMenuItem(value: 'On Hold', child: Text('On Hold')),
-                          DropdownMenuItem(value: 'Cancelled', child: Text('Cancelled')),
-                        ],
-                        onChanged: (val) => setState(() => _selectedStatus = val!),
-                      ),
-                      const SizedBox(height: 20),
-                      DropdownButtonFormField<String>(
-                        isExpanded: true,
-                        value: _selectedHealth,
-                        decoration: InputDecoration(
-                          labelText: 'Project Health',
-                          prefixIcon: const Icon(Icons.health_and_safety),
-                          border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
-                        ),
-                        items: const [
-                          DropdownMenuItem(value: 'On Track', child: Text('On Track')),
-                          DropdownMenuItem(value: 'At Risk', child: Text('At Risk')),
-                          DropdownMenuItem(value: 'Delayed', child: Text('Delayed')),
-                        ],
-                        onChanged: (val) => setState(() => _selectedHealth = val!),
-                      ),
-                      const SizedBox(height: 20),
+                        const SizedBox(height: 16),
 
-                      TextFormField(
-                        controller: _budgetCtrl,
-                        keyboardType: TextInputType.number,
-                        decoration: InputDecoration(
-                          labelText: 'Total Budget (\$)',
-                          prefixIcon: const Icon(Icons.attach_money),
-                          border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+                        DropdownButtonFormField<String>(
+                          isExpanded: true,
+                          value: _selectedManagerId,
+                          dropdownColor: kPremiumSurface,
+                          style: const TextStyle(color: kPremiumText),
+                          decoration: InputDecoration(
+                            labelText: 'Project Manager',
+                            labelStyle: const TextStyle(color: kPremiumMuted),
+                            prefixIcon: const Icon(Icons.person_outline, color: kPremiumGold),
+                            filled: true,
+                            fillColor: kPremiumSurface.withOpacity(0.5),
+                            border: OutlineInputBorder(borderRadius: BorderRadius.circular(14)),
+                          ),
+                          items: [
+                            const DropdownMenuItem(value: null, child: Text('Unassigned Manager', style: TextStyle(color: kPremiumMuted))),
+                            ..._store.employees.where((e) => e.userId.isNotEmpty).fold<Map<String, DropdownMenuItem<String>>>({}, (map, e) {
+                              map[e.userId] = DropdownMenuItem(value: e.userId, child: Text(e.name, style: const TextStyle(color: kPremiumText, fontWeight: FontWeight.bold)));
+                              return map;
+                            }).values,
+                          ],
+                          onChanged: (val) => setState(() => _selectedManagerId = val),
                         ),
-                      ),
-                      const SizedBox(height: 32),
+                        const SizedBox(height: 16),
 
-                      const Text('Timeline', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Colors.teal)),
-                      const SizedBox(height: 16),
-
-                      InkWell(
-                        onTap: _pickStartDateTime,
-                        borderRadius: BorderRadius.circular(12),
-                        child: Container(
-                          padding: const EdgeInsets.symmetric(vertical: 16, horizontal: 16),
+                        const Text('Assigned Team Members', style: TextStyle(fontSize: 15, fontWeight: FontWeight.bold, color: kPremiumGold)),
+                        const SizedBox(height: 8),
+                        Container(
+                          width: double.infinity,
+                          padding: const EdgeInsets.all(14),
                           decoration: BoxDecoration(
-                            border: Border.all(color: Colors.grey.shade400),
-                            borderRadius: BorderRadius.circular(12),
+                            color: kPremiumSurface.withOpacity(0.5),
+                            border: Border.all(color: Colors.white10),
+                            borderRadius: BorderRadius.circular(14),
                           ),
-                          child: Row(
-                            children: [
-                              const Icon(Icons.play_circle_outline, color: Colors.teal),
-                              const SizedBox(width: 12),
-                              Expanded(
-                                child: Column(
-                                  crossAxisAlignment: CrossAxisAlignment.start,
-                                  children: [
-                                    const Text('Start Date & Time', style: TextStyle(fontSize: 12, color: Colors.grey)),
-                                    Text(
-                                      _formatDateTimeDisplay(_startDate, _startTime), 
-                                      style: const TextStyle(fontWeight: FontWeight.bold),
-                                      overflow: TextOverflow.visible,
-                                    ),
-                                  ],
+                          child: _store.employees.where((e) => e.userId.isNotEmpty).isEmpty
+                              ? const Text('No assignable team members found.', style: TextStyle(color: kPremiumMuted))
+                              : Wrap(
+                                  spacing: 8.0,
+                                  runSpacing: 6.0,
+                                  children: _store.employees
+                                      .where((e) => e.userId.isNotEmpty)
+                                      .fold<Map<String, Employee>>({}, (map, e) {
+                                        map[e.userId] = e;
+                                        return map;
+                                      })
+                                      .values
+                                      .map((e) {
+                                        final isSelected = _selectedTeamMemberIds.contains(e.userId);
+                                        return FilterChip(
+                                          label: Text(e.name, style: TextStyle(color: isSelected ? kPremiumBg : kPremiumText, fontWeight: FontWeight.bold)),
+                                          selected: isSelected,
+                                          onSelected: (selected) {
+                                            setState(() {
+                                              if (selected) {
+                                                _selectedTeamMemberIds.add(e.userId);
+                                              } else {
+                                                _selectedTeamMemberIds.remove(e.userId);
+                                              }
+                                            });
+                                          },
+                                          selectedColor: kPremiumGold,
+                                          backgroundColor: Colors.white.withOpacity(0.06),
+                                          checkmarkColor: kPremiumBg,
+                                          side: BorderSide(color: isSelected ? kPremiumGold : Colors.white10),
+                                        );
+                                      }).toList(),
                                 ),
-                              ),
-                            ],
-                          ),
                         ),
-                      ),
-                      const SizedBox(height: 16),
-                      InkWell(
-                        onTap: _pickEndDateTime,
-                        borderRadius: BorderRadius.circular(12),
-                        child: Container(
-                          padding: const EdgeInsets.symmetric(vertical: 16, horizontal: 16),
-                          decoration: BoxDecoration(
-                            border: Border.all(color: Colors.grey.shade400),
-                            borderRadius: BorderRadius.circular(12),
-                          ),
-                          child: Row(
-                            children: [
-                              const Icon(Icons.stop_circle_outlined, color: Colors.redAccent),
-                              const SizedBox(width: 12),
-                              Expanded(
-                                child: Column(
-                                  crossAxisAlignment: CrossAxisAlignment.start,
-                                  children: [
-                                    const Text('End Date & Time', style: TextStyle(fontSize: 12, color: Colors.grey)),
-                                    Text(
-                                      _formatDateTimeDisplay(_endDate, _endTime), 
-                                      style: const TextStyle(fontWeight: FontWeight.bold),
-                                      overflow: TextOverflow.visible,
-                                    ),
-                                  ],
-                                ),
-                              ),
-                            ],
-                          ),
-                        ),
-                      ),
-                      const SizedBox(height: 40),
+                        const SizedBox(height: 16),
 
-                      SizedBox(
-                        width: double.infinity,
-                        height: 54,
-                        child: ElevatedButton(
+                        DropdownButtonFormField<String>(
+                          isExpanded: true,
+                          value: _selectedStatus,
+                          dropdownColor: kPremiumSurface,
+                          style: const TextStyle(color: kPremiumText),
+                          decoration: InputDecoration(
+                            labelText: 'Status',
+                            labelStyle: const TextStyle(color: kPremiumMuted),
+                            prefixIcon: const Icon(Icons.flag_outlined, color: kPremiumGold),
+                            filled: true,
+                            fillColor: kPremiumSurface.withOpacity(0.5),
+                            border: OutlineInputBorder(borderRadius: BorderRadius.circular(14)),
+                          ),
+                          items: const [
+                            DropdownMenuItem(value: 'In Progress', child: Text('In Progress', style: TextStyle(color: Colors.blueAccent, fontWeight: FontWeight.bold))),
+                            DropdownMenuItem(value: 'Completed', child: Text('Completed', style: TextStyle(color: Colors.greenAccent, fontWeight: FontWeight.bold))),
+                            DropdownMenuItem(value: 'On Hold', child: Text('On Hold', style: TextStyle(color: Colors.orangeAccent, fontWeight: FontWeight.bold))),
+                            DropdownMenuItem(value: 'Cancelled', child: Text('Cancelled', style: TextStyle(color: Colors.redAccent, fontWeight: FontWeight.bold))),
+                          ],
+                          onChanged: (val) => setState(() => _selectedStatus = val!),
+                        ),
+                        const SizedBox(height: 16),
+
+                        DropdownButtonFormField<String>(
+                          isExpanded: true,
+                          value: _selectedHealth,
+                          dropdownColor: kPremiumSurface,
+                          style: const TextStyle(color: kPremiumText),
+                          decoration: InputDecoration(
+                            labelText: 'Project Health',
+                            labelStyle: const TextStyle(color: kPremiumMuted),
+                            prefixIcon: const Icon(Icons.health_and_safety_outlined, color: kPremiumGold),
+                            filled: true,
+                            fillColor: kPremiumSurface.withOpacity(0.5),
+                            border: OutlineInputBorder(borderRadius: BorderRadius.circular(14)),
+                          ),
+                          items: const [
+                            DropdownMenuItem(value: 'On Track', child: Text('On Track', style: TextStyle(color: Colors.greenAccent, fontWeight: FontWeight.bold))),
+                            DropdownMenuItem(value: 'At Risk', child: Text('At Risk', style: TextStyle(color: Colors.orangeAccent, fontWeight: FontWeight.bold))),
+                            DropdownMenuItem(value: 'Delayed', child: Text('Delayed', style: TextStyle(color: Colors.redAccent, fontWeight: FontWeight.bold))),
+                          ],
+                          onChanged: (val) => setState(() => _selectedHealth = val!),
+                        ),
+                        const SizedBox(height: 16),
+
+                        TextFormField(
+                          controller: _budgetCtrl,
+                          keyboardType: TextInputType.number,
+                          style: const TextStyle(color: kPremiumText),
+                          decoration: InputDecoration(
+                            labelText: 'Total Budget (\$)',
+                            labelStyle: const TextStyle(color: kPremiumMuted),
+                            prefixIcon: const Icon(Icons.attach_money, color: kPremiumGold),
+                            filled: true,
+                            fillColor: kPremiumSurface.withOpacity(0.5),
+                            border: OutlineInputBorder(borderRadius: BorderRadius.circular(14)),
+                          ),
+                        ),
+                        const SizedBox(height: 24),
+
+                        const Text('Timeline & Schedule', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: kPremiumGold)),
+                        const SizedBox(height: 12),
+
+                        InkWell(
+                          onTap: _pickStartDateTime,
+                          borderRadius: BorderRadius.circular(14),
+                          child: Container(
+                            padding: const EdgeInsets.symmetric(vertical: 14, horizontal: 16),
+                            decoration: BoxDecoration(
+                              color: kPremiumSurface.withOpacity(0.5),
+                              border: Border.all(color: Colors.white10),
+                              borderRadius: BorderRadius.circular(14),
+                            ),
+                            child: Row(
+                              children: [
+                                const Icon(Icons.play_circle_outline, color: Colors.greenAccent),
+                                const SizedBox(width: 12),
+                                Expanded(
+                                  child: Column(
+                                    crossAxisAlignment: CrossAxisAlignment.start,
+                                    children: [
+                                      const Text('Start Date & Time', style: TextStyle(fontSize: 12, color: kPremiumMuted)),
+                                      const SizedBox(height: 2),
+                                      Text(
+                                        _formatDateTimeDisplay(_startDate, _startTime), 
+                                        style: const TextStyle(fontWeight: FontWeight.bold, color: kPremiumText),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ),
+                        const SizedBox(height: 12),
+
+                        InkWell(
+                          onTap: _pickEndDateTime,
+                          borderRadius: BorderRadius.circular(14),
+                          child: Container(
+                            padding: const EdgeInsets.symmetric(vertical: 14, horizontal: 16),
+                            decoration: BoxDecoration(
+                              color: kPremiumSurface.withOpacity(0.5),
+                              border: Border.all(color: Colors.white10),
+                              borderRadius: BorderRadius.circular(14),
+                            ),
+                            child: Row(
+                              children: [
+                                const Icon(Icons.stop_circle_outlined, color: Colors.redAccent),
+                                const SizedBox(width: 12),
+                                Expanded(
+                                  child: Column(
+                                    crossAxisAlignment: CrossAxisAlignment.start,
+                                    children: [
+                                      const Text('End Date & Deadline', style: TextStyle(fontSize: 12, color: kPremiumMuted)),
+                                      const SizedBox(height: 2),
+                                      Text(
+                                        _formatDateTimeDisplay(_endDate, _endTime), 
+                                        style: const TextStyle(fontWeight: FontWeight.bold, color: kPremiumText),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ),
+                        const SizedBox(height: 32),
+
+                        GoldButton(
+                          label: 'Save Project',
+                          icon: Icons.check_circle_outline,
+                          expand: true,
+                          isLoading: _isSaving,
                           onPressed: _isSaving ? null : _saveProject,
-                          style: ElevatedButton.styleFrom(
-                            backgroundColor: Colors.teal,
-                            foregroundColor: Colors.white,
-                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                            textStyle: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
-                          ),
-                          child: _isSaving
-                              ? const CircularProgressIndicator(color: Colors.white)
-                              : const Text('Save Project'),
                         ),
-                      ),
-                    ],
+                      ],
+                    ),
                   ),
                 ),
               ),

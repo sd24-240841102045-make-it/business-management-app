@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:business_managment_app/services/app_data_store.dart';
 import 'package:business_managment_app/services/supabase_service.dart';
+import 'package:business_managment_app/core/premium_theme.dart';
 
 /// Body-only Dashboard widget — Scaffold lives in MainShell.
 class HomeBody extends StatefulWidget {
@@ -49,6 +50,7 @@ class _HomeBodyState extends State<HomeBody> {
 
     try {
       final clientsData = await client.from('clients').select('id, email').eq('organization_id', orgId);
+      final clientInvitesData = await client.from('invitations').select('email').eq('organization_id', orgId).eq('role', 'client');
       final activeEmpData = await client.from('employees').select('id').eq('organization_id', orgId).eq('status', 'Active');
       final leaveEmpData = await client.from('employees').select('id').eq('organization_id', orgId).eq('status', 'On Leave');
       final leavesData = await client.from('leave_requests').select('id').eq('organization_id', orgId).eq('status', 'Pending');
@@ -62,10 +64,18 @@ class _HomeBodyState extends State<HomeBody> {
           if (key != null) uniqueClientKeys.add(key);
         }
       }
+      if (clientInvitesData is List) {
+        for (final item in clientInvitesData) {
+          final email = item['email']?.toString().trim().toLowerCase();
+          if (email != null && email.isNotEmpty) uniqueClientKeys.add(email);
+        }
+      }
 
       if (mounted) {
         setState(() {
-          _totalClients = uniqueClientKeys.isNotEmpty ? uniqueClientKeys.length : _store.clients.length;
+          final dbCount = uniqueClientKeys.length;
+          final storeCount = _store.clients.length;
+          _totalClients = dbCount > storeCount ? dbCount : storeCount;
           _activeEmployees = (activeEmpData as List).length;
           _staffOnLeave = (leaveEmpData as List).length;
           _pendingLeaves = (leavesData as List).length;
@@ -151,79 +161,49 @@ class _HomeBodyState extends State<HomeBody> {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     if (_store.isLoadingFromSupabase) ...[
-                      const LinearProgressIndicator(color: Colors.deepPurple),
+                      const LinearProgressIndicator(color: kPremiumGold),
                       const SizedBox(height: 10),
                     ],
-              // ── Welcome ───────────────────────────────────
-              Row(
-                crossAxisAlignment: CrossAxisAlignment.end,
-                children: [
-                  Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        _getGreeting(),
-                        style: TextStyle(
-                          fontSize: 16,
-                          color: Colors.grey.shade600,
-                          fontWeight: FontWeight.w500,
-                          letterSpacing: 0.2,
-                        ),
-                      ),
-                      const SizedBox(height: 4),
-                      ShaderMask(
-                        shaderCallback: (bounds) => const LinearGradient(
-                          colors: [Color(0xFF38BDF8), Color(0xFF818CF8), Color(0xFFC084FC)],
-                          begin: Alignment.topLeft,
-                          end: Alignment.bottomRight,
-                        ).createShader(bounds),
-                        child: Text(
-                          _getBusinessName(),
-                          style: const TextStyle(
-                            fontSize: 32,
-                            fontWeight: FontWeight.w900,
-                            color: Colors.white,
-                            letterSpacing: -1.0,
-                            height: 1.1,
-                          ),
-                        ),
-                      ),
-                    ],
-                  ),
-                ],
+              HeroBanner(
+                title: _getBusinessName(),
+                subtitle: _getGreeting(),
+                badge: 'Enterprise Dashboard',
               ),
 
               const SizedBox(height: 20),
 
               // ── Overview Banner ───────────────────────────
-              Container(
-                width: double.infinity,
+              GlassCard(
                 padding: const EdgeInsets.all(22),
-                decoration: BoxDecoration(
-                  gradient: const LinearGradient(
-                    colors: [Color(0xFF6C63FF), Color(0xFF8E7CFF)],
-                  ),
-                  borderRadius: BorderRadius.circular(24),
-                  boxShadow: [
-                    BoxShadow(
-                      color: Colors.deepPurple.withOpacity(0.2),
-                      blurRadius: 15,
-                      offset: const Offset(0, 6),
-                    ),
-                  ],
-                ),
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    const Text(
-                      'Unified Platform Overview',
-                      style: TextStyle(color: Colors.white70, fontSize: 14),
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        const Text(
+                          'Unified Platform Overview',
+                          style: TextStyle(color: kPremiumMuted, fontSize: 14),
+                        ),
+                        Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                          decoration: BoxDecoration(
+                            color: kPremiumGold.withOpacity(0.15),
+                            borderRadius: BorderRadius.circular(12),
+                            border: Border.all(color: kPremiumGold.withOpacity(0.3)),
+                          ),
+                          child: const Text(
+                            'Live Metrics',
+                            style: TextStyle(color: kPremiumGold, fontSize: 11, fontWeight: FontWeight.bold),
+                          ),
+                        ),
+                      ],
                     ),
                     const SizedBox(height: 6),
                     Text(
                       SupabaseService().currentOrganization?['name'] ?? 'Your Organization',
                       style: const TextStyle(
-                        color: Colors.white,
+                        color: kPremiumText,
                         fontSize: 22,
                         fontWeight: FontWeight.bold,
                       ),
@@ -259,28 +239,25 @@ class _HomeBodyState extends State<HomeBody> {
                 mainAxisSpacing: 14,
                 childAspectRatio: isDesktop ? 1.6 : isTablet ? 1.4 : 1.15,
                 children: [
-
-                   _actionCard(
-                    icon: Icons.badge,
+                  _actionCard(
+                    icon: Icons.badge_outlined,
                     title: 'Employees (HR)',
                     subtitle: '${_store.employees.length} Members',
-                    color: Colors.orange,
+                    color: kPremiumGold,
                     onTap: () => widget.onNavigate(1),
                   ),
-                  
                   _actionCard(
-                    icon: Icons.people,
+                    icon: Icons.people_outline,
                     title: 'Clients (CRM)',
                     subtitle: _isLoadingStats ? '...' : '${_totalClients ?? 0} Accounts',
-                    color: Colors.blue,
+                    color: kPremiumBlue,
                     onTap: () => widget.onNavigate(2),
                   ),
-                 
                   _actionCard(
-                    icon: Icons.calendar_month,
+                    icon: Icons.calendar_month_outlined,
                     title: 'Attendance & Leave',
                     subtitle: _isLoadingStats ? '...' : '${_pendingLeaves ?? 0} Pending',
-                    color: Colors.green,
+                    color: kPremiumTeal,
                     onTap: () => widget.onNavigate(3),
                   ),
                 ],
@@ -301,31 +278,15 @@ class _HomeBodyState extends State<HomeBody> {
                 itemCount: _store.clients.length,
                 itemBuilder: (context, index) {
                   final client = _store.clients[index];
-                  return Container(
+                  return GlassCard(
                     margin: const EdgeInsets.only(bottom: 12),
                     padding: const EdgeInsets.all(16),
-                    decoration: BoxDecoration(
-                      color: Colors.white,
-                      borderRadius: BorderRadius.circular(18),
-                      boxShadow: [
-                        BoxShadow(
-                          color: Colors.black.withOpacity(0.03),
-                          blurRadius: 8,
-                          offset: const Offset(0, 3),
-                        ),
-                      ],
-                    ),
                     child: Row(
                       children: [
-                        CircleAvatar(
-                          radius: 22,
-                          backgroundColor: Colors.deepPurple.shade50,
-                          child: Icon(
-                            client.status == 'Active'
-                                ? Icons.business
-                                : Icons.business_center_outlined,
-                            color: Colors.deepPurple,
-                          ),
+                        PremiumAvatar(
+                          icon: client.status == 'Active' ? Icons.business_rounded : Icons.business_center_outlined,
+                          style: AvatarStyle.glowIcon,
+                          size: 44,
                         ),
                         const SizedBox(width: 14),
                         Expanded(
@@ -343,7 +304,7 @@ class _HomeBodyState extends State<HomeBody> {
                               Text(
                                 'Contact: ${client.name} • ${client.projectType}',
                                 style: const TextStyle(
-                                  color: Colors.grey,
+                                  color: kPremiumMuted,
                                   fontSize: 12,
                                 ),
                               ),
@@ -356,13 +317,14 @@ class _HomeBodyState extends State<HomeBody> {
                             vertical: 4,
                           ),
                           decoration: BoxDecoration(
-                            color: Colors.deepPurple.withOpacity(0.1),
+                            color: kPremiumGold.withOpacity(0.15),
                             borderRadius: BorderRadius.circular(10),
+                            border: Border.all(color: kPremiumGold.withOpacity(0.3)),
                           ),
                           child: Text(
                             client.assignedEmployeeName ?? 'Unassigned',
                             style: const TextStyle(
-                              color: Colors.deepPurple,
+                              color: kPremiumGold,
                               fontWeight: FontWeight.bold,
                               fontSize: 11,
                             ),
@@ -391,15 +353,15 @@ class _HomeBodyState extends State<HomeBody> {
         Text(
           count,
           style: const TextStyle(
-            color: Colors.white,
-            fontSize: 20,
+            color: kPremiumGold,
+            fontSize: 22,
             fontWeight: FontWeight.bold,
           ),
         ),
         const SizedBox(height: 2),
         Text(
           label,
-          style: const TextStyle(color: Colors.white70, fontSize: 12),
+          style: const TextStyle(color: kPremiumMuted, fontSize: 12),
         ),
       ],
     );
@@ -412,46 +374,33 @@ class _HomeBodyState extends State<HomeBody> {
     required Color color,
     required VoidCallback onTap,
   }) {
-    return InkWell(
+    return GlassCard(
+      margin: EdgeInsets.zero,
+      padding: const EdgeInsets.all(18),
       onTap: onTap,
-      borderRadius: BorderRadius.circular(20),
-      child: Container(
-        padding: const EdgeInsets.all(18),
-        decoration: BoxDecoration(
-          color: Colors.white,
-          borderRadius: BorderRadius.circular(20),
-          boxShadow: [
-            BoxShadow(
-              color: Colors.black.withOpacity(0.04),
-              blurRadius: 10,
-              offset: const Offset(0, 4),
-            ),
-          ],
-        ),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            CircleAvatar(
-              radius: 22,
-              backgroundColor: color.withOpacity(0.12),
-              child: Icon(icon, color: color, size: 24),
-            ),
-            const SizedBox(height: 14),
-            Text(
-              title,
-              style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 15),
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-            ),
-            const SizedBox(height: 2),
-            Text(
-              subtitle,
-              style: const TextStyle(color: Colors.grey, fontSize: 12),
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-            ),
-          ],
-        ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          CircleAvatar(
+            radius: 22,
+            backgroundColor: color.withOpacity(0.16),
+            child: Icon(icon, color: color, size: 24),
+          ),
+          const SizedBox(height: 14),
+          Text(
+            title,
+            style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 15),
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+          ),
+          const SizedBox(height: 2),
+          Text(
+            subtitle,
+            style: const TextStyle(color: kPremiumMuted, fontSize: 12),
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+          ),
+        ],
       ),
     );
   }
@@ -459,11 +408,10 @@ class _HomeBodyState extends State<HomeBody> {
   void _showReportsBottomSheet(BuildContext context) {
     showModalBottomSheet(
       context: context,
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
-      ),
+      backgroundColor: Colors.transparent,
       builder: (context) {
-        return Container(
+        return GlassCard(
+          margin: const EdgeInsets.all(16),
           padding: const EdgeInsets.all(24),
           child: Column(
             mainAxisSize: MainAxisSize.min,
@@ -474,41 +422,45 @@ class _HomeBodyState extends State<HomeBody> {
                 children: [
                   const Text(
                     'Operational Reports',
-                    style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
+                    style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: kPremiumGold),
                   ),
                   IconButton(
                     onPressed: () => Navigator.pop(context),
-                    icon: const Icon(Icons.close),
+                    icon: const Icon(Icons.close, color: kPremiumMuted),
                   ),
                 ],
               ),
               const SizedBox(height: 16),
               ListTile(
-                leading: const CircleAvatar(
-                  backgroundColor: Colors.blueAccent,
-                  child: Icon(Icons.assessment, color: Colors.white),
+                leading: const PremiumAvatar(
+                  icon: Icons.assessment_rounded,
+                  style: AvatarStyle.glowIcon,
+                  size: 42,
                 ),
                 title: const Text('Client Account Distribution'),
-                subtitle: Text('${_store.clients.length} Total Accounts'),
+                subtitle: Text('${_store.clients.length} Total Accounts', style: const TextStyle(color: kPremiumMuted)),
                 onTap: () => Navigator.pop(context),
               ),
               ListTile(
-                leading: const CircleAvatar(
-                  backgroundColor: Colors.orangeAccent,
-                  child: Icon(Icons.pie_chart, color: Colors.white),
+                leading: const PremiumAvatar(
+                  icon: Icons.pie_chart_rounded,
+                  style: AvatarStyle.glowIcon,
+                  size: 42,
                 ),
                 title: const Text('HR Workforce Utilization'),
-                subtitle: Text('${_store.employees.length} Total Staff'),
+                subtitle: Text('${_store.employees.length} Total Staff', style: const TextStyle(color: kPremiumMuted)),
                 onTap: () => Navigator.pop(context),
               ),
               ListTile(
-                leading: const CircleAvatar(
-                  backgroundColor: Colors.green,
-                  child: Icon(Icons.bar_chart, color: Colors.white),
+                leading: const PremiumAvatar(
+                  icon: Icons.bar_chart_rounded,
+                  style: AvatarStyle.glowIcon,
+                  size: 42,
                 ),
                 title: const Text('Monthly Attendance Summary'),
                 subtitle: Text(
                   '${_store.leaveRequests.length} Leave Records',
+                  style: const TextStyle(color: kPremiumMuted),
                 ),
                 onTap: () => Navigator.pop(context),
               ),

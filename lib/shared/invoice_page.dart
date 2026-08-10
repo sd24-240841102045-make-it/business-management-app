@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:business_managment_app/services/app_data_store.dart';
+import 'package:business_managment_app/core/premium_theme.dart';
 
 class InvoicePage extends StatefulWidget {
   const InvoicePage({super.key});
@@ -144,11 +145,9 @@ class _InvoicePageState extends State<InvoicePage> {
         final double hPad = isDesktop ? 36 : isTablet ? 24 : 16;
 
         return Scaffold(
+          backgroundColor: Colors.transparent,
           appBar: AppBar(
             title: const Text('Invoices & Billing', style: TextStyle(fontWeight: FontWeight.bold)),
-            backgroundColor: Colors.purple,
-            foregroundColor: Colors.white,
-            elevation: 2,
           ),
           body: SingleChildScrollView(
             padding: EdgeInsets.symmetric(horizontal: hPad, vertical: 20),
@@ -158,6 +157,12 @@ class _InvoicePageState extends State<InvoicePage> {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
+                    const HeroBanner(
+                      title: 'Client Invoices & Billing',
+                      subtitle: 'Generate client statements, issue new invoices, and track payment statuses',
+                      badge: 'Billing Operations',
+                    ),
+                    const SizedBox(height: 20),
                     Row(
                       mainAxisAlignment: MainAxisAlignment.spaceBetween,
                       children: [
@@ -168,15 +173,10 @@ class _InvoicePageState extends State<InvoicePage> {
                             overflow: TextOverflow.ellipsis,
                           ),
                         ),
-                        ElevatedButton.icon(
+                        GoldButton(
+                          label: 'Create Invoice',
+                          icon: Icons.add,
                           onPressed: _showCreateInvoiceDialog,
-                          icon: const Icon(Icons.add, size: 18),
-                          label: const Text('Create Invoice'),
-                          style: ElevatedButton.styleFrom(
-                            backgroundColor: Colors.purple,
-                            foregroundColor: Colors.white,
-                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-                          ),
                         ),
                       ],
                     ),

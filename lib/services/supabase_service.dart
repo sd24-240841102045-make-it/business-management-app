@@ -28,6 +28,11 @@ class SupabaseService {
   Map<String, dynamic>? _currentMembership;
   bool _isAuthActionInProgress = false;
 
+  final Set<String> _deletedClientIds = {};
+  final Set<String> _deletedClientEmails = {};
+  final Set<String> _deletedEmployeeIds = {};
+  final Set<String> _deletedEmployeeEmails = {};
+
   bool get isAuthActionInProgress => _isAuthActionInProgress;
 
   Map<String, dynamic>? get currentOrganization => _currentOrganization;
@@ -287,7 +292,9 @@ class SupabaseService {
                 await client.from('clients').upsert({
                   'organization_id': orgId,
                   'user_id': userId,
+                  'client_type': 'business',
                   'contact_name': cleanName,
+                  'company_name': cleanName,
                   'email': targetEmail,
                   'status': 'Active',
                 });
@@ -485,6 +492,7 @@ class SupabaseService {
           final uId = mem['user_id']?.toString();
           final r = mem['role']?.toString() ?? 'employee';
           if (uId != null && uId.isNotEmpty && !existingUserIds.contains(uId) && r == 'employee') {
+            if (_deletedEmployeeIds.contains(uId)) continue;
             try {
               await client.from('employees').upsert({
                 'organization_id': currentOrganizationId,
@@ -525,7 +533,16 @@ class SupabaseService {
         debugPrint('Employees auto-sync notice: $syncErr');
       }
 
-      final list = (response as List).map((json) {
+      final list = (response as List)
+          .where((json) {
+            final eId = json['id']?.toString();
+            final profile = json['profiles'] as Map<String, dynamic>?;
+            final eEmail = profile?['email']?.toString()?.trim()?.toLowerCase();
+            if (eId != null && _deletedEmployeeIds.contains(eId)) return false;
+            if (eEmail != null && _deletedEmployeeEmails.contains(eEmail)) return false;
+            return true;
+          })
+          .map((json) {
         final profile = json['profiles'] as Map<String, dynamic>?;
         return Employee(
           id: json['id']?.toString() ?? '',
@@ -581,9 +598,66 @@ class SupabaseService {
     }
   }
 
-  Future<bool> deleteEmployee(String id) async {
+  Future<bool> deleteEmployee(String id, {String? email}) async {
     try {
+      if (currentOrganizationId == null) {
+        await loadUserOrganizationContext();
+      }
+      _deletedEmployeeIds.add(id);
+
+      final targetEmail = email?.trim()?.toLowerCase();
+      if (targetEmail != null && targetEmail.isNotEmpty) {
+        _deletedEmployeeEmails.add(targetEmail);
+      }
+
+      var query = client.from('employees').select('id, user_id, email, profiles(email)');
+      if (targetEmail != null && targetEmail.isNotEmpty) {
+        query = query.or('id.eq.$id,email.eq.$targetEmail');
+      } else {
+        query = query.eq('id', id);
+      }
+
+      final records = await query;
+      if (records is List && records.isNotEmpty) {
+        for (final rec in records) {
+          final dbId = rec['id']?.toString();
+          final dbUserId = rec['user_id']?.toString();
+          String? dbEmail = rec['email']?.toString()?.trim()?.toLowerCase();
+          if ((dbEmail == null || dbEmail.isEmpty) && rec['profiles'] != null && rec['profiles'] is Map) {
+            dbEmail = (rec['profiles'] as Map)['email']?.toString()?.trim()?.toLowerCase();
+          }
+
+          if (dbId != null) _deletedEmployeeIds.add(dbId);
+          if (dbEmail != null) _deletedEmployeeEmails.add(dbEmail);
+
+          if (dbId != null) {
+            try { await client.from('attendance_logs').delete().eq('user_id', dbId); } catch (_) {}
+            try { await client.from('attendance_logs').delete().eq('employee_id', dbId); } catch (_) {}
+            try { await client.from('leave_requests').delete().eq('employee_id', dbId); } catch (_) {}
+            try { await client.from('tasks').delete().eq('assigned_employee_id', dbId); } catch (_) {}
+            try { await client.from('clients').update({'assigned_employee_id': null, 'assigned_employee_name': null}).eq('assigned_employee_id', dbId); } catch (_) {}
+          }
+
+          if (currentOrganizationId != null) {
+            if (dbUserId != null && dbUserId.isNotEmpty) {
+              try { await client.from('organization_memberships').delete().eq('organization_id', currentOrganizationId!).eq('user_id', dbUserId); } catch (_) {}
+            }
+            if (dbEmail != null && dbEmail.isNotEmpty) {
+              try { await client.from('invitations').delete().eq('organization_id', currentOrganizationId!).eq('email', dbEmail); } catch (_) {}
+            }
+          }
+
+          if (dbId != null) {
+            await client.from('employees').delete().eq('id', dbId);
+          }
+        }
+      }
+
+      if (targetEmail != null && targetEmail.isNotEmpty) {
+        await client.from('employees').delete().eq('email', targetEmail);
+      }
       await client.from('employees').delete().eq('id', id);
+
       return true;
     } catch (e) {
       debugPrint('Supabase deleteEmployee error: $e');
@@ -599,17 +673,118 @@ class SupabaseService {
       if (currentOrganizationId == null) {
         return [];
       }
+
       final response = await client
           .from('clients')
-          .select()
+          .select('*, profiles(*)')
           .eq('organization_id', currentOrganizationId!);
-      final list = (response as List).map((json) {
+
+      // Auto-sync any client invitations, client memberships, or client profiles missing in clients table
+      try {
+        final existingEmails = (response as List)
+            .map((c) => c['email']?.toString().trim().toLowerCase())
+            .whereType<String>()
+            .toSet();
+
+        final existingUserIds = (response as List)
+            .map((c) => c['user_id']?.toString())
+            .whereType<String>()
+            .toSet();
+
+        bool hasNew = false;
+
+        // 1. Check invitations table for role == 'client'
+        final clientInvites = await client
+            .from('invitations')
+            .select('email, status')
+            .eq('organization_id', currentOrganizationId!)
+            .eq('role', 'client');
+
+        for (final inv in (clientInvites as List)) {
+          final invEmail = inv['email']?.toString().trim().toLowerCase();
+          if (invEmail != null && invEmail.isNotEmpty && !existingEmails.contains(invEmail)) {
+            final namePart = invEmail.contains('@') ? invEmail.split('@').first : invEmail;
+            try {
+              await client.from('clients').upsert({
+                'organization_id': currentOrganizationId,
+                'client_type': 'business',
+                'contact_name': namePart,
+                'company_name': namePart,
+                'email': invEmail,
+                'status': 'Active',
+              });
+              existingEmails.add(invEmail);
+              hasNew = true;
+            } catch (e) {
+              debugPrint('Syncing client invitation error: $e');
+            }
+          }
+        }
+
+        // 2. Check organization_memberships table for role == 'client'
+        final clientMems = await client
+            .from('organization_memberships')
+            .select('user_id, role')
+            .eq('organization_id', currentOrganizationId!)
+            .eq('role', 'client');
+
+        for (final mem in (clientMems as List)) {
+          final uId = mem['user_id']?.toString();
+          if (uId != null && uId.isNotEmpty && !existingUserIds.contains(uId)) {
+            try {
+              final prof = await client
+                  .from('profiles')
+                  .select('full_name, email, phone')
+                  .eq('id', uId)
+                  .maybeSingle();
+              if (prof != null) {
+                final pEmail = prof['email']?.toString().trim().toLowerCase();
+                final pName = prof['full_name']?.toString() ?? 'Client';
+                if (pEmail != null && pEmail.isNotEmpty && !existingEmails.contains(pEmail)) {
+                  await client.from('clients').upsert({
+                    'organization_id': currentOrganizationId,
+                    'user_id': uId,
+                    'client_type': 'business',
+                    'contact_name': pName,
+                    'company_name': pName,
+                    'email': pEmail,
+                    'phone': prof['phone']?.toString() ?? '',
+                    'status': 'Active',
+                  });
+                  existingEmails.add(pEmail);
+                  existingUserIds.add(uId);
+                  hasNew = true;
+                }
+              }
+            } catch (e) {
+              debugPrint('Syncing client membership error: $e');
+            }
+          }
+        }
+
+      } catch (syncErr) {
+        debugPrint('Clients auto-sync notice: $syncErr');
+      }
+
+      final list = (response as List)
+          .where((json) {
+            final cId = json['id']?.toString();
+            final cEmail = json['email']?.toString()?.trim()?.toLowerCase();
+            if (cId != null && _deletedClientIds.contains(cId)) return false;
+            if (cEmail != null && _deletedClientEmails.contains(cEmail)) return false;
+            return true;
+          })
+          .map((json) {
+        final profile = json['profiles'] as Map<String, dynamic>?;
+        final name = json['contact_name']?.toString() ?? json['name']?.toString() ?? profile?['full_name']?.toString() ?? '';
+        final email = json['email']?.toString() ?? profile?['email']?.toString() ?? '';
+        final company = json['company_name']?.toString() ?? json['company']?.toString() ?? name;
         return ClientModel(
           id: json['id']?.toString() ?? '',
-          name: json['contact_name']?.toString() ?? json['name']?.toString() ?? '',
-          company: json['company_name']?.toString() ?? json['company']?.toString() ?? '',
-          email: json['email']?.toString() ?? '',
-          phone: json['phone']?.toString() ?? '',
+          name: name.isNotEmpty ? name : 'Client',
+          company: company.isNotEmpty ? company : 'Client Business',
+          email: email,
+          phone: json['phone']?.toString() ?? profile?['phone']?.toString() ?? '',
           status: json['status']?.toString() ?? 'Active',
           assignedEmployeeId: json['assigned_employee_id']?.toString(),
           assignedEmployeeName: json['assigned_employee_name']?.toString(),
@@ -661,9 +836,62 @@ class SupabaseService {
     }
   }
 
-  Future<bool> deleteClient(String id) async {
+  Future<bool> deleteClient(String id, {String? email}) async {
     try {
+      if (currentOrganizationId == null) {
+        await loadUserOrganizationContext();
+      }
+      _deletedClientIds.add(id);
+
+      final targetEmail = email?.trim()?.toLowerCase();
+      if (targetEmail != null && targetEmail.isNotEmpty) {
+        _deletedClientEmails.add(targetEmail);
+      }
+
+      var query = client.from('clients').select('id, user_id, email');
+      if (targetEmail != null && targetEmail.isNotEmpty) {
+        query = query.or('id.eq.$id,email.eq.$targetEmail');
+      } else {
+        query = query.eq('id', id);
+      }
+
+      final records = await query;
+      if (records is List && records.isNotEmpty) {
+        for (final rec in records) {
+          final dbId = rec['id']?.toString();
+          final dbUserId = rec['user_id']?.toString();
+          final dbEmail = rec['email']?.toString()?.trim()?.toLowerCase();
+
+          if (dbId != null) _deletedClientIds.add(dbId);
+          if (dbEmail != null) _deletedClientEmails.add(dbEmail);
+
+          if (dbId != null) {
+            try { await client.from('projects').delete().eq('client_id', dbId); } catch (_) {}
+            try { await client.from('invoices').delete().eq('client_id', dbId); } catch (_) {}
+            try { await client.from('chat_messages').delete().eq('client_id', dbId); } catch (_) {}
+            try { await client.from('tasks').delete().eq('client_id', dbId); } catch (_) {}
+          }
+
+          if (currentOrganizationId != null) {
+            if (dbEmail != null && dbEmail.isNotEmpty) {
+              try { await client.from('invitations').delete().eq('organization_id', currentOrganizationId!).eq('email', dbEmail); } catch (_) {}
+            }
+            if (dbUserId != null && dbUserId.isNotEmpty) {
+              try { await client.from('organization_memberships').delete().eq('organization_id', currentOrganizationId!).eq('user_id', dbUserId); } catch (_) {}
+            }
+          }
+
+          if (dbId != null) {
+            await client.from('clients').delete().eq('id', dbId);
+          }
+        }
+      }
+
+      if (targetEmail != null && targetEmail.isNotEmpty) {
+        await client.from('clients').delete().eq('email', targetEmail);
+      }
       await client.from('clients').delete().eq('id', id);
+
       return true;
     } catch (e) {
       debugPrint('Supabase deleteClient error: $e');
