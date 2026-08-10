@@ -343,74 +343,158 @@ class _EmployeeDashboardPageState extends State<EmployeeDashboardPage> {
           bottom: true,
           child: LayoutBuilder(
             builder: (context, constraints) {
-              final isDesktop = constraints.maxWidth > 800;
-              final isTablet = constraints.maxWidth >= 600 && constraints.maxWidth <= 800;
+              final width = constraints.maxWidth;
+              final bool isDesktop = width >= 900;
+              final bool isTablet = width >= 600 && width < 900;
+              final double hPad = isDesktop ? 40 : (isTablet ? 24 : 16);
 
               return RefreshIndicator(
                 color: kPremiumGold,
                 onRefresh: _fetchEmployeeData,
                 child: SingleChildScrollView(
                   physics: const AlwaysScrollableScrollPhysics(),
-                  padding: EdgeInsets.only(
-                    left: 20,
-                    right: 20,
-                    top: 20,
-                    bottom: MediaQuery.of(context).padding.bottom + 80.0,
-                  ),
+                  padding: EdgeInsets.symmetric(horizontal: hPad, vertical: 18),
                   child: Center(
                     child: ConstrainedBox(
                       constraints: const BoxConstraints(maxWidth: 1100),
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          // HERO BANNER & PROFILE BADGE
-                          FadeInSlide(
-                            index: 0,
-                            child: GlassCard(
-                              padding: const EdgeInsets.all(24),
-                              child: Row(
-                                crossAxisAlignment: CrossAxisAlignment.center,
-                                children: [
-                                  PremiumAvatar(
-                                    label: _userName,
-                                    style: AvatarStyle.gradient,
-                                    size: 64,
-                                    radius: 32,
-                                  ),
-                                  const SizedBox(width: 20),
-                                  Expanded(
-                                    child: Column(
-                                      crossAxisAlignment: CrossAxisAlignment.start,
-                                      mainAxisAlignment: MainAxisAlignment.center,
-                                      children: [
-                                        Text('Welcome, $_userName 👋', style: const TextStyle(fontSize: 22, fontWeight: FontWeight.bold, color: kPremiumGold)),
-                                        const SizedBox(height: 4),
-                                        Text('$_userRole • $_userDept • $_userEmail', style: const TextStyle(fontSize: 13, color: kPremiumMuted)),
-                                      ],
+                          // ── HERO BANNER (SAME AS ADMIN) ──────────────────────────────
+                          HeroBanner(
+                            title: '$_userDept Operations',
+                            subtitle: 'Welcome back 👋, $_userName',
+                            badge: 'Employee Portal',
+                          ),
+
+                          const SizedBox(height: 20),
+
+                          // ── OVERVIEW BANNER CARD (SAME AS ADMIN) ─────────────────────
+                          GlassCard(
+                            padding: const EdgeInsets.all(22),
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Row(
+                                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                  crossAxisAlignment: CrossAxisAlignment.center,
+                                  children: [
+                                    const Expanded(
+                                      child: Text(
+                                        'Unified Operations Overview',
+                                        style: TextStyle(color: kPremiumMuted, fontSize: 13),
+                                        maxLines: 1,
+                                        overflow: TextOverflow.ellipsis,
+                                      ),
                                     ),
+                                    const SizedBox(width: 8),
+                                    Container(
+                                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                                      decoration: BoxDecoration(
+                                        color: kPremiumGold.withOpacity(0.15),
+                                        borderRadius: BorderRadius.circular(10),
+                                        border: Border.all(color: kPremiumGold.withOpacity(0.3)),
+                                      ),
+                                      child: Text(
+                                        '$_userRole',
+                                        style: const TextStyle(color: kPremiumGold, fontSize: 11, fontWeight: FontWeight.bold),
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                                const SizedBox(height: 6),
+                                Text(
+                                  _userName,
+                                  style: const TextStyle(
+                                    color: kPremiumText,
+                                    fontSize: 20,
+                                    fontWeight: FontWeight.bold,
                                   ),
-                                ],
-                              ),
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                ),
+                                const SizedBox(height: 16),
+
+                                // Responsive Overview Stats Layout
+                                LayoutBuilder(
+                                  builder: (context, overviewConstraints) {
+                                    final bool isCompact = overviewConstraints.maxWidth < 450;
+                                    if (isCompact) {
+                                      return Column(
+                                        children: [
+                                          Row(
+                                            children: [
+                                              Expanded(child: _overviewItem('Active Tasks', '$_activeTasksCount')),
+                                              Expanded(child: _overviewItem('Due Today', '$_tasksDueTodayCount')),
+                                            ],
+                                          ),
+                                          const SizedBox(height: 14),
+                                          Row(
+                                            children: [
+                                              Expanded(child: _overviewItem('My Projects', '$_activeProjectsCount')),
+                                              Expanded(child: _overviewItem('Pending Leave', '$_pendingLeavesCount')),
+                                            ],
+                                          ),
+                                        ],
+                                      );
+                                    }
+                                    return Row(
+                                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                      children: [
+                                        Expanded(child: FittedBox(fit: BoxFit.scaleDown, child: _overviewItem('Active Tasks', '$_activeTasksCount'))),
+                                        Expanded(child: FittedBox(fit: BoxFit.scaleDown, child: _overviewItem('Due Today', '$_tasksDueTodayCount'))),
+                                        Expanded(child: FittedBox(fit: BoxFit.scaleDown, child: _overviewItem('My Projects', '$_activeProjectsCount'))),
+                                        Expanded(child: FittedBox(fit: BoxFit.scaleDown, child: _overviewItem('Pending Leave', '$_pendingLeavesCount'))),
+                                      ],
+                                    );
+                                  },
+                                ),
+                              ],
                             ),
                           ),
+
                           const SizedBox(height: 24),
 
-                          // STAT METRICS GRID
+                          // ── OPERATIONS MODULES (SAME AS ADMIN ACTION CARDS) ──────────
+                          const Text(
+                            'Staff Operations Modules',
+                            style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
+                          ),
+                          const SizedBox(height: 14),
+
                           GridView.count(
-                            crossAxisCount: isDesktop ? 4 : (isTablet ? 2 : 1),
                             shrinkWrap: true,
                             physics: const NeverScrollableScrollPhysics(),
+                            crossAxisCount: isDesktop ? 3 : (isTablet ? 3 : (width < 360 ? 1 : 2)),
                             crossAxisSpacing: 14,
                             mainAxisSpacing: 14,
-                            childAspectRatio: isDesktop ? 2.2 : (isTablet ? 2.5 : 3.2),
+                            childAspectRatio: isDesktop ? 1.6 : (isTablet ? 1.4 : 1.15),
                             children: [
-                              FadeInSlide(index: 1, child: _buildStatCard('Active Tasks', _activeTasksCount.toString(), Icons.assignment_outlined, Colors.orangeAccent)),
-                              FadeInSlide(index: 2, child: _buildStatCard('Due Today', _tasksDueTodayCount.toString(), Icons.warning_amber_rounded, Colors.redAccent)),
-                              FadeInSlide(index: 3, child: _buildStatCard('My Projects', _activeProjectsCount.toString(), Icons.folder_open_outlined, Colors.blueAccent)),
-                              FadeInSlide(index: 4, child: _buildStatCard('Pending Leaves', _pendingLeavesCount.toString(), Icons.event_note_outlined, Colors.purpleAccent)),
+                              _actionCard(
+                                icon: Icons.assignment_outlined,
+                                title: 'My Tasks',
+                                subtitle: '$_activeTasksCount Active Tasks',
+                                color: kPremiumGold,
+                                onTap: () {},
+                              ),
+                              _actionCard(
+                                icon: Icons.folder_open_outlined,
+                                title: 'My Projects',
+                                subtitle: '$_activeProjectsCount Projects',
+                                color: kPremiumBlue,
+                                onTap: () {},
+                              ),
+                              _actionCard(
+                                icon: Icons.event_note_outlined,
+                                title: 'Attendance & Leave',
+                                subtitle: '$_pendingLeavesCount Pending Requests',
+                                color: kPremiumTeal,
+                                onTap: _showRequestLeaveDialog,
+                              ),
                             ],
                           ),
-                          const SizedBox(height: 32),
+
+                          const SizedBox(height: 30),
 
                           // SECTION 1: MY LIVE ASSIGNED TASKS
                           Row(
@@ -443,83 +527,80 @@ class _EmployeeDashboardPageState extends State<EmployeeDashboardPage> {
                                 final dueDate = task['due_date'] ?? 'No Deadline';
                                 final pColor = _getPriorityColor(priority);
 
-                                return FadeInSlide(
-                                  index: index + 5,
-                                  child: Container(
-                                    margin: const EdgeInsets.only(bottom: 12),
-                                    child: GlassCard(
-                                      padding: const EdgeInsets.all(16),
-                                      child: Column(
-                                        crossAxisAlignment: CrossAxisAlignment.start,
-                                        children: [
-                                          Row(
-                                            crossAxisAlignment: CrossAxisAlignment.center,
-                                            children: [
-                                              Expanded(
-                                                child: Text(title, style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: kPremiumText)),
+                                return Container(
+                                  margin: const EdgeInsets.only(bottom: 12),
+                                  child: GlassCard(
+                                    padding: const EdgeInsets.all(16),
+                                    child: Column(
+                                      crossAxisAlignment: CrossAxisAlignment.start,
+                                      children: [
+                                        Row(
+                                          crossAxisAlignment: CrossAxisAlignment.center,
+                                          children: [
+                                            Expanded(
+                                              child: Text(title, style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: kPremiumText)),
+                                            ),
+                                            const SizedBox(width: 10),
+                                            Container(
+                                              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                                              decoration: BoxDecoration(
+                                                color: pColor.withOpacity(0.15),
+                                                borderRadius: BorderRadius.circular(12),
+                                                border: Border.all(color: pColor.withOpacity(0.4)),
                                               ),
-                                              const SizedBox(width: 10),
-                                              Container(
-                                                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-                                                decoration: BoxDecoration(
-                                                  color: pColor.withOpacity(0.15),
-                                                  borderRadius: BorderRadius.circular(12),
-                                                  border: Border.all(color: pColor.withOpacity(0.4)),
-                                                ),
-                                                child: Text('$priority Priority', style: TextStyle(color: pColor, fontSize: 11, fontWeight: FontWeight.bold)),
-                                              ),
-                                            ],
-                                          ),
-                                          if (task['description'] != null && task['description'].toString().isNotEmpty) ...[
-                                            const SizedBox(height: 6),
-                                            Text(task['description'].toString(), style: const TextStyle(color: kPremiumMuted, fontSize: 13)),
+                                              child: Text('$priority Priority', style: TextStyle(color: pColor, fontSize: 11, fontWeight: FontWeight.bold)),
+                                            ),
                                           ],
-                                          const Divider(height: 20, color: Colors.white10),
-                                          Row(
-                                            crossAxisAlignment: CrossAxisAlignment.center,
-                                            children: [
-                                              const Icon(Icons.schedule_outlined, size: 14, color: kPremiumGold),
-                                              const SizedBox(width: 6),
-                                              Flexible(
-                                                child: Text(
-                                                  'Due: $dueDate',
-                                                  style: const TextStyle(color: kPremiumMuted, fontSize: 12),
-                                                  maxLines: 1,
-                                                  overflow: TextOverflow.ellipsis,
-                                                ),
-                                              ),
-                                              const SizedBox(width: 8),
-                                              PopupMenuButton<String>(
-                                                color: kPremiumSurface,
-                                                child: Container(
-                                                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
-                                                  decoration: BoxDecoration(
-                                                    color: kPremiumGold.withOpacity(0.12),
-                                                    borderRadius: BorderRadius.circular(12),
-                                                    border: Border.all(color: kPremiumGold.withOpacity(0.3)),
-                                                  ),
-                                                  child: Row(
-                                                    mainAxisSize: MainAxisSize.min,
-                                                    crossAxisAlignment: CrossAxisAlignment.center,
-                                                    children: [
-                                                      Text(status, style: const TextStyle(color: kPremiumGold, fontWeight: FontWeight.bold, fontSize: 12)),
-                                                      const SizedBox(width: 2),
-                                                      const Icon(Icons.arrow_drop_down, color: kPremiumGold, size: 16),
-                                                    ],
-                                                  ),
-                                                ),
-                                                onSelected: (val) => _updateTaskStatus(task['id'], val),
-                                                itemBuilder: (context) => const [
-                                                  PopupMenuItem(value: 'To Do', child: Text('To Do', style: TextStyle(color: kPremiumText))),
-                                                  PopupMenuItem(value: 'In Progress', child: Text('In Progress', style: TextStyle(color: kPremiumText))),
-                                                  PopupMenuItem(value: 'In Review', child: Text('In Review', style: TextStyle(color: kPremiumText))),
-                                                  PopupMenuItem(value: 'Completed', child: Text('Completed', style: TextStyle(color: kPremiumText))),
-                                                ],
-                                              ),
-                                            ],
-                                          ),
+                                        ),
+                                        if (task['description'] != null && task['description'].toString().isNotEmpty) ...[
+                                          const SizedBox(height: 6),
+                                          Text(task['description'].toString(), style: const TextStyle(color: kPremiumMuted, fontSize: 13)),
                                         ],
-                                      ),
+                                        const Divider(height: 20, color: Colors.white10),
+                                        Row(
+                                          crossAxisAlignment: CrossAxisAlignment.center,
+                                          children: [
+                                            const Icon(Icons.schedule_outlined, size: 14, color: kPremiumGold),
+                                            const SizedBox(width: 6),
+                                            Flexible(
+                                              child: Text(
+                                                'Due: $dueDate',
+                                                style: const TextStyle(color: kPremiumMuted, fontSize: 12),
+                                                maxLines: 1,
+                                                overflow: TextOverflow.ellipsis,
+                                              ),
+                                            ),
+                                            const SizedBox(width: 8),
+                                            PopupMenuButton<String>(
+                                              color: kPremiumSurface,
+                                              child: Container(
+                                                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+                                                decoration: BoxDecoration(
+                                                  color: kPremiumGold.withOpacity(0.12),
+                                                  borderRadius: BorderRadius.circular(12),
+                                                  border: Border.all(color: kPremiumGold.withOpacity(0.3)),
+                                                ),
+                                                child: Row(
+                                                  mainAxisSize: MainAxisSize.min,
+                                                  crossAxisAlignment: CrossAxisAlignment.center,
+                                                  children: [
+                                                    Text(status, style: const TextStyle(color: kPremiumGold, fontWeight: FontWeight.bold, fontSize: 12)),
+                                                    const SizedBox(width: 2),
+                                                    const Icon(Icons.arrow_drop_down, color: kPremiumGold, size: 16),
+                                                  ],
+                                                ),
+                                              ),
+                                              onSelected: (val) => _updateTaskStatus(task['id'], val),
+                                              itemBuilder: (context) => const [
+                                                PopupMenuItem(value: 'To Do', child: Text('To Do', style: TextStyle(color: kPremiumText))),
+                                                PopupMenuItem(value: 'In Progress', child: Text('In Progress', style: TextStyle(color: kPremiumText))),
+                                                PopupMenuItem(value: 'In Review', child: Text('In Review', style: TextStyle(color: kPremiumText))),
+                                                PopupMenuItem(value: 'Completed', child: Text('Completed', style: TextStyle(color: kPremiumText))),
+                                              ],
+                                            ),
+                                          ],
+                                        ),
+                                      ],
                                     ),
                                   ),
                                 );
@@ -699,11 +780,42 @@ class _EmployeeDashboardPageState extends State<EmployeeDashboardPage> {
     );
   }
 
-  Widget _buildStatCard(String title, String value, IconData icon, Color color) {
+  Widget _overviewItem(String label, String value) {
+    return Column(
+      children: [
+        Text(
+          value,
+          style: const TextStyle(
+            color: kPremiumGold,
+            fontSize: 26,
+            fontWeight: FontWeight.bold,
+          ),
+        ),
+        const SizedBox(height: 4),
+        Text(
+          label,
+          style: const TextStyle(
+            color: kPremiumMuted,
+            fontSize: 12,
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _actionCard({
+    required IconData icon,
+    required String title,
+    required String subtitle,
+    required Color color,
+    required VoidCallback onTap,
+  }) {
     return GlassCard(
-      padding: const EdgeInsets.symmetric(horizontal: 14.0, vertical: 12.0),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.center,
+      onTap: onTap,
+      padding: const EdgeInsets.all(18),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
           Container(
             padding: const EdgeInsets.all(10),
@@ -714,17 +826,30 @@ class _EmployeeDashboardPageState extends State<EmployeeDashboardPage> {
             ),
             child: Icon(icon, color: color, size: 24),
           ),
-          const SizedBox(width: 10),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                Text(title, style: const TextStyle(color: kPremiumMuted, fontSize: 12, fontWeight: FontWeight.w500), maxLines: 1, overflow: TextOverflow.ellipsis),
-                const SizedBox(height: 2),
-                Text(value, style: const TextStyle(fontSize: 22, fontWeight: FontWeight.bold, color: kPremiumText)),
-              ],
-            ),
+          Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                title,
+                style: const TextStyle(
+                  fontWeight: FontWeight.bold,
+                  fontSize: 15,
+                  color: kPremiumText,
+                ),
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+              ),
+              const SizedBox(height: 2),
+              Text(
+                subtitle,
+                style: const TextStyle(
+                  color: kPremiumMuted,
+                  fontSize: 12,
+                ),
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+              ),
+            ],
           ),
         ],
       ),

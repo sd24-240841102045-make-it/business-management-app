@@ -180,16 +180,22 @@ class _HomeBodyState extends State<HomeBody> {
                   children: [
                     Row(
                       mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      crossAxisAlignment: CrossAxisAlignment.center,
                       children: [
-                        const Text(
-                          'Unified Platform Overview',
-                          style: TextStyle(color: kPremiumMuted, fontSize: 14),
+                        const Expanded(
+                          child: Text(
+                            'Unified Platform Overview',
+                            style: TextStyle(color: kPremiumMuted, fontSize: 13),
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                          ),
                         ),
+                        const SizedBox(width: 8),
                         Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
                           decoration: BoxDecoration(
                             color: kPremiumGold.withOpacity(0.15),
-                            borderRadius: BorderRadius.circular(12),
+                            borderRadius: BorderRadius.circular(10),
                             border: Border.all(color: kPremiumGold.withOpacity(0.3)),
                           ),
                           child: const Text(
@@ -204,19 +210,47 @@ class _HomeBodyState extends State<HomeBody> {
                       SupabaseService().currentOrganization?['name'] ?? 'Your Organization',
                       style: const TextStyle(
                         color: kPremiumText,
-                        fontSize: 22,
+                        fontSize: 20,
                         fontWeight: FontWeight.bold,
                       ),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
                     ),
-                    const SizedBox(height: 20),
-                    Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                      children: [
-                        Expanded(child: FittedBox(fit: BoxFit.scaleDown, child: _overviewItem('Clients', _isLoadingStats ? '-' : '${_totalClients ?? 0}'))),
-                        Expanded(child: FittedBox(fit: BoxFit.scaleDown, child: _overviewItem('Active HR', _isLoadingStats ? '-' : '${_activeEmployees ?? 0}'))),
-                        Expanded(child: FittedBox(fit: BoxFit.scaleDown, child: _overviewItem('On Leave', _isLoadingStats ? '-' : '${_staffOnLeave ?? 0}'))),
-                        Expanded(child: FittedBox(fit: BoxFit.scaleDown, child: _overviewItem('Pending', _isLoadingStats ? '-' : '${_pendingLeaves ?? 0}'))),
-                      ],
+                    const SizedBox(height: 16),
+
+                    // Responsive Overview Stats Layout
+                    LayoutBuilder(
+                      builder: (context, overviewConstraints) {
+                        final bool isCompact = overviewConstraints.maxWidth < 450;
+                        if (isCompact) {
+                          return Column(
+                            children: [
+                              Row(
+                                children: [
+                                  Expanded(child: _overviewItem('Clients', _isLoadingStats ? '-' : '${_totalClients ?? 0}')),
+                                  Expanded(child: _overviewItem('Active HR', _isLoadingStats ? '-' : '${_activeEmployees ?? 0}')),
+                                ],
+                              ),
+                              const SizedBox(height: 14),
+                              Row(
+                                children: [
+                                  Expanded(child: _overviewItem('On Leave', _isLoadingStats ? '-' : '${_staffOnLeave ?? 0}')),
+                                  Expanded(child: _overviewItem('Pending', _isLoadingStats ? '-' : '${_pendingLeaves ?? 0}')),
+                                ],
+                              ),
+                            ],
+                          );
+                        }
+                        return Row(
+                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                          children: [
+                            Expanded(child: FittedBox(fit: BoxFit.scaleDown, child: _overviewItem('Clients', _isLoadingStats ? '-' : '${_totalClients ?? 0}'))),
+                            Expanded(child: FittedBox(fit: BoxFit.scaleDown, child: _overviewItem('Active HR', _isLoadingStats ? '-' : '${_activeEmployees ?? 0}'))),
+                            Expanded(child: FittedBox(fit: BoxFit.scaleDown, child: _overviewItem('On Leave', _isLoadingStats ? '-' : '${_staffOnLeave ?? 0}'))),
+                            Expanded(child: FittedBox(fit: BoxFit.scaleDown, child: _overviewItem('Pending', _isLoadingStats ? '-' : '${_pendingLeaves ?? 0}'))),
+                          ],
+                        );
+                      },
                     ),
                   ],
                 ),

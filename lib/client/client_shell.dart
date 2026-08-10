@@ -5,6 +5,7 @@ import 'package:business_managment_app/services/app_data_store.dart';
 import 'package:business_managment_app/shared/login_page.dart';
 import 'package:business_managment_app/shared/settings_page.dart';
 import 'package:business_managment_app/shared/chat_page.dart';
+import 'package:business_managment_app/client/client_dashboard_page.dart';
 import 'package:business_managment_app/core/premium_theme.dart';
 
 class ClientShell extends StatefulWidget {
@@ -94,7 +95,7 @@ class _ClientShellState extends State<ClientShell> {
         (metaCompany.isNotEmpty ? metaCompany : 'Registered Partner Enterprise');
 
     final pages = [
-      ClientOverviewBody(name: userName, email: userEmail, company: userCompany, store: _store),
+      const ClientDashboardPage(),
       ClientManagerBody(userEmail: userEmail, store: _store),
       const ChatPage(),
       ClientProfileBody(name: userName, email: userEmail, company: userCompany, store: _store, onLogout: _logout),
@@ -107,11 +108,13 @@ class _ClientShellState extends State<ClientShell> {
       'Client Profile',
     ];
 
-    return LayoutBuilder(
-      builder: (context, constraints) {
-        final bool isWideScreen = constraints.maxWidth >= 700;
+    return PremiumBackground(
+      child: LayoutBuilder(
+        builder: (context, constraints) {
+          final bool isWideScreen = constraints.maxWidth >= 700;
 
-        return Scaffold(
+          return Scaffold(
+            backgroundColor: Colors.transparent,
           appBar: AppBar(
             title: Text(
               titles[_selectedIndex],
@@ -129,33 +132,6 @@ class _ClientShellState extends State<ClientShell> {
                   );
                 },
               ),
-              IconButton(
-                icon: const Icon(Icons.settings),
-                tooltip: 'Settings',
-                onPressed: () {
-                  Navigator.push(
-                    context,
-                    MaterialPageRoute(builder: (context) => const SettingsPage()),
-                  );
-                },
-              ),
-              IconButton(
-                icon: const Icon(Icons.refresh),
-                tooltip: 'Sync Supabase',
-                onPressed: () async {
-                  await _store.refreshFromSupabase();
-                  if (mounted) {
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      const SnackBar(content: Text('Client portal data refreshed from Supabase!'), backgroundColor: Colors.green),
-                    );
-                  }
-                },
-              ),
-              IconButton(
-                icon: const Icon(Icons.logout),
-                tooltip: 'Logout',
-                onPressed: _logout,
-              ),
             ],
           ),
           body: isWideScreen
@@ -165,12 +141,13 @@ class _ClientShellState extends State<ClientShell> {
                       selectedIndex: _selectedIndex,
                       onDestinationSelected: _onItemTapped,
                       labelType: NavigationRailLabelType.all,
-                      selectedIconTheme: const IconThemeData(color: Colors.indigo, size: 28),
+                      backgroundColor: kPremiumBg2,
+                      selectedIconTheme: const IconThemeData(color: kPremiumGold, size: 28),
                       selectedLabelTextStyle: const TextStyle(
-                        color: Colors.indigo,
+                        color: kPremiumGold,
                         fontWeight: FontWeight.bold,
                       ),
-                      unselectedIconTheme: const IconThemeData(color: Colors.grey),
+                      unselectedIconTheme: const IconThemeData(color: kPremiumMuted),
                       destinations: const [
                         NavigationRailDestination(
                           icon: Icon(Icons.dashboard_outlined),
@@ -245,8 +222,9 @@ class _ClientShellState extends State<ClientShell> {
                     ),
                   ],
                 ),
-        );
-      },
+          );
+        },
+      ),
     );
   }
 }
@@ -294,43 +272,27 @@ class ClientOverviewBody extends StatelessWidget {
 
           return SingleChildScrollView(
             physics: const AlwaysScrollableScrollPhysics(),
-            padding: EdgeInsets.all(padding),
+            padding: EdgeInsets.only(
+              left: padding,
+              right: padding,
+              top: padding,
+              bottom: MediaQuery.of(context).padding.bottom + 80.0,
+            ),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                // Responsive Welcome Header Card
-                Container(
-                  padding: EdgeInsets.all(isMobile ? 16 : 20),
-                  decoration: BoxDecoration(
-                    gradient: LinearGradient(
-                      colors: [Colors.indigo.shade700, Colors.deepPurple.shade600],
-                      begin: Alignment.topLeft,
-                      end: Alignment.bottomRight,
-                    ),
-                    borderRadius: BorderRadius.circular(18),
-                    boxShadow: [
-                      BoxShadow(
-                        color: Colors.indigo.withOpacity(0.3),
-                        blurRadius: 10,
-                        offset: const Offset(0, 4),
-                      ),
-                    ],
-                  ),
+                // Premium Welcome Header Card
+                GlassCard(
+                  padding: EdgeInsets.all(isMobile ? 16 : 22),
                   child: Row(
                     children: [
-                      CircleAvatar(
-                        radius: isMobile ? 24 : 30,
-                        backgroundColor: Colors.white.withOpacity(0.2),
-                        child: Text(
-                          name.isNotEmpty ? name[0].toUpperCase() : 'C',
-                          style: TextStyle(
-                            color: Colors.white,
-                            fontSize: isMobile ? 20 : 26,
-                            fontWeight: FontWeight.bold,
-                          ),
-                        ),
+                      PremiumAvatar(
+                        label: name,
+                        style: AvatarStyle.gradient,
+                        size: isMobile ? 52 : 64,
+                        radius: isMobile ? 26 : 32,
                       ),
-                      const SizedBox(width: 12),
+                      const SizedBox(width: 14),
                       Expanded(
                         child: Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
@@ -338,7 +300,7 @@ class ClientOverviewBody extends StatelessWidget {
                             Text(
                               'Welcome back, $name!',
                               style: TextStyle(
-                                color: Colors.white,
+                                color: kPremiumText,
                                 fontSize: isMobile ? 16 : 20,
                                 fontWeight: FontWeight.bold,
                               ),
@@ -348,9 +310,9 @@ class ClientOverviewBody extends StatelessWidget {
                             const SizedBox(height: 4),
                             Text(
                               matchedClient?.company ?? company,
-                              style: TextStyle(
-                                color: Colors.white70,
-                                fontSize: isMobile ? 12 : 14,
+                              style: const TextStyle(
+                                color: kPremiumMuted,
+                                fontSize: 13,
                               ),
                               maxLines: 1,
                               overflow: TextOverflow.ellipsis,
@@ -362,13 +324,16 @@ class ClientOverviewBody extends StatelessWidget {
                       Container(
                         padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
                         decoration: BoxDecoration(
-                          color: status == 'Active' ? Colors.green.shade400 : Colors.orange.shade400,
+                          color: status == 'Active' ? kPremiumSuccess.withOpacity(0.15) : kPremiumWarning.withOpacity(0.15),
                           borderRadius: BorderRadius.circular(10),
+                          border: Border.all(
+                            color: status == 'Active' ? kPremiumSuccess.withOpacity(0.4) : kPremiumWarning.withOpacity(0.4),
+                          ),
                         ),
                         child: Text(
                           status,
-                          style: const TextStyle(
-                            color: Colors.white,
+                          style: TextStyle(
+                            color: status == 'Active' ? kPremiumSuccess : kPremiumWarning,
                             fontWeight: FontWeight.bold,
                             fontSize: 11,
                           ),
@@ -377,21 +342,15 @@ class ClientOverviewBody extends StatelessWidget {
                     ],
                   ),
                 ),
-                const SizedBox(height: 16),
+                const SizedBox(height: 14),
 
                 // Admin Announcement Banner if configured
                 if (matchedClient?.adminNote != null && matchedClient!.adminNote.isNotEmpty) ...[
-                  Container(
-                    width: double.infinity,
+                  GlassCard(
                     padding: const EdgeInsets.all(16),
-                    decoration: BoxDecoration(
-                      color: Colors.purple.shade50,
-                      borderRadius: BorderRadius.circular(16),
-                      border: Border.all(color: Colors.deepPurple.shade200),
-                    ),
                     child: Row(
                       children: [
-                        const Icon(Icons.campaign, color: Colors.deepPurple, size: 28),
+                        const Icon(Icons.campaign, color: kPremiumGold, size: 28),
                         const SizedBox(width: 12),
                         Expanded(
                           child: Column(
@@ -399,12 +358,12 @@ class ClientOverviewBody extends StatelessWidget {
                             children: [
                               const Text(
                                 'Notice from Management',
-                                style: TextStyle(fontWeight: FontWeight.bold, color: Colors.deepPurple, fontSize: 13),
+                                style: TextStyle(fontWeight: FontWeight.bold, color: kPremiumGold, fontSize: 13),
                               ),
-                              const SizedBox(height: 2),
+                              const SizedBox(height: 4),
                               Text(
                                 matchedClient.adminNote,
-                                style: const TextStyle(fontSize: 13, color: Colors.black87),
+                                style: const TextStyle(fontSize: 13, color: kPremiumText),
                               ),
                             ],
                           ),
@@ -412,126 +371,77 @@ class ClientOverviewBody extends StatelessWidget {
                       ],
                     ),
                   ),
-                  const SizedBox(height: 16),
+                  const SizedBox(height: 14),
                 ],
 
                 // Overview Cards Title
                 const Text(
                   'Project Summary & Live Metrics',
-                  style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Colors.black87),
+                  style: TextStyle(fontSize: 17, fontWeight: FontWeight.bold, color: kPremiumGold),
                 ),
                 const SizedBox(height: 12),
 
                 // Responsive Metrics Grid
                 if (isMobile) ...[
-                  _buildMetricCard(
-                    title: 'Project Scope',
-                    value: projectType,
-                    icon: Icons.assignment_turned_in_outlined,
-                    color: Colors.blue,
-                  ),
+                  _buildMetricCard(title: 'Project Scope', value: projectType, icon: Icons.assignment_turned_in_outlined, color: kPremiumBlue),
                   const SizedBox(height: 10),
-                  _buildMetricCard(
-                    title: 'Allocated Budget',
-                    value: '\$${budget.toStringAsFixed(0)}',
-                    icon: Icons.account_balance_wallet_outlined,
-                    color: Colors.green,
-                  ),
+                  _buildMetricCard(title: 'Allocated Budget', value: '\$${budget.toStringAsFixed(0)}', icon: Icons.account_balance_wallet_outlined, color: kPremiumSuccess),
                   const SizedBox(height: 10),
-                  _buildMetricCard(
-                    title: 'Account Lead',
-                    value: assignedManager,
-                    icon: Icons.person_pin_outlined,
-                    color: Colors.orange,
-                  ),
+                  _buildMetricCard(title: 'Account Lead', value: assignedManager, icon: Icons.person_pin_outlined, color: kPremiumTeal),
                   const SizedBox(height: 10),
-                  _buildMetricCard(
-                    title: 'Database Status',
-                    value: 'Synced (Supabase DB)',
-                    icon: Icons.cloud_done_outlined,
-                    color: Colors.teal,
-                  ),
+                  _buildMetricCard(title: 'Support Tier', value: 'Executive Priority', icon: Icons.star_outline, color: kPremiumGold),
                 ] else ...[
                   Row(
                     children: [
-                      Expanded(
-                        child: _buildMetricCard(
-                          title: 'Project Scope',
-                          value: projectType,
-                          icon: Icons.assignment_turned_in_outlined,
-                          color: Colors.blue,
-                        ),
-                      ),
+                      Expanded(child: _buildMetricCard(title: 'Project Scope', value: projectType, icon: Icons.assignment_turned_in_outlined, color: kPremiumBlue)),
                       const SizedBox(width: 12),
-                      Expanded(
-                        child: _buildMetricCard(
-                          title: 'Allocated Budget',
-                          value: '\$${budget.toStringAsFixed(0)}',
-                          icon: Icons.account_balance_wallet_outlined,
-                          color: Colors.green,
-                        ),
-                      ),
+                      Expanded(child: _buildMetricCard(title: 'Allocated Budget', value: '\$${budget.toStringAsFixed(0)}', icon: Icons.account_balance_wallet_outlined, color: kPremiumSuccess)),
                     ],
                   ),
                   const SizedBox(height: 12),
                   Row(
                     children: [
-                      Expanded(
-                        child: _buildMetricCard(
-                          title: 'Account Lead',
-                          value: assignedManager,
-                          icon: Icons.person_pin_outlined,
-                          color: Colors.orange,
-                        ),
-                      ),
+                      Expanded(child: _buildMetricCard(title: 'Account Lead', value: assignedManager, icon: Icons.person_pin_outlined, color: kPremiumTeal)),
                       const SizedBox(width: 12),
-                      Expanded(
-                        child: _buildMetricCard(
-                          title: 'Database Status',
-                          value: 'Synced (Supabase DB)',
-                          icon: Icons.cloud_done_outlined,
-                          color: Colors.teal,
-                        ),
-                      ),
+                      Expanded(child: _buildMetricCard(title: 'Support Tier', value: 'Executive Priority', icon: Icons.star_outline, color: kPremiumGold)),
                     ],
                   ),
                 ],
 
-                const SizedBox(height: 24),
+                const SizedBox(height: 22),
 
                 // Project Milestones Card
-                Card(
-                  elevation: 3,
-                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-                  child: Padding(
-                    padding: EdgeInsets.all(isMobile ? 14 : 20),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        const Row(
-                          children: [
-                            Icon(Icons.timeline, color: Colors.indigo),
-                            SizedBox(width: 10),
-                            Expanded(
-                              child: Text(
-                                'Project Milestones & Deliverables',
-                                style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
-                                maxLines: 1,
-                                overflow: TextOverflow.ellipsis,
-                              ),
+                GlassCard(
+                  padding: EdgeInsets.all(isMobile ? 14 : 20),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      const Row(
+                        children: [
+                          Icon(Icons.timeline, color: kPremiumGold),
+                          SizedBox(width: 10),
+                          Expanded(
+                            child: Text(
+                              'Project Milestones & Deliverables',
+                              style: TextStyle(fontSize: 15, fontWeight: FontWeight.bold, color: kPremiumText),
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
                             ),
-                          ],
-                        ),
-                        const SizedBox(height: 16),
-                        _buildMilestoneTile('Requirement Gathering & Setup', 'Completed', Colors.green, true),
-                        const Divider(),
-                        _buildMilestoneTile('Database Schema & RLS Integration', 'Completed', Colors.green, true),
-                        const Divider(),
-                        _buildMilestoneTile('Portal Dashboard & Dynamic Sync', 'In Progress', Colors.indigo, false),
-                        const Divider(),
-                        _buildMilestoneTile('Final Quality Sign-off', 'Upcoming', Colors.grey, false),
-                      ],
-                    ),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 16),
+                      _buildMilestoneTile('Requirement Gathering & Setup', 'Completed', kPremiumSuccess, true),
+                      const Divider(color: Colors.white10, height: 1),
+                      const SizedBox(height: 10),
+                      _buildMilestoneTile('Database Schema & RLS Integration', 'Completed', kPremiumSuccess, true),
+                      const Divider(color: Colors.white10, height: 1),
+                      const SizedBox(height: 10),
+                      _buildMilestoneTile('Portal Dashboard & Dynamic Sync', 'In Progress', kPremiumBlue, false),
+                      const Divider(color: Colors.white10, height: 1),
+                      const SizedBox(height: 10),
+                      _buildMilestoneTile('Final Quality Sign-off', 'Upcoming', kPremiumMuted, false),
+                    ],
                   ),
                 ),
               ],
@@ -548,31 +458,21 @@ class ClientOverviewBody extends StatelessWidget {
     required IconData icon,
     required Color color,
   }) {
-    return Container(
+    return GlassCard(
+      margin: EdgeInsets.zero,
       padding: const EdgeInsets.all(14),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(16),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withOpacity(0.04),
-            blurRadius: 8,
-            offset: const Offset(0, 2),
-          ),
-        ],
-      ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           CircleAvatar(
             radius: 18,
-            backgroundColor: color.withOpacity(0.12),
-            child: Icon(icon, color: color, size: 20),
+            backgroundColor: color.withOpacity(0.15),
+            child: Icon(icon, color: color, size: 18),
           ),
           const SizedBox(height: 10),
           Text(
             title,
-            style: TextStyle(fontSize: 12, color: Colors.grey.shade600),
+            style: const TextStyle(fontSize: 12, color: kPremiumMuted),
           ),
           const SizedBox(height: 4),
           FittedBox(
@@ -580,7 +480,7 @@ class ClientOverviewBody extends StatelessWidget {
             alignment: Alignment.centerLeft,
             child: Text(
               value,
-              style: const TextStyle(fontSize: 15, fontWeight: FontWeight.bold, color: Colors.black87),
+              style: const TextStyle(fontSize: 15, fontWeight: FontWeight.bold, color: kPremiumText),
             ),
           ),
         ],
@@ -604,7 +504,7 @@ class ClientOverviewBody extends StatelessWidget {
               title,
               style: TextStyle(
                 fontWeight: isDone ? FontWeight.w600 : FontWeight.normal,
-                color: isDone ? Colors.black87 : Colors.black54,
+                color: isDone ? kPremiumText : kPremiumMuted,
                 fontSize: 13,
               ),
             ),
@@ -615,6 +515,7 @@ class ClientOverviewBody extends StatelessWidget {
             decoration: BoxDecoration(
               color: color.withOpacity(0.12),
               borderRadius: BorderRadius.circular(8),
+              border: Border.all(color: color.withOpacity(0.3)),
             ),
             child: Text(
               status,
@@ -673,111 +574,139 @@ class ClientManagerBody extends StatelessWidget {
       },
       child: SingleChildScrollView(
         physics: const AlwaysScrollableScrollPhysics(),
-        padding: const EdgeInsets.all(20),
+        padding: const EdgeInsets.only(left: 20, right: 20, top: 20, bottom: 100),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Card(
-              elevation: 4,
-              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(18)),
-              child: Padding(
-                padding: const EdgeInsets.all(24),
-                child: Column(
-                  children: [
-                    CircleAvatar(
-                      radius: 42,
-                      backgroundColor: Colors.indigo.shade600,
-                      child: Text(
-                        manager.name.isNotEmpty ? manager.name[0].toUpperCase() : 'M',
-                        style: const TextStyle(fontSize: 32, color: Colors.white, fontWeight: FontWeight.bold),
-                      ),
+            // Section title
+            const Text('Your Dedicated Account Manager', style: TextStyle(fontSize: 17, fontWeight: FontWeight.bold, color: kPremiumGold)),
+            const SizedBox(height: 14),
+
+            // Manager Profile Card
+            GlassCard(
+              padding: const EdgeInsets.all(24),
+              child: Column(
+                children: [
+                  PremiumAvatar(
+                    label: manager.name,
+                    style: AvatarStyle.gradient,
+                    size: 80,
+                    radius: 40,
+                  ),
+                  const SizedBox(height: 16),
+                  Text(
+                    manager.name,
+                    textAlign: TextAlign.center,
+                    style: const TextStyle(fontSize: 22, fontWeight: FontWeight.bold, color: kPremiumText),
+                  ),
+                  const SizedBox(height: 6),
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 5),
+                    decoration: BoxDecoration(
+                      color: kPremiumGold.withOpacity(0.12),
+                      borderRadius: BorderRadius.circular(12),
+                      border: Border.all(color: kPremiumGold.withOpacity(0.3)),
                     ),
-                    const SizedBox(height: 16),
-                    Text(
-                      manager.name,
-                      style: const TextStyle(fontSize: 22, fontWeight: FontWeight.bold),
+                    child: Text(
+                      '${manager.role} • ${manager.department}',
+                      textAlign: TextAlign.center,
+                      style: const TextStyle(color: kPremiumGold, fontWeight: FontWeight.w600, fontSize: 13),
                     ),
-                    const SizedBox(height: 4),
-                    Text(
-                      '${manager.role} (${manager.department})',
-                      style: TextStyle(color: Colors.indigo.shade700, fontWeight: FontWeight.w600),
-                    ),
-                    const SizedBox(height: 20),
-                    const Divider(),
-                    ListTile(
-                      leading: const Icon(Icons.email_outlined, color: Colors.indigo),
-                      title: const Text('Email Address'),
-                      subtitle: Text(manager.email),
-                    ),
-                    ListTile(
-                      leading: const Icon(Icons.phone_outlined, color: Colors.indigo),
-                      title: const Text('Direct Phone'),
-                      subtitle: Text(manager.phone),
-                    ),
-                    ListTile(
-                      leading: const Icon(Icons.check_circle_outline, color: Colors.green),
-                      title: const Text('Manager Availability'),
-                      subtitle: Text('Status: ${manager.status}'),
-                    ),
-                  ],
-                ),
+                  ),
+                  const SizedBox(height: 20),
+                  const Divider(color: Colors.white10),
+                  const SizedBox(height: 8),
+                  _managerInfoTile(Icons.email_outlined, 'Email Address', manager.email),
+                  _managerInfoTile(Icons.phone_outlined, 'Direct Phone', manager.phone.isNotEmpty ? manager.phone : 'Not provided'),
+                  _managerInfoTile(
+                    Icons.circle,
+                    'Availability Status',
+                    manager.status,
+                    valueColor: manager.status == 'Active' ? kPremiumSuccess : kPremiumWarning,
+                  ),
+                ],
               ),
             ),
-            const SizedBox(height: 24),
-            Card(
-              elevation: 2,
-              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-              child: Padding(
-                padding: const EdgeInsets.all(20),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    const Row(
-                      children: [
-                        Icon(Icons.headset_mic_outlined, color: Colors.indigo),
-                        SizedBox(width: 10),
-                        Expanded(
-                          child: Text(
-                            'Need Support or Advice?',
-                            style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
-                            overflow: TextOverflow.ellipsis,
-                          ),
-                        ),
-                      ],
-                    ),
-                    const SizedBox(height: 10),
-                    const Text(
-                      'Our dedicated team is ready to assist you with active milestones, change requests, or consultation.',
-                      style: TextStyle(color: Colors.black54),
-                    ),
-                    const SizedBox(height: 16),
-                    SizedBox(
-                      width: double.infinity,
-                      child: ElevatedButton.icon(
-                        onPressed: () {
-                          ScaffoldMessenger.of(context).showSnackBar(
-                            const SnackBar(content: Text('Support request sent to your account manager!'), backgroundColor: Colors.indigo),
-                          );
-                        },
-                        icon: const Icon(Icons.support),
-                        label: const FittedBox(
-                          fit: BoxFit.scaleDown,
-                          child: Text('Request Account Consultation'),
-                        ),
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: Colors.indigo,
-                          foregroundColor: Colors.white,
-                          padding: const EdgeInsets.symmetric(vertical: 14),
-                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+
+            const SizedBox(height: 20),
+
+            // Support Section
+            GlassCard(
+              padding: const EdgeInsets.all(20),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Row(
+                    children: [
+                      Icon(Icons.headset_mic_outlined, color: kPremiumGold),
+                      SizedBox(width: 10),
+                      Expanded(
+                        child: Text(
+                          'Need Support or Advice?',
+                          style: TextStyle(fontSize: 15, fontWeight: FontWeight.bold, color: kPremiumText),
+                          overflow: TextOverflow.ellipsis,
                         ),
                       ),
-                    ),
-                  ],
-                ),
+                    ],
+                  ),
+                  const SizedBox(height: 10),
+                  const Text(
+                    'Our dedicated team is ready to assist you with active milestones, change requests, or consultation.',
+                    style: TextStyle(color: kPremiumMuted, fontSize: 13),
+                  ),
+                  const SizedBox(height: 16),
+                  GoldButton(
+                    label: 'Request Account Consultation',
+                    icon: Icons.support_agent,
+                    expand: true,
+                    onPressed: () {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        SnackBar(
+                          content: const Text('Support request sent to your account manager!'),
+                          backgroundColor: kPremiumSuccess,
+                          behavior: SnackBarBehavior.floating,
+                        ),
+                      );
+                    },
+                  ),
+                ],
               ),
             ),
           ],
         ),
+      ),
+    );
+  }
+
+  static Widget _managerInfoTile(IconData icon, String title, String value, {Color? valueColor}) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 6),
+      child: Row(
+        children: [
+          PremiumAvatar(
+            icon: icon,
+            style: AvatarStyle.glowIcon,
+            size: 36,
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(title, style: const TextStyle(fontSize: 11, color: kPremiumMuted)),
+                const SizedBox(height: 2),
+                Text(
+                  value,
+                  style: TextStyle(
+                    fontWeight: FontWeight.bold,
+                    fontSize: 13,
+                    color: valueColor ?? kPremiumText,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
       ),
     );
   }
@@ -905,99 +834,143 @@ class ClientProfileBody extends StatelessWidget {
     final user = Supabase.instance.client.auth.currentUser;
 
     return RefreshIndicator(
+      color: kPremiumGold,
       onRefresh: () async {
         await store.refreshFromSupabase();
       },
       child: SingleChildScrollView(
         physics: const AlwaysScrollableScrollPhysics(),
         padding: const EdgeInsets.all(20),
-        child: Column(
-          children: [
-            Container(
-              padding: const EdgeInsets.all(24),
-              decoration: BoxDecoration(
-                color: Colors.white,
-                borderRadius: BorderRadius.circular(20),
-                boxShadow: [
-                  BoxShadow(
-                    color: Colors.black.withOpacity(0.05),
-                    blurRadius: 10,
-                    offset: const Offset(0, 4),
+        child: Center(
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: 750),
+            child: Column(
+              children: [
+                GlassCard(
+                  padding: const EdgeInsets.all(24),
+                  child: Column(
+                    children: [
+                      PremiumAvatar(
+                        label: name,
+                        style: AvatarStyle.gradient,
+                        size: 72,
+                        radius: 36,
+                      ),
+                      const SizedBox(height: 14),
+                      Text(
+                        name,
+                        style: const TextStyle(fontSize: 22, fontWeight: FontWeight.bold, color: kPremiumGold),
+                      ),
+                      const SizedBox(height: 4),
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 4),
+                        decoration: BoxDecoration(
+                          color: kPremiumGold.withOpacity(0.15),
+                          borderRadius: BorderRadius.circular(12),
+                          border: Border.all(color: kPremiumGold.withOpacity(0.3)),
+                        ),
+                        child: const Text(
+                          'Client Partner Account',
+                          style: TextStyle(color: kPremiumGold, fontWeight: FontWeight.bold, fontSize: 12),
+                        ),
+                      ),
+                      const SizedBox(height: 16),
+                      ElevatedButton.icon(
+                        style: ElevatedButton.styleFrom(backgroundColor: kPremiumGold, foregroundColor: kPremiumBg),
+                        onPressed: () => _editClientProfileDialog(context, user),
+                        icon: const Icon(Icons.edit, size: 18),
+                        label: const Text('Edit Profile Details', style: TextStyle(fontWeight: FontWeight.bold)),
+                      ),
+                      const SizedBox(height: 20),
+                      const Divider(color: Colors.white10),
+                      const SizedBox(height: 10),
+                      ListTile(
+                        leading: const Icon(Icons.business_outlined, color: kPremiumGold),
+                        title: const Text('Company / Organization', style: TextStyle(color: kPremiumMuted, fontSize: 12)),
+                        subtitle: Text(company, style: const TextStyle(color: kPremiumText, fontWeight: FontWeight.bold, fontSize: 15)),
+                      ),
+                      ListTile(
+                        leading: const Icon(Icons.email_outlined, color: kPremiumGold),
+                        title: const Text('Email Address', style: TextStyle(color: kPremiumMuted, fontSize: 12)),
+                        subtitle: Text(email, style: const TextStyle(color: kPremiumText, fontWeight: FontWeight.bold, fontSize: 15)),
+                      ),
+                      ListTile(
+                        leading: const Icon(Icons.verified_user_outlined, color: kPremiumGold),
+                        title: const Text('Authentication Source', style: TextStyle(color: kPremiumMuted, fontSize: 12)),
+                        subtitle: const Text('Supabase Auth (Role: Client)', style: const TextStyle(color: kPremiumText, fontWeight: FontWeight.bold, fontSize: 15)),
+                      ),
+                    ],
                   ),
-                ],
-              ),
-              child: Column(
-                children: [
-                  CircleAvatar(
-                    radius: 45,
-                    backgroundColor: Colors.indigo.shade600,
-                    child: Text(
-                      name.isNotEmpty ? name[0].toUpperCase() : 'C',
-                      style: const TextStyle(fontSize: 36, color: Colors.white, fontWeight: FontWeight.bold),
-                    ),
-                  ),
-                  const SizedBox(height: 16),
-                  Text(
-                    name,
-                    style: const TextStyle(fontSize: 22, fontWeight: FontWeight.bold),
-                  ),
-                  const SizedBox(height: 4),
-                  Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 4),
-                    decoration: BoxDecoration(
-                      color: Colors.indigo.shade50,
-                      borderRadius: BorderRadius.circular(12),
-                    ),
-                    child: const Text(
-                      'Client Portal Account',
-                      style: TextStyle(color: Colors.indigo, fontWeight: FontWeight.bold, fontSize: 13),
-                    ),
-                  ),
-                  const SizedBox(height: 16),
-                  OutlinedButton.icon(
-                    onPressed: () => _editClientProfileDialog(context, user),
-                    icon: const Icon(Icons.edit, color: Colors.indigo),
-                    label: const Text('Edit Profile Details', style: TextStyle(color: Colors.indigo)),
-                    style: OutlinedButton.styleFrom(
-                      side: const BorderSide(color: Colors.indigo),
-                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                    ),
-                  ),
-                  const SizedBox(height: 16),
-                  const Divider(),
-                  ListTile(
-                    leading: const Icon(Icons.business, color: Colors.indigo),
-                    title: const Text('Company / Organization'),
-                    subtitle: Text(company),
-                  ),
-                  ListTile(
-                    leading: const Icon(Icons.email, color: Colors.indigo),
-                    title: const Text('Email Address'),
-                    subtitle: Text(email),
-                  ),
-                  ListTile(
-                    leading: const Icon(Icons.verified_user_outlined, color: Colors.indigo),
-                    title: const Text('Authentication Source'),
-                    subtitle: const Text('Supabase Auth (Role: Client)'),
-                  ),
-                ],
-              ),
-            ),
-            const SizedBox(height: 24),
-            SizedBox(
-              width: double.infinity,
-              child: OutlinedButton.icon(
-                onPressed: onLogout,
-                icon: const Icon(Icons.logout, color: Colors.red),
-                label: const Text('Sign Out', style: TextStyle(color: Colors.red, fontWeight: FontWeight.bold)),
-                style: OutlinedButton.styleFrom(
-                  side: const BorderSide(color: Colors.red),
-                  padding: const EdgeInsets.symmetric(vertical: 14),
-                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
                 ),
-              ),
+                const SizedBox(height: 20),
+
+                // PORTAL PREFERENCES & ACTIONS CARD
+                GlassCard(
+                  padding: const EdgeInsets.all(16),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      const Text('Portal Actions & Settings', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: kPremiumGold)),
+                      const SizedBox(height: 12),
+
+                      // Settings Tile
+                      ListTile(
+                        onTap: () {
+                          Navigator.push(context, MaterialPageRoute(builder: (context) => const SettingsPage()));
+                        },
+                        leading: Container(
+                          padding: const EdgeInsets.all(8),
+                          decoration: BoxDecoration(color: Colors.blueAccent.withOpacity(0.15), borderRadius: BorderRadius.circular(10)),
+                          child: const Icon(Icons.settings_outlined, color: Colors.blueAccent, size: 20),
+                        ),
+                        title: const Text('Account & App Settings', style: TextStyle(fontWeight: FontWeight.bold, color: kPremiumText)),
+                        subtitle: const Text('Configure portal themes, notifications, and security', style: TextStyle(color: kPremiumMuted, fontSize: 12)),
+                        trailing: const Icon(Icons.arrow_forward_ios, color: kPremiumMuted, size: 14),
+                      ),
+                      const Divider(color: Colors.white10),
+
+                      // Refresh Data Tile
+                      ListTile(
+                        onTap: () async {
+                          await store.refreshFromSupabase();
+                          if (context.mounted) {
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              const SnackBar(content: Text('Client portal data refreshed from Supabase!'), backgroundColor: Colors.green),
+                            );
+                          }
+                        },
+                        leading: Container(
+                          padding: const EdgeInsets.all(8),
+                          decoration: BoxDecoration(color: Colors.tealAccent.withOpacity(0.15), borderRadius: BorderRadius.circular(10)),
+                          child: const Icon(Icons.refresh_outlined, color: Colors.tealAccent, size: 20),
+                        ),
+                        title: const Text('Sync Portal Data', style: TextStyle(fontWeight: FontWeight.bold, color: kPremiumText)),
+                        subtitle: const Text('Fetch latest active projects and workspace updates', style: TextStyle(color: kPremiumMuted, fontSize: 12)),
+                        trailing: const Icon(Icons.cloud_sync_outlined, color: kPremiumMuted, size: 16),
+                      ),
+                    ],
+                  ),
+                ),
+
+                const SizedBox(height: 20),
+
+                // SIGN OUT BUTTON
+                SizedBox(
+                  width: double.infinity,
+                  child: OutlinedButton.icon(
+                    onPressed: onLogout,
+                    icon: const Icon(Icons.logout, color: Colors.redAccent),
+                    label: const Text('Sign Out', style: TextStyle(color: Colors.redAccent, fontWeight: FontWeight.bold, fontSize: 15)),
+                    style: OutlinedButton.styleFrom(
+                      side: const BorderSide(color: Colors.redAccent),
+                      padding: const EdgeInsets.symmetric(vertical: 16),
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+                    ),
+                  ),
+                ),
+              ],
             ),
-          ],
+          ),
         ),
       ),
     );

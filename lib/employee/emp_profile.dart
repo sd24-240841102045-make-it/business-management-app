@@ -40,24 +40,59 @@ class _ProfileBodyState extends State<ProfileBody> {
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
-        title: const Text('Edit Admin Profile'),
+        backgroundColor: kPremiumSurface,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(20),
+          side: const BorderSide(color: kPremiumBorder),
+        ),
+        title: const Text(
+          'Edit Admin Profile',
+          style: TextStyle(fontWeight: FontWeight.bold, color: kPremiumGold),
+        ),
         content: SingleChildScrollView(
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
               TextField(
                 controller: nameCtrl,
-                decoration: const InputDecoration(labelText: 'Full Name', prefixIcon: Icon(Icons.person)),
+                style: const TextStyle(color: kPremiumText),
+                decoration: InputDecoration(
+                  labelText: 'Full Name',
+                  labelStyle: const TextStyle(color: kPremiumMuted),
+                  prefixIcon: const Icon(Icons.person, color: kPremiumGold),
+                  filled: true,
+                  fillColor: kPremiumSurface.withOpacity(0.5),
+                  enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: const BorderSide(color: Colors.white10)),
+                  focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: const BorderSide(color: kPremiumGold, width: 1.5)),
+                ),
               ),
               const SizedBox(height: 12),
               TextField(
                 controller: phoneCtrl,
-                decoration: const InputDecoration(labelText: 'Phone Number', prefixIcon: Icon(Icons.phone)),
+                style: const TextStyle(color: kPremiumText),
+                decoration: InputDecoration(
+                  labelText: 'Phone Number',
+                  labelStyle: const TextStyle(color: kPremiumMuted),
+                  prefixIcon: const Icon(Icons.phone, color: kPremiumGold),
+                  filled: true,
+                  fillColor: kPremiumSurface.withOpacity(0.5),
+                  enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: const BorderSide(color: Colors.white10)),
+                  focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: const BorderSide(color: kPremiumGold, width: 1.5)),
+                ),
               ),
               const SizedBox(height: 12),
               TextField(
                 controller: deptCtrl,
-                decoration: const InputDecoration(labelText: 'Department', prefixIcon: Icon(Icons.business_center)),
+                style: const TextStyle(color: kPremiumText),
+                decoration: InputDecoration(
+                  labelText: 'Department',
+                  labelStyle: const TextStyle(color: kPremiumMuted),
+                  prefixIcon: const Icon(Icons.business_center, color: kPremiumGold),
+                  filled: true,
+                  fillColor: kPremiumSurface.withOpacity(0.5),
+                  enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: const BorderSide(color: Colors.white10)),
+                  focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: const BorderSide(color: kPremiumGold, width: 1.5)),
+                ),
               ),
             ],
           ),
@@ -65,7 +100,7 @@ class _ProfileBodyState extends State<ProfileBody> {
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(context),
-            child: const Text('Cancel'),
+            child: const Text('Cancel', style: TextStyle(color: kPremiumMuted)),
           ),
           ElevatedButton(
             onPressed: () async {
@@ -121,8 +156,8 @@ class _ProfileBodyState extends State<ProfileBody> {
                 }
               }
             },
-            style: ElevatedButton.styleFrom(backgroundColor: Colors.deepPurple),
-            child: const Text('Save Changes', style: TextStyle(color: Colors.white)),
+            style: ElevatedButton.styleFrom(backgroundColor: kPremiumGold, foregroundColor: kPremiumBg),
+            child: const Text('Save Changes', style: TextStyle(fontWeight: FontWeight.bold)),
           ),
         ],
       ),

@@ -16,7 +16,10 @@ class ReportsPage extends StatelessWidget {
         return Scaffold(
           backgroundColor: Colors.transparent,
           appBar: AppBar(
-            title: const Text('Reports & Analytics', style: TextStyle(fontWeight: FontWeight.bold)),
+            title: const Text('Reports & Analytics', style: TextStyle(fontWeight: FontWeight.bold, color: kPremiumGold)),
+            backgroundColor: kPremiumBg,
+            foregroundColor: kPremiumGold,
+            elevation: 0,
           ),
           body: SingleChildScrollView(
             padding: EdgeInsets.symmetric(horizontal: hPad, vertical: 20),

@@ -36,7 +36,10 @@ class FinancePage extends StatelessWidget {
         return Scaffold(
           backgroundColor: Colors.transparent,
           appBar: AppBar(
-            title: const Text('Finance & Ledger', style: TextStyle(fontWeight: FontWeight.bold)),
+            title: const Text('Finance & Ledger', style: TextStyle(fontWeight: FontWeight.bold, color: kPremiumGold)),
+            backgroundColor: kPremiumBg,
+            foregroundColor: kPremiumGold,
+            elevation: 0,
           ),
           body: SingleChildScrollView(
             padding: EdgeInsets.symmetric(horizontal: hPad, vertical: 20),

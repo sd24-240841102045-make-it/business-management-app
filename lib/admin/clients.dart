@@ -69,7 +69,7 @@ class ClientsBodyState extends State<ClientsBody> {
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       if (_store.isLoadingFromSupabase) ...[
-                        const LinearProgressIndicator(color: Colors.deepPurple),
+                        const LinearProgressIndicator(color: kPremiumGold),
                         const SizedBox(height: 10),
                       ],
                 HeroBanner(
@@ -105,7 +105,7 @@ class ClientsBodyState extends State<ClientsBody> {
                         physics: const NeverScrollableScrollPhysics(),
                         gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
                           crossAxisCount: isDesktop ? 2 : 1,
-                          mainAxisExtent: 200,
+                          mainAxisExtent: 225,
                           crossAxisSpacing: 16,
                           mainAxisSpacing: 16,
                         ),
@@ -118,146 +118,151 @@ class ClientsBodyState extends State<ClientsBody> {
                             child: GlassCard(
                               margin: EdgeInsets.zero,
                               padding: const EdgeInsets.all(16),
-                            onTap: () {
-                              Navigator.push(
-                                context,
-                                MaterialPageRoute(
-                                  builder: (context) => ClientProfilePage(client: client),
-                                ),
-                              );
-                            },
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              mainAxisSize: MainAxisSize.min,
-                              children: [
-                                Row(
-                                  children: [
-                                    PremiumAvatar(
-                                      label: client.name,
-                                      style: AvatarStyle.gradient,
-                                      size: 44,
-                                      radius: 22,
-                                    ),
-                                    const SizedBox(width: 10),
-                                    Expanded(
-                                      child: Column(
-                                        crossAxisAlignment: CrossAxisAlignment.start,
-                                        children: [
-                                          Text(
-                                            client.name,
-                                            style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 15, color: kPremiumText),
-                                            maxLines: 1,
-                                            overflow: TextOverflow.ellipsis,
-                                          ),
-                                          Text(
-                                            client.company,
-                                            style: const TextStyle(color: kPremiumMuted, fontSize: 12),
-                                            maxLines: 1,
-                                            overflow: TextOverflow.ellipsis,
-                                          ),
-                                        ],
-                                      ),
-                                    ),
-                                    Container(
-                                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-                                      decoration: BoxDecoration(
-                                        color: client.status == 'Active' ? Colors.green.withOpacity(0.15) : Colors.red.withOpacity(0.15),
-                                        borderRadius: BorderRadius.circular(10),
-                                        border: Border.all(color: client.status == 'Active' ? Colors.green.withOpacity(0.3) : Colors.red.withOpacity(0.3)),
-                                      ),
-                                      child: Text(
-                                        client.status,
-                                        style: TextStyle(
-                                          color: client.status == 'Active' ? Colors.greenAccent : Colors.redAccent,
-                                          fontWeight: FontWeight.bold,
-                                          fontSize: 11,
-                                        ),
-                                      ),
-                                    ),
-                                    const SizedBox(width: 4),
-                                    IconButton(
-                                      icon: const Icon(Icons.edit_outlined, color: kPremiumMuted, size: 18),
-                                      onPressed: () => _editClient(client),
-                                      tooltip: 'Edit Client',
-                                      padding: EdgeInsets.zero,
-                                      constraints: const BoxConstraints(),
-                                    ),
-                                    const SizedBox(width: 4),
-                                    IconButton(
-                                      icon: const Icon(Icons.delete_outline, color: Colors.redAccent, size: 18),
-                                      onPressed: () => _confirmDeleteClient(client),
-                                      tooltip: 'Delete Client',
-                                      padding: EdgeInsets.zero,
-                                      constraints: const BoxConstraints(),
-                                    ),
-                                  ],
-                                ),
-
-                                const Divider(height: 18, color: Colors.white10),
-
-                                Row(
-                                  children: [
-                                    const Icon(Icons.email_outlined, size: 15, color: kPremiumMuted),
-                                    const SizedBox(width: 6),
-                                    Expanded(child: Text(client.email, style: const TextStyle(fontSize: 12, color: kPremiumMuted), maxLines: 1, overflow: TextOverflow.ellipsis)),
-                                  ],
-                                ),
-                                const SizedBox(height: 4),
-                                Row(
-                                  children: [
-                                    const Icon(Icons.phone_outlined, size: 15, color: kPremiumMuted),
-                                    const SizedBox(width: 6),
-                                    Text(client.phone, style: const TextStyle(fontSize: 12, color: kPremiumMuted)),
-                                  ],
-                                ),
-
-                                const SizedBox(height: 10),
-
-                                // HR Employee Assignment Lead Badge
-                                Container(
-                                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-                                  decoration: BoxDecoration(
-                                    color: kPremiumGold.withOpacity(0.12),
-                                    borderRadius: BorderRadius.circular(10),
-                                    border: Border.all(color: kPremiumGold.withOpacity(0.3)),
+                              onTap: () {
+                                Navigator.push(
+                                  context,
+                                  MaterialPageRoute(
+                                    builder: (context) => ClientProfilePage(client: client),
                                   ),
-                                  child: Row(
-                                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                );
+                              },
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                children: [
+                                  Row(
+                                    crossAxisAlignment: CrossAxisAlignment.center,
                                     children: [
+                                      PremiumAvatar(
+                                        label: client.name,
+                                        style: AvatarStyle.gradient,
+                                        size: 44,
+                                        radius: 22,
+                                      ),
+                                      const SizedBox(width: 10),
                                       Expanded(
-                                        child: Row(
+                                        child: Column(
+                                          crossAxisAlignment: CrossAxisAlignment.start,
                                           children: [
-                                            const Icon(Icons.badge, size: 15, color: kPremiumGold),
-                                            const SizedBox(width: 6),
-                                            Expanded(
-                                              child: Text(
-                                                'HR Lead: ${client.assignedEmployeeName ?? "Unassigned"}',
-                                                style: const TextStyle(
-                                                  fontSize: 12,
-                                                  color: kPremiumGold,
-                                                  fontWeight: FontWeight.w600,
-                                                ),
-                                                maxLines: 1,
-                                                overflow: TextOverflow.ellipsis,
-                                              ),
+                                            Text(
+                                              client.name,
+                                              style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 15, color: kPremiumGold),
+                                              maxLines: 1,
+                                              overflow: TextOverflow.ellipsis,
+                                            ),
+                                            Text(
+                                              client.company,
+                                              style: const TextStyle(color: kPremiumMuted, fontSize: 12),
+                                              maxLines: 1,
+                                              overflow: TextOverflow.ellipsis,
                                             ),
                                           ],
                                         ),
                                       ),
-                                      InkWell(
-                                        onTap: () => _showAssignEmployeeModal(client),
-                                        child: const Text(
-                                          'Change',
-                                          style: TextStyle(color: kPremiumGold, fontWeight: FontWeight.bold, fontSize: 11),
+                                      const SizedBox(width: 6),
+                                      Container(
+                                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                                        decoration: BoxDecoration(
+                                          color: client.status == 'Active' ? Colors.green.withOpacity(0.15) : Colors.red.withOpacity(0.15),
+                                          borderRadius: BorderRadius.circular(10),
+                                          border: Border.all(color: client.status == 'Active' ? Colors.green.withOpacity(0.3) : Colors.red.withOpacity(0.3)),
+                                        ),
+                                        child: Text(
+                                          client.status,
+                                          style: TextStyle(
+                                            color: client.status == 'Active' ? Colors.greenAccent : Colors.redAccent,
+                                            fontWeight: FontWeight.bold,
+                                            fontSize: 11,
+                                          ),
                                         ),
                                       ),
                                     ],
                                   ),
-                                ),
-                              ],
+
+                                  const Divider(height: 16, color: Colors.white10),
+
+                                  Row(
+                                    children: [
+                                      const Icon(Icons.email_outlined, size: 15, color: kPremiumGold),
+                                      const SizedBox(width: 6),
+                                      Expanded(child: Text(client.email, style: const TextStyle(fontSize: 12, color: kPremiumMuted), maxLines: 1, overflow: TextOverflow.ellipsis)),
+                                    ],
+                                  ),
+                                  const SizedBox(height: 4),
+                                  Row(
+                                    children: [
+                                      const Icon(Icons.phone_outlined, size: 15, color: kPremiumGold),
+                                      const SizedBox(width: 6),
+                                      Text(client.phone, style: const TextStyle(fontSize: 12, color: kPremiumMuted)),
+                                    ],
+                                  ),
+
+                                  const SizedBox(height: 8),
+
+                                  // HR Employee Assignment Lead Badge
+                                  Container(
+                                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                                    decoration: BoxDecoration(
+                                      color: kPremiumGold.withOpacity(0.12),
+                                      borderRadius: BorderRadius.circular(10),
+                                      border: Border.all(color: kPremiumGold.withOpacity(0.3)),
+                                    ),
+                                    child: Row(
+                                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                      crossAxisAlignment: CrossAxisAlignment.center,
+                                      children: [
+                                        Expanded(
+                                          child: Row(
+                                            crossAxisAlignment: CrossAxisAlignment.center,
+                                            children: [
+                                              const Icon(Icons.badge_outlined, size: 15, color: kPremiumGold),
+                                              const SizedBox(width: 6),
+                                              Expanded(
+                                                child: Text(
+                                                  'HR Lead: ${client.assignedEmployeeName ?? "Unassigned"}',
+                                                  style: const TextStyle(
+                                                    fontSize: 12,
+                                                    color: kPremiumGold,
+                                                    fontWeight: FontWeight.w600,
+                                                  ),
+                                                  maxLines: 1,
+                                                  overflow: TextOverflow.ellipsis,
+                                                ),
+                                              ),
+                                            ],
+                                          ),
+                                        ),
+                                        InkWell(
+                                          onTap: () => _showAssignEmployeeModal(client),
+                                          child: const Text(
+                                            'Change',
+                                            style: TextStyle(color: kPremiumGold, fontWeight: FontWeight.bold, fontSize: 11),
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                  ),
+
+                                  // Card Action Row (Edit & Delete Buttons)
+                                  Row(
+                                    mainAxisAlignment: MainAxisAlignment.end,
+                                    children: [
+                                      TextButton.icon(
+                                        onPressed: () => _editClient(client),
+                                        icon: const Icon(Icons.edit_outlined, color: kPremiumMuted, size: 16),
+                                        label: const Text('Edit', style: TextStyle(color: kPremiumMuted, fontSize: 12)),
+                                      ),
+                                      TextButton.icon(
+                                        onPressed: () => _confirmDeleteClient(client),
+                                        icon: const Icon(Icons.delete_outline, color: Colors.redAccent, size: 16),
+                                        label: const Text('Delete', style: TextStyle(color: Colors.redAccent, fontSize: 12)),
+                                      ),
+                                    ],
+                                  ),
+                                ],
+                              ),
                             ),
-                          ),
-                        );
+                          );
                       },
                       ),
               ],
@@ -755,8 +760,9 @@ class _ClientProfilePageState extends State<ClientProfilePage> {
   Widget build(BuildContext context) {
     Color statusColor = _currentClient.status == 'Active' ? Colors.greenAccent : Colors.orangeAccent;
 
-    return Scaffold(
-      backgroundColor: Colors.transparent,
+    return PremiumBackground(
+      child: Scaffold(
+        backgroundColor: Colors.transparent,
       appBar: AppBar(
         title: Text('${_currentClient.name}\'s Profile', style: const TextStyle(fontWeight: FontWeight.bold, color: kPremiumGold)),
         backgroundColor: kPremiumBg,
@@ -885,8 +891,9 @@ class _ClientProfilePageState extends State<ClientProfilePage> {
           ),
         ),
       ),
-    );
-  }
+    ),
+  );
+}
 
   Widget _buildInfoCard(IconData icon, String title, String value) {
     return GlassCard(
