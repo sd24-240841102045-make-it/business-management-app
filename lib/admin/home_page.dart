@@ -259,20 +259,23 @@ class _HomeBodyState extends State<HomeBody> {
                 mainAxisSpacing: 14,
                 childAspectRatio: isDesktop ? 1.6 : isTablet ? 1.4 : 1.15,
                 children: [
+
+                   _actionCard(
+                    icon: Icons.badge,
+                    title: 'Employees (HR)',
+                    subtitle: '${_store.employees.length} Members',
+                    color: Colors.orange,
+                    onTap: () => widget.onNavigate(1),
+                  ),
+                  
                   _actionCard(
                     icon: Icons.people,
                     title: 'Clients (CRM)',
                     subtitle: _isLoadingStats ? '...' : '${_totalClients ?? 0} Accounts',
                     color: Colors.blue,
-                    onTap: () => widget.onNavigate(1),
-                  ),
-                  _actionCard(
-                    icon: Icons.badge,
-                    title: 'Employees (HR)',
-                    subtitle: '${_store.employees.length} Members',
-                    color: Colors.orange,
                     onTap: () => widget.onNavigate(2),
                   ),
+                 
                   _actionCard(
                     icon: Icons.calendar_month,
                     title: 'Attendance & Leave',
