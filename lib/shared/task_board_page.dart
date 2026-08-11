@@ -12,8 +12,31 @@ class TaskBoardPage extends StatefulWidget {
 }
 
 class _TaskBoardPageState extends State<TaskBoardPage> {
-  final _tasksStream = SupabaseService().client.from('tasks').stream(primaryKey: ['id']);
   final AppDataStore _store = AppDataStore();
+
+  @override
+  void initState() {
+    super.initState();
+    _store.addListener(_onStoreUpdate);
+    _loadInitialData();
+  }
+
+  @override
+  void dispose() {
+    _store.removeListener(_onStoreUpdate);
+    super.dispose();
+  }
+
+  void _onStoreUpdate() {
+    if (mounted) setState(() {});
+  }
+
+  Future<void> _loadInitialData() async {
+    if (_store.tasks.isEmpty) {
+      await _store.refreshFromSupabase();
+      if (mounted) setState(() {});
+    }
+  }
 
   void _showAddTaskDialog() {
     final titleCtrl = TextEditingController();
@@ -99,12 +122,16 @@ class _TaskBoardPageState extends State<TaskBoardPage> {
             }
 
             return Dialog(
-              backgroundColor: Colors.transparent,
-              child: ConstrainedBox(
-                constraints: const BoxConstraints(maxWidth: 550),
-                child: GlassCard(
-                  padding: const EdgeInsets.all(26),
-                  child: SingleChildScrollView(
+              backgroundColor: kPremiumSurface,
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(20),
+                side: const BorderSide(color: kPremiumBorder),
+              ),
+              child: SingleChildScrollView(
+                child: Padding(
+                  padding: const EdgeInsets.all(24.0),
+                  child: ConstrainedBox(
+                    constraints: const BoxConstraints(maxWidth: 500),
                     child: Column(
                       mainAxisSize: MainAxisSize.min,
                       crossAxisAlignment: CrossAxisAlignment.start,
@@ -112,10 +139,13 @@ class _TaskBoardPageState extends State<TaskBoardPage> {
                         Row(
                           mainAxisAlignment: MainAxisAlignment.spaceBetween,
                           children: [
-                            const Text('Add Kanban Task', style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: kPremiumGold)),
+                            const Text(
+                              'Create New Task',
+                              style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: kPremiumGold),
+                            ),
                             IconButton(
-                              icon: const Icon(Icons.close, color: kPremiumMuted),
                               onPressed: () => Navigator.pop(context),
+                              icon: const Icon(Icons.close, color: kPremiumMuted),
                             ),
                           ],
                         ),
@@ -125,34 +155,35 @@ class _TaskBoardPageState extends State<TaskBoardPage> {
                           controller: titleCtrl,
                           style: const TextStyle(color: kPremiumText),
                           decoration: InputDecoration(
-                            labelText: 'Task Title *',
+                            labelText: 'Task Title',
                             labelStyle: const TextStyle(color: kPremiumMuted),
-                            prefixIcon: const Icon(Icons.assignment_outlined, color: kPremiumGold),
+                            prefixIcon: const Icon(Icons.title, color: kPremiumGold),
                             filled: true,
                             fillColor: kPremiumSurface.withOpacity(0.5),
-                            border: OutlineInputBorder(borderRadius: BorderRadius.circular(14)),
+                            enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: const BorderSide(color: Colors.white10)),
+                            focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: const BorderSide(color: kPremiumGold, width: 1.5)),
                           ),
                         ),
                         const SizedBox(height: 14),
 
                         TextField(
                           controller: descCtrl,
-                          maxLines: 2,
+                          maxLines: 3,
                           style: const TextStyle(color: kPremiumText),
                           decoration: InputDecoration(
                             labelText: 'Task Description',
                             labelStyle: const TextStyle(color: kPremiumMuted),
-                            prefixIcon: const Icon(Icons.description_outlined, color: kPremiumGold),
+                            prefixIcon: const Icon(Icons.description, color: kPremiumGold),
                             filled: true,
                             fillColor: kPremiumSurface.withOpacity(0.5),
-                            border: OutlineInputBorder(borderRadius: BorderRadius.circular(14)),
+                            enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: const BorderSide(color: Colors.white10)),
+                            focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: const BorderSide(color: kPremiumGold, width: 1.5)),
                           ),
                         ),
                         const SizedBox(height: 14),
 
                         if (_store.projects.isNotEmpty) ...[
                           DropdownButtonFormField<String>(
-                            isExpanded: true,
                             value: selectedProjectId,
                             dropdownColor: kPremiumSurface,
                             style: const TextStyle(color: kPremiumText),
@@ -162,109 +193,120 @@ class _TaskBoardPageState extends State<TaskBoardPage> {
                               prefixIcon: const Icon(Icons.folder_outlined, color: kPremiumGold),
                               filled: true,
                               fillColor: kPremiumSurface.withOpacity(0.5),
-                              border: OutlineInputBorder(borderRadius: BorderRadius.circular(14)),
+                              enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: const BorderSide(color: Colors.white10)),
+                              focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: const BorderSide(color: kPremiumGold, width: 1.5)),
                             ),
                             items: _store.projects.map((p) {
-                              return DropdownMenuItem(value: p.id, child: Text(p.name, style: const TextStyle(color: kPremiumText)));
+                              return DropdownMenuItem<String>(
+                                value: p.id,
+                                child: Text(p.name, style: const TextStyle(color: kPremiumText)),
+                              );
                             }).toList(),
-                            onChanged: (val) => setModalState(() => selectedProjectId = val),
+                            onChanged: (val) {
+                              setModalState(() => selectedProjectId = val);
+                            },
                           ),
                           const SizedBox(height: 14),
                         ],
 
-                        DropdownButtonFormField<String>(
-                          isExpanded: true,
-                          value: selectedEmployeeName,
-                          dropdownColor: kPremiumSurface,
-                          style: const TextStyle(color: kPremiumText),
-                          decoration: InputDecoration(
-                            labelText: 'Assign HR Employee',
-                            labelStyle: const TextStyle(color: kPremiumMuted),
-                            prefixIcon: const Icon(Icons.person_outline, color: kPremiumGold),
-                            filled: true,
-                            fillColor: kPremiumSurface.withOpacity(0.5),
-                            border: OutlineInputBorder(borderRadius: BorderRadius.circular(14)),
+                        if (_store.employees.isNotEmpty) ...[
+                          DropdownButtonFormField<String>(
+                            value: selectedEmployeeName,
+                            dropdownColor: kPremiumSurface,
+                            style: const TextStyle(color: kPremiumText),
+                            decoration: InputDecoration(
+                              labelText: 'Assign Member',
+                              labelStyle: const TextStyle(color: kPremiumMuted),
+                              prefixIcon: const Icon(Icons.person_outline, color: kPremiumGold),
+                              filled: true,
+                              fillColor: kPremiumSurface.withOpacity(0.5),
+                              enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: const BorderSide(color: Colors.white10)),
+                              focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: const BorderSide(color: kPremiumGold, width: 1.5)),
+                            ),
+                            items: _store.employees.map((e) {
+                              return DropdownMenuItem<String>(
+                                value: e.name,
+                                child: Text('${e.name} (${e.role})', style: const TextStyle(color: kPremiumText)),
+                              );
+                            }).toList(),
+                            onChanged: (val) {
+                              setModalState(() => selectedEmployeeName = val);
+                            },
                           ),
-                          items: [
-                            const DropdownMenuItem(value: null, child: Text('Unassigned', style: TextStyle(color: kPremiumMuted))),
-                            ..._store.employees.map((e) {
-                              return DropdownMenuItem(value: e.name, child: Text(e.name, style: const TextStyle(color: kPremiumText)));
-                            }),
-                          ],
-                          onChanged: (val) => setModalState(() => selectedEmployeeName = val),
-                        ),
-                        const SizedBox(height: 14),
+                          const SizedBox(height: 14),
+                        ],
 
                         Row(
                           children: [
                             Expanded(
                               child: DropdownButtonFormField<String>(
-                                isExpanded: true,
                                 value: selectedPriority,
                                 dropdownColor: kPremiumSurface,
                                 style: const TextStyle(color: kPremiumText),
                                 decoration: InputDecoration(
                                   labelText: 'Priority',
                                   labelStyle: const TextStyle(color: kPremiumMuted),
-                                  prefixIcon: const Icon(Icons.priority_high, color: kPremiumGold),
+                                  prefixIcon: const Icon(Icons.flag_outlined, color: kPremiumGold),
                                   filled: true,
                                   fillColor: kPremiumSurface.withOpacity(0.5),
-                                  border: OutlineInputBorder(borderRadius: BorderRadius.circular(14)),
+                                  enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: const BorderSide(color: Colors.white10)),
+                                  focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: const BorderSide(color: kPremiumGold, width: 1.5)),
                                 ),
-                                items: const [
-                                  DropdownMenuItem(value: 'Low', child: Text('Low Priority', style: TextStyle(color: Colors.blueAccent))),
-                                  DropdownMenuItem(value: 'Medium', child: Text('Medium Priority', style: TextStyle(color: Colors.orangeAccent))),
-                                  DropdownMenuItem(value: 'High', child: Text('High Priority', style: TextStyle(color: Colors.redAccent))),
-                                ],
-                                onChanged: (val) => setModalState(() => selectedPriority = val!),
+                                items: ['Low', 'Medium', 'High', 'Urgent'].map((p) {
+                                  return DropdownMenuItem<String>(
+                                    value: p,
+                                    child: Text(p, style: const TextStyle(color: kPremiumText)),
+                                  );
+                                }).toList(),
+                                onChanged: (val) {
+                                  if (val != null) setModalState(() => selectedPriority = val);
+                                },
                               ),
                             ),
                             const SizedBox(width: 12),
                             Expanded(
                               child: DropdownButtonFormField<String>(
-                                isExpanded: true,
                                 value: selectedStatus,
                                 dropdownColor: kPremiumSurface,
                                 style: const TextStyle(color: kPremiumText),
                                 decoration: InputDecoration(
-                                  labelText: 'Column Status',
+                                  labelText: 'Kanban Column',
                                   labelStyle: const TextStyle(color: kPremiumMuted),
-                                  prefixIcon: const Icon(Icons.view_column_outlined, color: kPremiumGold),
+                                  prefixIcon: const Icon(Icons.view_kanban_outlined, color: kPremiumGold),
                                   filled: true,
                                   fillColor: kPremiumSurface.withOpacity(0.5),
-                                  border: OutlineInputBorder(borderRadius: BorderRadius.circular(14)),
+                                  enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: const BorderSide(color: Colors.white10)),
+                                  focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: const BorderSide(color: kPremiumGold, width: 1.5)),
                                 ),
-                                items: const [
-                                  DropdownMenuItem(value: 'To Do', child: Text('To Do')),
-                                  DropdownMenuItem(value: 'In Progress', child: Text('In Progress')),
-                                  DropdownMenuItem(value: 'In Review', child: Text('In Review')),
-                                  DropdownMenuItem(value: 'Completed', child: Text('Completed')),
-                                ],
-                                onChanged: (val) => setModalState(() => selectedStatus = val!),
+                                items: ['To Do', 'In Progress', 'In Review', 'Completed'].map((s) {
+                                  return DropdownMenuItem<String>(
+                                    value: s,
+                                    child: Text(s, style: const TextStyle(color: kPremiumText)),
+                                  );
+                                }).toList(),
+                                onChanged: (val) {
+                                  if (val != null) setModalState(() => selectedStatus = val);
+                                },
                               ),
                             ),
                           ],
                         ),
-                        const SizedBox(height: 18),
+                        const SizedBox(height: 14),
 
-                        const Text('Timeline & Deadlines', style: TextStyle(fontSize: 14, fontWeight: FontWeight.bold, color: kPremiumGold)),
-                        const SizedBox(height: 10),
-
-                        // Start Date Picker Tile
                         InkWell(
                           onTap: pickStart,
-                          borderRadius: BorderRadius.circular(14),
+                          borderRadius: BorderRadius.circular(12),
                           child: Container(
-                            padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 14),
+                            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
                             decoration: BoxDecoration(
                               color: kPremiumSurface.withOpacity(0.5),
+                              borderRadius: BorderRadius.circular(12),
                               border: Border.all(color: Colors.white10),
-                              borderRadius: BorderRadius.circular(14),
                             ),
                             child: Row(
                               children: [
-                                const Icon(Icons.play_circle_outline, color: Colors.greenAccent, size: 20),
-                                const SizedBox(width: 10),
+                                const Icon(Icons.calendar_today, color: kPremiumGold, size: 20),
+                                const SizedBox(width: 12),
                                 Expanded(
                                   child: Column(
                                     crossAxisAlignment: CrossAxisAlignment.start,
@@ -280,21 +322,20 @@ class _TaskBoardPageState extends State<TaskBoardPage> {
                         ),
                         const SizedBox(height: 10),
 
-                        // End Date Picker Tile (Due Date)
                         InkWell(
                           onTap: pickEnd,
-                          borderRadius: BorderRadius.circular(14),
+                          borderRadius: BorderRadius.circular(12),
                           child: Container(
-                            padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 14),
+                            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
                             decoration: BoxDecoration(
                               color: kPremiumSurface.withOpacity(0.5),
+                              borderRadius: BorderRadius.circular(12),
                               border: Border.all(color: Colors.white10),
-                              borderRadius: BorderRadius.circular(14),
                             ),
                             child: Row(
                               children: [
-                                const Icon(Icons.stop_circle_outlined, color: Colors.redAccent, size: 20),
-                                const SizedBox(width: 10),
+                                const Icon(Icons.event, color: kPremiumGold, size: 20),
+                                const SizedBox(width: 12),
                                 Expanded(
                                   child: Column(
                                     crossAxisAlignment: CrossAxisAlignment.start,
@@ -345,6 +386,8 @@ class _TaskBoardPageState extends State<TaskBoardPage> {
                                 'start_date': startIso,
                                 'due_date': endIso,
                               });
+                              await _store.refreshFromSupabase();
+                              if (mounted) setState(() {});
                               if (context.mounted) Navigator.pop(context);
                             } catch (e) {
                               debugPrint('Error creating task: $e');
@@ -398,7 +441,13 @@ class _TaskBoardPageState extends State<TaskBoardPage> {
                       if (selected) {
                         Navigator.pop(context);
                         final dbStatus = status == 'To Do' ? 'Todo' : status;
-                        await SupabaseService().client.from('tasks').update({'status': dbStatus}).eq('id', task.id);
+                        try {
+                          await SupabaseService().client.from('tasks').update({'status': dbStatus}).eq('id', task.id);
+                        } catch (e) {
+                          debugPrint('Error updating task status: $e');
+                        }
+                        await _store.refreshFromSupabase();
+                        if (mounted) setState(() {});
                       }
                     },
                   );
@@ -439,6 +488,7 @@ class _TaskBoardPageState extends State<TaskBoardPage> {
               Navigator.pop(context);
               Navigator.pop(context);
               await SupabaseService().client.from('tasks').delete().eq('id', task.id);
+              await _store.refreshFromSupabase();
               if (mounted) setState(() {});
             },
             child: const Text('Delete Task'),
@@ -450,6 +500,11 @@ class _TaskBoardPageState extends State<TaskBoardPage> {
 
   @override
   Widget build(BuildContext context) {
+    final orgId = SupabaseService().currentOrganizationId;
+    final Stream<List<Map<String, dynamic>>>? tasksStream = (orgId != null)
+        ? SupabaseService().client.from('tasks').stream(primaryKey: ['id']).eq('organization_id', orgId)
+        : null;
+
     return PremiumBackground(
       child: Scaffold(
         backgroundColor: Colors.transparent,
@@ -463,9 +518,14 @@ class _TaskBoardPageState extends State<TaskBoardPage> {
               Padding(
                 padding: const EdgeInsets.only(right: 12.0),
                 child: IconButton(
-                  icon: const Icon(Icons.add_circle_outline, size: 26, color: kPremiumGold),
-                  tooltip: 'Add Task',
-                  onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const AddTaskPage())),
+                  icon: const Icon(Icons.add_task_rounded, size: 26, color: kPremiumGold),
+                  tooltip: 'Create New Task',
+                  onPressed: () {
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(builder: (context) => const AddTaskPage()),
+                    );
+                  },
                 ),
               ),
           ],
@@ -473,16 +533,28 @@ class _TaskBoardPageState extends State<TaskBoardPage> {
         body: SafeArea(
           bottom: true,
           child: StreamBuilder<List<Map<String, dynamic>>>(
-            stream: _tasksStream,
+            stream: tasksStream,
             builder: (context, snapshot) {
-              if (snapshot.connectionState == ConnectionState.waiting) {
-                return const Center(child: CircularProgressIndicator(color: kPremiumGold));
-              }
-              if (snapshot.hasError) {
-                return Center(child: Text('Error loading tasks: ${snapshot.error}', style: const TextStyle(color: kPremiumDanger)));
+              List<Map<String, dynamic>> data = [];
+
+              if (_store.tasks.isNotEmpty) {
+                data = _store.tasks.map((t) => {
+                  'id': t.id,
+                  'title': t.title,
+                  'project_id': t.projectId,
+                  'project_name': t.projectName,
+                  'assigned_to': t.assignedToName,
+                  'status': t.status,
+                  'priority': t.priority,
+                  'due_date': t.dueDate,
+                }).toList();
+              } else if (snapshot.hasData && snapshot.data != null) {
+                data = snapshot.data!;
               }
 
-              final data = snapshot.data ?? [];
+              if (snapshot.connectionState == ConnectionState.waiting && data.isEmpty) {
+                return const Center(child: CircularProgressIndicator(color: kPremiumGold));
+              }
               
               final tasks = data.map((row) {
                 final projId = row['project_id']?.toString();

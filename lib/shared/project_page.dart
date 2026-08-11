@@ -13,14 +13,25 @@ class ProjectPage extends StatefulWidget {
 }
 
 class _ProjectPageState extends State<ProjectPage> {
-  final _projectsStream = SupabaseService().client.from('projects').stream(primaryKey: ['id']);
   final AppDataStore _store = AppDataStore();
   List<String> _userProjectIds = [];
+  bool _isLoading = true;
 
   @override
   void initState() {
     super.initState();
+    _store.addListener(_onStoreUpdate);
     _loadUserProjects();
+  }
+
+  @override
+  void dispose() {
+    _store.removeListener(_onStoreUpdate);
+    super.dispose();
+  }
+
+  void _onStoreUpdate() {
+    if (mounted) setState(() {});
   }
 
   Future<void> _loadUserProjects() async {
@@ -33,10 +44,23 @@ class _ProjectPageState extends State<ProjectPage> {
         });
       }
     }
+    if (_store.projects.isEmpty) {
+      await _store.refreshFromSupabase();
+    }
+    if (mounted) {
+      setState(() {
+        _isLoading = false;
+      });
+    }
   }
 
   @override
   Widget build(BuildContext context) {
+    final orgId = SupabaseService().currentOrganizationId;
+    final Stream<List<Map<String, dynamic>>>? projectsStream = (orgId != null)
+        ? SupabaseService().client.from('projects').stream(primaryKey: ['id']).eq('organization_id', orgId)
+        : null;
+
     return PremiumBackground(
       child: Scaffold(
         backgroundColor: Colors.transparent,
@@ -65,17 +89,28 @@ class _ProjectPageState extends State<ProjectPage> {
               final hPad = isMobile ? 16.0 : 28.0;
 
               return StreamBuilder<List<Map<String, dynamic>>>(
-                stream: _projectsStream,
+                stream: projectsStream,
                 builder: (context, snapshot) {
-                  if (snapshot.connectionState == ConnectionState.waiting) {
-                    return const Center(child: CircularProgressIndicator(color: kPremiumGold));
-                  }
-                  if (snapshot.hasError) {
-                    return Center(child: Text('Error loading projects: ${snapshot.error}', style: const TextStyle(color: kPremiumDanger)));
+                  List<Map<String, dynamic>> data = [];
+
+                  if (snapshot.hasData && snapshot.data != null && snapshot.data!.isNotEmpty) {
+                    data = snapshot.data!;
+                  } else if (_store.projects.isNotEmpty) {
+                    // Seamless fallback to store projects if realtime stream is empty/loading/error
+                    data = _store.projects.map((p) => {
+                      'id': p.id,
+                      'name': p.name,
+                      'client_id': p.clientId,
+                      'status': p.status,
+                      'budget': p.budget,
+                      'deadline': p.deadline,
+                    }).toList();
                   }
 
-                  var data = snapshot.data ?? [];
-                  
+                  if (snapshot.connectionState == ConnectionState.waiting && data.isEmpty && _isLoading) {
+                    return const Center(child: CircularProgressIndicator(color: kPremiumGold));
+                  }
+
                   if (SupabaseService().currentRole != 'admin') {
                     final userId = SupabaseService().currentUser?.id;
                     data = data.where((row) {
@@ -281,6 +316,7 @@ class _ProjectPageState extends State<ProjectPage> {
             onPressed: () async {
               Navigator.pop(context);
               await SupabaseService().client.from('projects').delete().eq('id', project.id);
+              await _store.refreshFromSupabase();
               if (mounted) setState(() {});
             },
             child: const Text('Delete Project'),

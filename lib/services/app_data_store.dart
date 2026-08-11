@@ -529,6 +529,7 @@ class AppDataStore extends ChangeNotifier {
 
   /// Sync database from Supabase
   Future<void> refreshFromSupabase() async {
+    if (_isLoadingFromSupabase) return;
     _isLoadingFromSupabase = true;
     notifyListeners();
 
@@ -739,29 +740,40 @@ class AppDataStore extends ChangeNotifier {
     notifyListeners();
   }
 
-  void addLeaveRequest(LeaveRequest request) {
+  Future<bool> addLeaveRequest(LeaveRequest request) async {
     _leaveRequests.insert(0, request);
-    SupabaseService().insertLeaveRequest(request);
     notifyListeners();
+    final success = await SupabaseService().insertLeaveRequest(request);
+    final remoteLeaves = await SupabaseService().fetchLeaveRequests();
+    if (remoteLeaves != null && remoteLeaves.isNotEmpty) {
+      _leaveRequests.clear();
+      _leaveRequests.addAll(remoteLeaves);
+      notifyListeners();
+    }
+    return success;
   }
 
-  void updateLeaveStatus(String requestId, String newStatus) {
+  Future<bool> updateLeaveStatus(String requestId, String newStatus) async {
     final index = _leaveRequests.indexWhere((r) => r.id == requestId);
     if (index != -1) {
       _leaveRequests[index].status = newStatus;
-      SupabaseService().updateLeaveStatus(requestId, newStatus);
+      notifyListeners();
+      final success = await SupabaseService().updateLeaveStatus(requestId, newStatus);
 
       // Also update employee status if leave is approved
       if (newStatus == 'Approved') {
-        final empIndex =
-            _employees.indexWhere((e) => e.id == _leaveRequests[index].employeeId);
+        final empIndex = _employees.indexWhere(
+          (e) => e.id == _leaveRequests[index].employeeId || e.userId == _leaveRequests[index].employeeId,
+        );
         if (empIndex != -1) {
           final updatedEmp = _employees[empIndex].copyWith(status: 'On Leave');
           _employees[empIndex] = updatedEmp;
-          SupabaseService().updateEmployee(updatedEmp);
+          await SupabaseService().updateEmployee(updatedEmp);
         }
       }
       notifyListeners();
+      return success;
     }
+    return false;
   }
 }

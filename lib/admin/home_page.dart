@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:business_managment_app/services/app_data_store.dart';
 import 'package:business_managment_app/services/supabase_service.dart';
+import 'package:business_managment_app/shared/project_page.dart';
 import 'package:business_managment_app/core/premium_theme.dart';
 
 /// Body-only Dashboard widget — Scaffold lives in MainShell.
@@ -19,6 +20,7 @@ class _HomeBodyState extends State<HomeBody> {
   int? _activeEmployees;
   int? _staffOnLeave;
   int? _pendingLeaves;
+  int? _totalProjects;
   bool _isLoadingStats = true;
 
   @override
@@ -42,6 +44,7 @@ class _HomeBodyState extends State<HomeBody> {
           _activeEmployees = _store.employees.where((e) => e.status == 'Active').length;
           _staffOnLeave = _store.employees.where((e) => e.status == 'On Leave').length;
           _pendingLeaves = _store.leaveRequests.where((r) => r.status == 'Pending').length;
+          _totalProjects = _store.projects.length;
           _isLoadingStats = false;
         });
       }
@@ -54,6 +57,7 @@ class _HomeBodyState extends State<HomeBody> {
       final activeEmpData = await client.from('employees').select('id').eq('organization_id', orgId).eq('status', 'Active');
       final leaveEmpData = await client.from('employees').select('id').eq('organization_id', orgId).eq('status', 'On Leave');
       final leavesData = await client.from('leave_requests').select('id').eq('organization_id', orgId).eq('status', 'Pending');
+      final projectsData = await client.from('projects').select('id').eq('organization_id', orgId);
       
       final uniqueClientKeys = <String>{};
       if (clientsData is List) {
@@ -79,6 +83,7 @@ class _HomeBodyState extends State<HomeBody> {
           _activeEmployees = (activeEmpData as List).length;
           _staffOnLeave = (leaveEmpData as List).length;
           _pendingLeaves = (leavesData as List).length;
+          _totalProjects = (projectsData as List).length;
           _isLoadingStats = false;
         });
       }
@@ -90,6 +95,7 @@ class _HomeBodyState extends State<HomeBody> {
           _activeEmployees = _store.employees.where((e) => e.status == 'Active').length;
           _staffOnLeave = _store.employees.where((e) => e.status == 'On Leave').length;
           _pendingLeaves = _store.leaveRequests.where((r) => r.status == 'Pending').length;
+          _totalProjects = _store.projects.length;
           _isLoadingStats = false;
         });
       }
@@ -109,6 +115,7 @@ class _HomeBodyState extends State<HomeBody> {
         _activeEmployees = _store.employees.where((e) => e.status == 'Active').length;
         _staffOnLeave = _store.employees.where((e) => e.status == 'On Leave').length;
         _pendingLeaves = _store.leaveRequests.where((r) => r.status == 'Pending').length;
+        _totalProjects = _store.projects.length;
         _isLoadingStats = false;
       });
     }
@@ -268,10 +275,10 @@ class _HomeBodyState extends State<HomeBody> {
               GridView.count(
                 shrinkWrap: true,
                 physics: const NeverScrollableScrollPhysics(),
-                crossAxisCount: isDesktop ? 3 : isTablet ? 3 : (width < 360 ? 1 : 2),
+                crossAxisCount: isDesktop ? 4 : isTablet ? 2 : (width < 360 ? 1 : 2),
                 crossAxisSpacing: 14,
                 mainAxisSpacing: 14,
-                childAspectRatio: isDesktop ? 1.6 : isTablet ? 1.4 : 1.15,
+                childAspectRatio: isDesktop ? 1.4 : isTablet ? 1.3 : 1.15,
                 children: [
                   _actionCard(
                     icon: Icons.badge_outlined,
@@ -286,6 +293,18 @@ class _HomeBodyState extends State<HomeBody> {
                     subtitle: _isLoadingStats ? '...' : '${_totalClients ?? 0} Accounts',
                     color: kPremiumBlue,
                     onTap: () => widget.onNavigate(2),
+                  ),
+                  _actionCard(
+                    icon: Icons.folder_special_outlined,
+                    title: 'Projects',
+                    subtitle: _isLoadingStats ? '...' : '${_totalProjects ?? _store.projects.length} Active',
+                    color: kPremiumViolet,
+                    onTap: () {
+                      Navigator.push(
+                        context,
+                        MaterialPageRoute(builder: (context) => const ProjectPage()),
+                      );
+                    },
                   ),
                   _actionCard(
                     icon: Icons.calendar_month_outlined,
@@ -484,6 +503,19 @@ class _HomeBodyState extends State<HomeBody> {
                 title: const Text('HR Workforce Utilization'),
                 subtitle: Text('${_store.employees.length} Total Staff', style: const TextStyle(color: kPremiumMuted)),
                 onTap: () => Navigator.pop(context),
+              ),
+              ListTile(
+                leading: const PremiumAvatar(
+                  icon: Icons.folder_special_rounded,
+                  style: AvatarStyle.glowIcon,
+                  size: 42,
+                ),
+                title: const Text('Projects Portfolio & Deliverables'),
+                subtitle: Text('${_store.projects.length} Active Projects', style: const TextStyle(color: kPremiumMuted)),
+                onTap: () {
+                  Navigator.pop(context);
+                  Navigator.push(context, MaterialPageRoute(builder: (context) => const ProjectPage()));
+                },
               ),
               ListTile(
                 leading: const PremiumAvatar(

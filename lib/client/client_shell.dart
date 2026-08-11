@@ -874,6 +874,20 @@ class ClientProfileBody extends StatelessWidget {
                           style: TextStyle(color: kPremiumGold, fontWeight: FontWeight.bold, fontSize: 12),
                         ),
                       ),
+                      const SizedBox(height: 8),
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          const Icon(Icons.phone_outlined, size: 15, color: kPremiumGold),
+                          const SizedBox(width: 6),
+                          Text(
+                            (user?.userMetadata?['phone']?.toString().isNotEmpty == true)
+                                ? user!.userMetadata!['phone'].toString()
+                                : 'Contact Not Provided',
+                            style: const TextStyle(color: kPremiumMuted, fontSize: 14, fontWeight: FontWeight.w500),
+                          ),
+                        ],
+                      ),
                       const SizedBox(height: 16),
                       ElevatedButton.icon(
                         style: ElevatedButton.styleFrom(backgroundColor: kPremiumGold, foregroundColor: kPremiumBg),
@@ -895,9 +909,19 @@ class ClientProfileBody extends StatelessWidget {
                         subtitle: Text(email, style: const TextStyle(color: kPremiumText, fontWeight: FontWeight.bold, fontSize: 15)),
                       ),
                       ListTile(
+                        leading: const Icon(Icons.phone_outlined, color: kPremiumGold),
+                        title: const Text('Phone Number', style: TextStyle(color: kPremiumMuted, fontSize: 12)),
+                        subtitle: Text(
+                          (user?.userMetadata?['phone']?.toString().isNotEmpty == true)
+                              ? user!.userMetadata!['phone'].toString()
+                              : 'Contact Not Provided',
+                          style: const TextStyle(color: kPremiumText, fontWeight: FontWeight.bold, fontSize: 15),
+                        ),
+                      ),
+                      ListTile(
                         leading: const Icon(Icons.verified_user_outlined, color: kPremiumGold),
                         title: const Text('Authentication Source', style: TextStyle(color: kPremiumMuted, fontSize: 12)),
-                        subtitle: const Text('Supabase Auth (Role: Client)', style: const TextStyle(color: kPremiumText, fontWeight: FontWeight.bold, fontSize: 15)),
+                        subtitle: const Text('Supabase Auth (Role: Client)', style: TextStyle(color: kPremiumText, fontWeight: FontWeight.bold, fontSize: 15)),
                       ),
                     ],
                   ),

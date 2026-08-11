@@ -280,7 +280,7 @@ CREATE TABLE IF NOT EXISTS public.leave_requests (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
     organization_id UUID NOT NULL REFERENCES public.organizations(id) ON DELETE CASCADE,
     user_id UUID NOT NULL REFERENCES public.profiles(id) ON DELETE CASCADE,
-    leave_type TEXT NOT NULL CHECK (leave_type IN ('Casual', 'Sick', 'Paid', 'Unpaid')),
+    leave_type TEXT NOT NULL CHECK (leave_type IN ('Casual', 'Sick', 'Paid', 'Unpaid', 'Annual', 'Vacation', 'Personal', 'Maternity/Paternity')),
     start_date DATE NOT NULL,
     end_date DATE NOT NULL,
     reason TEXT NOT NULL,
@@ -672,8 +672,8 @@ CREATE POLICY "Leave requests viewable by self or admin" ON public.leave_request
         user_id = auth.uid() OR public.has_org_role(organization_id, 'admin')
     );
 
-CREATE POLICY "Leave requests insertable by self" ON public.leave_requests
-    FOR INSERT TO authenticated WITH CHECK (user_id = auth.uid());
+CREATE POLICY "Leave requests insertable by self or admin" ON public.leave_requests
+    FOR INSERT TO authenticated WITH CHECK (user_id = auth.uid() OR public.has_org_role(organization_id, 'admin'));
 
 CREATE POLICY "Leave requests updateable by admin" ON public.leave_requests
     FOR UPDATE TO authenticated USING (public.has_org_role(organization_id, 'admin'));

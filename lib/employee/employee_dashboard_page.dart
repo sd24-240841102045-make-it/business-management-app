@@ -168,6 +168,7 @@ class _EmployeeDashboardPageState extends State<EmployeeDashboardPage> {
           builder: (context, setModalState) {
             return AlertDialog(
               backgroundColor: kPremiumSurface,
+              insetPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 24),
               shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20), side: const BorderSide(color: kPremiumBorder)),
               title: const Text('Request Time Off / Leave', style: TextStyle(fontWeight: FontWeight.bold, color: kPremiumGold)),
               content: SingleChildScrollView(
@@ -176,6 +177,7 @@ class _EmployeeDashboardPageState extends State<EmployeeDashboardPage> {
                   children: [
                     DropdownButtonFormField<String>(
                       value: typeCtrl.text,
+                      isExpanded: true,
                       dropdownColor: kPremiumSurface,
                       style: const TextStyle(color: kPremiumText),
                       decoration: InputDecoration(
@@ -187,10 +189,11 @@ class _EmployeeDashboardPageState extends State<EmployeeDashboardPage> {
                         border: OutlineInputBorder(borderRadius: BorderRadius.circular(14)),
                       ),
                       items: const [
-                        DropdownMenuItem(value: 'Vacation', child: Text('Vacation Leave', style: TextStyle(color: kPremiumText))),
-                        DropdownMenuItem(value: 'Sick', child: Text('Sick Leave', style: TextStyle(color: kPremiumText))),
-                        DropdownMenuItem(value: 'Personal', child: Text('Personal Leave', style: TextStyle(color: kPremiumText))),
-                        DropdownMenuItem(value: 'Maternity/Paternity', child: Text('Maternity / Paternity', style: TextStyle(color: kPremiumText))),
+                        DropdownMenuItem(value: 'Vacation', child: Text('Vacation Leave', style: TextStyle(color: kPremiumText), overflow: TextOverflow.ellipsis, maxLines: 1)),
+                        DropdownMenuItem(value: 'Sick', child: Text('Sick Leave', style: TextStyle(color: kPremiumText), overflow: TextOverflow.ellipsis, maxLines: 1)),
+                        DropdownMenuItem(value: 'Casual', child: Text('Casual Leave', style: TextStyle(color: kPremiumText), overflow: TextOverflow.ellipsis, maxLines: 1)),
+                        DropdownMenuItem(value: 'Personal', child: Text('Personal Leave', style: TextStyle(color: kPremiumText), overflow: TextOverflow.ellipsis, maxLines: 1)),
+                        DropdownMenuItem(value: 'Maternity/Paternity', child: Text('Maternity / Paternity', style: TextStyle(color: kPremiumText), overflow: TextOverflow.ellipsis, maxLines: 1)),
                       ],
                       onChanged: (val) => setModalState(() => typeCtrl.text = val!),
                     ),
@@ -279,22 +282,26 @@ class _EmployeeDashboardPageState extends State<EmployeeDashboardPage> {
                             final sStr = '${startDate.year}-${startDate.month.toString().padLeft(2, '0')}-${startDate.day.toString().padLeft(2, '0')}';
                             final eStr = '${endDate.year}-${endDate.month.toString().padLeft(2, '0')}-${endDate.day.toString().padLeft(2, '0')}';
 
-                            await SupabaseService().client.from('leave_requests').insert({
-                              if (orgId != null) 'organization_id': orgId,
-                              'user_id': user.id,
-                              'employee_id': user.id,
-                              'leave_type': typeCtrl.text,
-                              'start_date': sStr,
-                              'end_date': eStr,
-                              'reason': reasonCtrl.text.trim(),
-                              'status': 'Pending',
-                            });
+                            final newReq = LeaveRequest(
+                              id: 'lv_${DateTime.now().millisecondsSinceEpoch}',
+                              employeeId: user.id,
+                              employeeName: user.userMetadata?['full_name']?.toString() ?? 'Staff Member',
+                              type: typeCtrl.text,
+                              startDate: sStr,
+                              endDate: eStr,
+                              reason: reasonCtrl.text.trim().isEmpty ? 'General leave request' : reasonCtrl.text.trim(),
+                            );
+
+                            final success = await _store.addLeaveRequest(newReq);
 
                             if (mounted) {
                               Navigator.pop(dialogContext);
                               _fetchEmployeeData();
                               ScaffoldMessenger.of(context).showSnackBar(
-                                const SnackBar(content: Text('Leave request submitted!'), backgroundColor: Colors.green),
+                                SnackBar(
+                                  content: Text(success ? 'Leave request submitted successfully!' : 'Leave request recorded locally.'),
+                                  backgroundColor: success ? Colors.green : Colors.orange,
+                                ),
                               );
                             }
                           } catch (e) {

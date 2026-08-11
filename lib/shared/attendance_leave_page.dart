@@ -75,20 +75,16 @@ class AttendanceLeaveBodyState extends State<AttendanceLeaveBody> {
   void showApplyLeaveDialog() => _showApplyLeaveDialog();
 
   void _showApplyLeaveDialog() {
-    if (_store.employees.isEmpty) return;
-
-    String selectedEmpId = _store.employees.first.id;
+    String selectedEmpId = _store.employees.isNotEmpty ? _store.employees.first.id : (SupabaseService().currentUser?.id ?? 'emp_1');
+    String selectedEmpName = _store.employees.isNotEmpty ? _store.employees.first.name : 'Staff Member';
     String leaveType = 'Casual';
     final reasonController = TextEditingController();
     DateTime startDate = DateTime.now();
-    DateTime endDate = DateTime.now().add(const Duration(days: 2));
-    TimeOfDay startTime = const TimeOfDay(hour: 9, minute: 0);
-    TimeOfDay endTime = const TimeOfDay(hour: 17, minute: 0);
+    DateTime endDate = DateTime.now().add(const Duration(days: 1));
+    bool isSubmitting = false;
 
     String _fmtDate(DateTime d) =>
-        '${d.day.toString().padLeft(2, '0')}/${d.month.toString().padLeft(2, '0')}/${d.year}';
-    String _fmtTime(TimeOfDay t) =>
-        '${t.hourOfPeriod == 0 ? 12 : t.hourOfPeriod}:${t.minute.toString().padLeft(2, '0')} ${t.period == DayPeriod.am ? 'AM' : 'PM'}';
+        '${d.year}-${d.month.toString().padLeft(2, '0')}-${d.day.toString().padLeft(2, '0')}';
 
     showDialog(
       context: context,
@@ -103,12 +99,25 @@ class AttendanceLeaveBodyState extends State<AttendanceLeaveBody> {
                 lastDate: DateTime(2030),
                 builder: (context, child) => Theme(
                   data: Theme.of(context).copyWith(
-                    colorScheme: const ColorScheme.light(primary: Colors.deepPurple),
+                    colorScheme: const ColorScheme.dark(
+                      primary: kPremiumGold,
+                      onPrimary: kPremiumBg,
+                      surface: kPremiumSurface,
+                      onSurface: kPremiumText,
+                    ),
+                    dialogBackgroundColor: kPremiumSurface,
                   ),
                   child: child!,
                 ),
               );
-              if (picked != null) setDialogState(() => startDate = picked);
+              if (picked != null) {
+                setDialogState(() {
+                  startDate = picked;
+                  if (endDate.isBefore(startDate)) {
+                    endDate = startDate;
+                  }
+                });
+              }
             }
 
             Future<void> pickEndDate() async {
@@ -119,7 +128,13 @@ class AttendanceLeaveBodyState extends State<AttendanceLeaveBody> {
                 lastDate: DateTime(2030),
                 builder: (context, child) => Theme(
                   data: Theme.of(context).copyWith(
-                    colorScheme: const ColorScheme.light(primary: Colors.deepPurple),
+                    colorScheme: const ColorScheme.dark(
+                      primary: kPremiumGold,
+                      onPrimary: kPremiumBg,
+                      surface: kPremiumSurface,
+                      onSurface: kPremiumText,
+                    ),
+                    dialogBackgroundColor: kPremiumSurface,
                   ),
                   child: child!,
                 ),
@@ -127,251 +142,305 @@ class AttendanceLeaveBodyState extends State<AttendanceLeaveBody> {
               if (picked != null) setDialogState(() => endDate = picked);
             }
 
-            Future<void> pickStartTime() async {
-              final picked = await showTimePicker(
-                context: context,
-                initialTime: startTime,
-                builder: (context, child) => Theme(
-                  data: Theme.of(context).copyWith(
-                    colorScheme: const ColorScheme.light(primary: Colors.deepPurple),
-                  ),
-                  child: child!,
-                ),
-              );
-              if (picked != null) setDialogState(() => startTime = picked);
-            }
+            final durationDays = endDate.difference(startDate).inDays + 1;
 
-            Future<void> pickEndTime() async {
-              final picked = await showTimePicker(
-                context: context,
-                initialTime: endTime,
-                builder: (context, child) => Theme(
-                  data: Theme.of(context).copyWith(
-                    colorScheme: const ColorScheme.light(primary: Colors.deepPurple),
-                  ),
-                  child: child!,
-                ),
-              );
-              if (picked != null) setDialogState(() => endTime = picked);
-            }
-
-            return AlertDialog(
-              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-              title: Row(
-                children: [
-                  Container(
-                    padding: const EdgeInsets.all(8),
-                    decoration: BoxDecoration(color: Colors.deepPurple.withOpacity(0.1), borderRadius: BorderRadius.circular(10)),
-                    child: const Icon(Icons.event_note, color: Colors.deepPurple, size: 22),
-                  ),
-                  const SizedBox(width: 10),
-                  const Text('Apply for Leave', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 18)),
-                ],
+            return Dialog(
+              backgroundColor: kPremiumSurface,
+              insetPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 24),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(20),
+                side: const BorderSide(color: kPremiumBorder),
               ),
-              content: SizedBox(
-                width: 340,
+              child: Container(
+                constraints: const BoxConstraints(maxWidth: 440),
+                padding: const EdgeInsets.all(20),
                 child: SingleChildScrollView(
                   child: Column(
                     mainAxisSize: MainAxisSize.min,
+                    crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      // Employee Selector
-                      DropdownButtonFormField<String>(
-                        value: selectedEmpId,
-                        decoration: InputDecoration(
-                          labelText: 'Employee',
-                          prefixIcon: const Icon(Icons.person, color: Colors.deepPurple),
-                          filled: true,
-                          fillColor: Colors.deepPurple.withOpacity(0.04),
-                          border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide.none),
-                        ),
-                        items: _store.employees.map((e) => DropdownMenuItem(value: e.id, child: Text(e.name))).toList(),
-                        onChanged: (val) => setDialogState(() => selectedEmpId = val!),
+                      // Header
+                      Row(
+                        children: [
+                          Container(
+                            padding: const EdgeInsets.all(10),
+                            decoration: BoxDecoration(
+                              color: kPremiumGold.withOpacity(0.12),
+                              borderRadius: BorderRadius.circular(12),
+                              border: Border.all(color: kPremiumGold.withOpacity(0.3)),
+                            ),
+                            child: const Icon(Icons.event_note, color: kPremiumGold, size: 24),
+                          ),
+                          const SizedBox(width: 14),
+                          const Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text('Apply for Leave', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 18, color: kPremiumText)),
+                                SizedBox(height: 2),
+                                Text('Submit a time-off request', style: TextStyle(color: kPremiumMuted, fontSize: 12)),
+                              ],
+                            ),
+                          ),
+                        ],
                       ),
-                      const SizedBox(height: 12),
+                      const SizedBox(height: 18),
+
+                      // Employee Selector (if multiple employees available)
+                      if (_store.employees.length > 1) ...[
+                        DropdownButtonFormField<String>(
+                          value: _store.employees.any((e) => e.id == selectedEmpId) ? selectedEmpId : _store.employees.first.id,
+                          isExpanded: true,
+                          dropdownColor: kPremiumSurface,
+                          style: const TextStyle(color: kPremiumText),
+                          decoration: InputDecoration(
+                            labelText: 'Employee',
+                            labelStyle: const TextStyle(color: kPremiumMuted),
+                            prefixIcon: const Icon(Icons.person_outlined, color: kPremiumGold),
+                            filled: true,
+                            fillColor: kPremiumBg.withOpacity(0.6),
+                            border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: const BorderSide(color: kPremiumBorder)),
+                            enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: const BorderSide(color: kPremiumBorder)),
+                            focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: const BorderSide(color: kPremiumGold)),
+                          ),
+                          items: _store.employees
+                              .map((e) => DropdownMenuItem(
+                                    value: e.id,
+                                    child: Text(
+                                      '${e.name} (${e.role.isNotEmpty ? e.role : 'Staff'})',
+                                      style: const TextStyle(color: kPremiumText),
+                                      overflow: TextOverflow.ellipsis,
+                                      maxLines: 1,
+                                    ),
+                                  ))
+                              .toList(),
+                          onChanged: (val) {
+                            if (val != null) {
+                              setDialogState(() {
+                                selectedEmpId = val;
+                                final found = _store.employees.firstWhere((e) => e.id == val);
+                                selectedEmpName = found.name;
+                              });
+                            }
+                          },
+                        ),
+                        const SizedBox(height: 14),
+                      ],
 
                       // Leave Type Selector
                       DropdownButtonFormField<String>(
                         value: leaveType,
+                        isExpanded: true,
+                        dropdownColor: kPremiumSurface,
+                        style: const TextStyle(color: kPremiumText),
                         decoration: InputDecoration(
                           labelText: 'Leave Type',
-                          prefixIcon: const Icon(Icons.category, color: Colors.deepPurple),
+                          labelStyle: const TextStyle(color: kPremiumMuted),
+                          prefixIcon: const Icon(Icons.category_outlined, color: kPremiumGold),
                           filled: true,
-                          fillColor: Colors.deepPurple.withOpacity(0.04),
-                          border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide.none),
+                          fillColor: kPremiumBg.withOpacity(0.6),
+                          border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: const BorderSide(color: kPremiumBorder)),
+                          enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: const BorderSide(color: kPremiumBorder)),
+                          focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: const BorderSide(color: kPremiumGold)),
                         ),
-                        items: ['Casual', 'Sick', 'Annual', 'Unpaid']
-                            .map((t) => DropdownMenuItem(value: t, child: Text(t)))
+                        items: ['Casual', 'Sick', 'Annual', 'Vacation', 'Unpaid', 'Personal', 'Maternity/Paternity']
+                            .map((t) => DropdownMenuItem(
+                                  value: t,
+                                  child: Text(
+                                    t,
+                                    style: const TextStyle(color: kPremiumText),
+                                    overflow: TextOverflow.ellipsis,
+                                    maxLines: 1,
+                                  ),
+                                ))
                             .toList(),
                         onChanged: (val) => setDialogState(() => leaveType = val!),
                       ),
                       const SizedBox(height: 16),
 
-                      // ── Start Date & Time ─────────────────────────────
-                      Text('Start Date & Time', style: TextStyle(fontWeight: FontWeight.w600, color: Colors.grey.shade700, fontSize: 13)),
-                      const SizedBox(height: 8),
+                      // Dates Row
                       Row(
                         children: [
                           Expanded(
-                            child: InkWell(
-                              onTap: pickStartDate,
-                              borderRadius: BorderRadius.circular(12),
-                              child: Container(
-                                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 14),
-                                decoration: BoxDecoration(
-                                  color: Colors.deepPurple.withOpacity(0.06),
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                const Text('Start Date', style: TextStyle(fontWeight: FontWeight.w600, color: kPremiumMuted, fontSize: 12)),
+                                const SizedBox(height: 6),
+                                InkWell(
+                                  onTap: pickStartDate,
                                   borderRadius: BorderRadius.circular(12),
-                                  border: Border.all(color: Colors.deepPurple.withOpacity(0.2)),
+                                  child: Container(
+                                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 12),
+                                    decoration: BoxDecoration(
+                                      color: kPremiumBg.withOpacity(0.6),
+                                      borderRadius: BorderRadius.circular(12),
+                                      border: Border.all(color: kPremiumGold.withOpacity(0.4)),
+                                    ),
+                                    child: Row(
+                                      children: [
+                                        const Icon(Icons.calendar_today, size: 16, color: kPremiumGold),
+                                        const SizedBox(width: 6),
+                                        Expanded(
+                                          child: FittedBox(
+                                            fit: BoxFit.scaleDown,
+                                            alignment: Alignment.centerLeft,
+                                            child: Text(_fmtDate(startDate), style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: kPremiumText)),
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                  ),
                                 ),
-                                child: Row(
-                                  children: [
-                                    const Icon(Icons.calendar_today, size: 16, color: Colors.deepPurple),
-                                    const SizedBox(width: 8),
-                                    Text(_fmtDate(startDate), style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600)),
-                                  ],
-                                ),
-                              ),
+                              ],
                             ),
                           ),
-                          const SizedBox(width: 8),
+                          const SizedBox(width: 10),
                           Expanded(
-                            child: InkWell(
-                              onTap: pickStartTime,
-                              borderRadius: BorderRadius.circular(12),
-                              child: Container(
-                                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 14),
-                                decoration: BoxDecoration(
-                                  color: Colors.deepPurple.withOpacity(0.06),
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                const Text('End Date', style: TextStyle(fontWeight: FontWeight.w600, color: kPremiumMuted, fontSize: 12)),
+                                const SizedBox(height: 6),
+                                InkWell(
+                                  onTap: pickEndDate,
                                   borderRadius: BorderRadius.circular(12),
-                                  border: Border.all(color: Colors.deepPurple.withOpacity(0.2)),
+                                  child: Container(
+                                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 12),
+                                    decoration: BoxDecoration(
+                                      color: kPremiumBg.withOpacity(0.6),
+                                      borderRadius: BorderRadius.circular(12),
+                                      border: Border.all(color: Colors.orangeAccent.withOpacity(0.5)),
+                                    ),
+                                    child: Row(
+                                      children: [
+                                        const Icon(Icons.event, size: 16, color: Colors.orangeAccent),
+                                        const SizedBox(width: 6),
+                                        Expanded(
+                                          child: FittedBox(
+                                            fit: BoxFit.scaleDown,
+                                            alignment: Alignment.centerLeft,
+                                            child: Text(_fmtDate(endDate), style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: kPremiumText)),
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                  ),
                                 ),
-                                child: Row(
-                                  children: [
-                                    const Icon(Icons.access_time, size: 16, color: Colors.deepPurple),
-                                    const SizedBox(width: 8),
-                                    Text(_fmtTime(startTime), style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600)),
-                                  ],
-                                ),
-                              ),
+                              ],
                             ),
                           ),
                         ],
                       ),
-                      const SizedBox(height: 12),
-
-                      // ── End Date & Time ─────────────────────────────
-                      Text('End Date & Time', style: TextStyle(fontWeight: FontWeight.w600, color: Colors.grey.shade700, fontSize: 13)),
-                      const SizedBox(height: 8),
-                      Row(
-                        children: [
-                          Expanded(
-                            child: InkWell(
-                              onTap: pickEndDate,
-                              borderRadius: BorderRadius.circular(12),
-                              child: Container(
-                                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 14),
-                                decoration: BoxDecoration(
-                                  color: Colors.orange.withOpacity(0.06),
-                                  borderRadius: BorderRadius.circular(12),
-                                  border: Border.all(color: Colors.orange.withOpacity(0.3)),
-                                ),
-                                child: Row(
-                                  children: [
-                                    const Icon(Icons.calendar_month, size: 16, color: Colors.orange),
-                                    const SizedBox(width: 8),
-                                    Text(_fmtDate(endDate), style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600)),
-                                  ],
-                                ),
-                              ),
-                            ),
-                          ),
-                          const SizedBox(width: 8),
-                          Expanded(
-                            child: InkWell(
-                              onTap: pickEndTime,
-                              borderRadius: BorderRadius.circular(12),
-                              child: Container(
-                                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 14),
-                                decoration: BoxDecoration(
-                                  color: Colors.orange.withOpacity(0.06),
-                                  borderRadius: BorderRadius.circular(12),
-                                  border: Border.all(color: Colors.orange.withOpacity(0.3)),
-                                ),
-                                child: Row(
-                                  children: [
-                                    const Icon(Icons.access_time, size: 16, color: Colors.orange),
-                                    const SizedBox(width: 8),
-                                    Text(_fmtTime(endTime), style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600)),
-                                  ],
-                                ),
-                              ),
-                            ),
-                          ),
-                        ],
-                      ),
-                      const SizedBox(height: 12),
+                      const SizedBox(height: 14),
 
                       // Duration summary chip
                       Container(
                         width: double.infinity,
-                        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
                         decoration: BoxDecoration(
-                          color: Colors.green.withOpacity(0.08),
+                          color: Colors.greenAccent.withOpacity(0.1),
                           borderRadius: BorderRadius.circular(10),
+                          border: Border.all(color: Colors.greenAccent.withOpacity(0.3)),
                         ),
                         child: Row(
                           children: [
-                            const Icon(Icons.timelapse, size: 16, color: Colors.green),
+                            const Icon(Icons.timelapse, size: 18, color: Colors.greenAccent),
                             const SizedBox(width: 8),
-                            Text(
-                              '${endDate.difference(startDate).inDays + 1} day(s) leave duration',
-                              style: const TextStyle(fontWeight: FontWeight.w600, color: Colors.green, fontSize: 13),
+                            Expanded(
+                              child: Text(
+                                '$durationDays ${durationDays == 1 ? "day" : "days"} leave duration',
+                                style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.greenAccent, fontSize: 12),
+                                overflow: TextOverflow.ellipsis,
+                              ),
                             ),
                           ],
                         ),
                       ),
-                      const SizedBox(height: 12),
+                      const SizedBox(height: 16),
 
                       // Reason
                       TextField(
                         controller: reasonController,
                         maxLines: 2,
+                        style: const TextStyle(color: kPremiumText),
                         decoration: InputDecoration(
                           labelText: 'Reason for Leave',
-                          prefixIcon: const Icon(Icons.notes, color: Colors.deepPurple),
+                          labelStyle: const TextStyle(color: kPremiumMuted),
+                          prefixIcon: const Icon(Icons.notes, color: kPremiumGold),
                           filled: true,
-                          fillColor: Colors.deepPurple.withOpacity(0.04),
-                          border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide.none),
+                          fillColor: kPremiumBg.withOpacity(0.6),
+                          border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: const BorderSide(color: kPremiumBorder)),
+                          enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: const BorderSide(color: kPremiumBorder)),
+                          focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: const BorderSide(color: kPremiumGold)),
                         ),
+                      ),
+                      const SizedBox(height: 20),
+
+                      // Actions
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.end,
+                        children: [
+                          TextButton(
+                            onPressed: isSubmitting ? null : () => Navigator.pop(context),
+                            child: const Text('Cancel', style: TextStyle(color: kPremiumMuted)),
+                          ),
+                          const SizedBox(width: 10),
+                          ElevatedButton.icon(
+                            icon: isSubmitting
+                                ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2, color: kPremiumBg))
+                                : const Icon(Icons.send, size: 16),
+                            label: Text(isSubmitting ? 'Submitting...' : 'Submit Request'),
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: kPremiumGold,
+                              foregroundColor: kPremiumBg,
+                              padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 12),
+                              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                            ),
+                            onPressed: isSubmitting
+                                ? null
+                                : () async {
+                                    setDialogState(() => isSubmitting = true);
+                                    
+                                    final emp = _store.employees.firstWhere(
+                                      (e) => e.id == selectedEmpId || e.userId == selectedEmpId,
+                                      orElse: () => Employee(id: selectedEmpId, name: selectedEmpName, role: '', department: '', email: '', phone: '', status: '', joiningDate: ''),
+                                    );
+                                    
+                                    final reqUserId = emp.userId.isNotEmpty
+                                        ? emp.userId
+                                        : (emp.id.startsWith('mem_') ? emp.id.replaceFirst('mem_', '') : emp.id);
+
+                                    final newReq = LeaveRequest(
+                                      id: 'lv_${DateTime.now().millisecondsSinceEpoch}',
+                                      employeeId: reqUserId,
+                                      employeeName: emp.name,
+                                      type: leaveType,
+                                      startDate: _fmtDate(startDate),
+                                      endDate: _fmtDate(endDate),
+                                      reason: reasonController.text.trim().isEmpty ? 'General leave request' : reasonController.text.trim(),
+                                    );
+
+                                    final success = await _store.addLeaveRequest(newReq);
+
+                                    if (mounted) setState(() {});
+                                    if (context.mounted) {
+                                      Navigator.pop(context);
+                                      ScaffoldMessenger.of(context).showSnackBar(
+                                        SnackBar(
+                                          content: Text(success ? 'Leave application submitted successfully!' : 'Leave request recorded locally.'),
+                                          backgroundColor: success ? Colors.green : Colors.orange,
+                                        ),
+                                      );
+                                    }
+                                  },
+                          ),
+                        ],
                       ),
                     ],
                   ),
                 ),
               ),
-              actions: [
-                TextButton(onPressed: () => Navigator.pop(context), child: const Text('Cancel')),
-                ElevatedButton.icon(
-                  icon: const Icon(Icons.send, size: 16),
-                  label: const Text('Submit Request'),
-                  style: ElevatedButton.styleFrom(backgroundColor: Colors.deepPurple, foregroundColor: Colors.white, shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10))),
-                  onPressed: () {
-                    final emp = _store.employees.firstWhere((e) => e.id == selectedEmpId);
-                    final newReq = LeaveRequest(
-                      id: 'lv_${DateTime.now().millisecondsSinceEpoch}',
-                      employeeId: emp.id,
-                      employeeName: emp.name,
-                      type: leaveType,
-                      startDate: '${_fmtDate(startDate)} ${_fmtTime(startTime)}',
-                      endDate: '${_fmtDate(endDate)} ${_fmtTime(endTime)}',
-                      reason: reasonController.text.trim().isEmpty ? 'General leave request' : reasonController.text.trim(),
-                    );
-                    _store.addLeaveRequest(newReq);
-                    Navigator.pop(context);
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      const SnackBar(content: Text('Leave application submitted successfully!'), backgroundColor: Colors.green),
-                    );
-                  },
-                ),
-              ],
             );
           },
         );
@@ -883,9 +952,17 @@ class AttendanceLeaveBodyState extends State<AttendanceLeaveBody> {
                           ],
                         ),
                         const SizedBox(height: 6),
-                        Text('Type: ${req.type} Leave  •  ${req.startDate} to ${req.endDate}', style: const TextStyle(fontSize: 12, color: kPremiumMuted)),
+                        Text(
+                          'Type: ${req.type} Leave  •  ${req.startDate} to ${req.endDate}',
+                          style: const TextStyle(fontSize: 12, color: kPremiumMuted),
+                          softWrap: true,
+                        ),
                         const SizedBox(height: 4),
-                        Text('Reason: ${req.reason}', style: const TextStyle(fontSize: 12, color: kPremiumMuted)),
+                        Text(
+                          'Reason: ${req.reason}',
+                          style: const TextStyle(fontSize: 12, color: kPremiumMuted),
+                          softWrap: true,
+                        ),
                         if (req.status == 'Pending' && isAdmin) ...[
                           const SizedBox(height: 12),
                           Row(

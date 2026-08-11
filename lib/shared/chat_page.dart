@@ -98,6 +98,15 @@ class _ChatPageState extends State<ChatPage> {
   }
 
   Future<void> _sendMessage() async {
+    if (_activeConversationId == null && _selectedTargetId != null) {
+      final fallbackConv = await SupabaseService().getOrCreateDirectConversation(_selectedTargetId!);
+      if (mounted) {
+        setState(() {
+          _activeConversationId = fallbackConv;
+        });
+      }
+    }
+
     if (_activeConversationId == null) return;
     
     final text = _msgController.text.trim();
@@ -107,11 +116,15 @@ class _ChatPageState extends State<ChatPage> {
     
     await SupabaseService().sendChatMessage(_activeConversationId!, text);
 
-    Future.delayed(const Duration(milliseconds: 250), () {
+    if (mounted) {
+      setState(() {});
+    }
+
+    Future.delayed(const Duration(milliseconds: 100), () {
       if (_scrollController.hasClients) {
         _scrollController.animateTo(
           _scrollController.position.maxScrollExtent,
-          duration: const Duration(milliseconds: 250),
+          duration: const Duration(milliseconds: 200),
           curve: Curves.easeOut,
         );
       }

@@ -33,8 +33,16 @@ class _ProfileBodyState extends State<ProfileBody> {
   }
 
   void _editProfileDialog(User user, Employee? emp) {
+    final metaPhone = user.userMetadata?['phone']?.toString();
+    final empPhoneVal = (emp?.phone != null && emp!.phone.trim().isNotEmpty) ? emp.phone.trim() : null;
+    final initialPhone = (empPhoneVal != null && empPhoneVal.isNotEmpty)
+        ? empPhoneVal
+        : ((metaPhone != null && metaPhone.trim().isNotEmpty)
+            ? metaPhone.trim()
+            : (user.phone != null && user.phone!.trim().isNotEmpty ? user.phone!.trim() : ''));
+
     final nameCtrl = TextEditingController(text: user.userMetadata?['full_name'] ?? emp?.name ?? 'Admin User');
-    final phoneCtrl = TextEditingController(text: user.userMetadata?['phone'] ?? emp?.phone ?? '+1 555-0100');
+    final phoneCtrl = TextEditingController(text: initialPhone);
     final deptCtrl = TextEditingController(text: emp?.department ?? 'Management');
 
     showDialog(
@@ -123,6 +131,16 @@ class _ProfileBodyState extends State<ProfileBody> {
                   debugPrint('Error updating auth metadata: $e');
                 }
 
+                // Try to update profiles database table
+                try {
+                  await Supabase.instance.client
+                      .from('profiles')
+                      .update({'full_name': newName, 'phone': newPhone})
+                      .eq('id', user.id);
+                } catch (e) {
+                  debugPrint('Notice updating profiles table: $e');
+                }
+
                 // Update employee record if exists
                 if (emp != null) {
                   final updatedEmp = emp.copyWith(
@@ -145,7 +163,8 @@ class _ProfileBodyState extends State<ProfileBody> {
                   _store.addEmployee(newEmp);
                 }
 
-                if (context.mounted) {
+                if (mounted && context.mounted) {
+                  setState(() {});
                   Navigator.pop(context);
                   ScaffoldMessenger.of(context).showSnackBar(
                     const SnackBar(
@@ -183,8 +202,19 @@ class _ProfileBodyState extends State<ProfileBody> {
     final userName = matchingEmp?.name ??
         (metaName.isNotEmpty ? metaName : (userEmail.contains('@') ? userEmail.split('@')[0] : 'Admin User'));
     final userRole = matchingEmp?.role.toUpperCase() ?? metaRole;
-    final empPhone = matchingEmp?.phone ?? user?.userMetadata?['phone']?.toString() ?? 'Contact Not Provided';
     final empDept = matchingEmp?.department ?? 'Executive Management';
+
+    // Robust phone number extraction
+    String empPhone = '';
+    if (matchingEmp?.phone != null && matchingEmp!.phone.trim().isNotEmpty) {
+      empPhone = matchingEmp.phone.trim();
+    } else if (user?.userMetadata?['phone'] != null && user!.userMetadata!['phone'].toString().trim().isNotEmpty) {
+      empPhone = user.userMetadata!['phone'].toString().trim();
+    } else if (user?.phone != null && user!.phone!.trim().isNotEmpty) {
+      empPhone = user.phone!.trim();
+    } else {
+      empPhone = 'Contact Not Provided';
+    }
 
     return LayoutBuilder(
       builder: (context, constraints) {
@@ -252,6 +282,22 @@ class _ProfileBodyState extends State<ProfileBody> {
                             ),
                           ),
                         ),
+                        const SizedBox(height: 10),
+                        Row(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            const Icon(Icons.phone_outlined, size: 15, color: kPremiumGold),
+                            const SizedBox(width: 6),
+                            Text(
+                              empPhone,
+                              style: const TextStyle(
+                                color: kPremiumMuted,
+                                fontSize: 14,
+                                fontWeight: FontWeight.w500,
+                              ),
+                            ),
+                          ],
+                        ),
                         const SizedBox(height: 18),
                         GoldButton(
                           label: 'Edit Profile',
@@ -281,7 +327,7 @@ class _ProfileBodyState extends State<ProfileBody> {
                 ),
                 _infoTile(
                   icon: Icons.phone,
-                  title: 'Phone',
+                  title: 'Phone Number',
                   subtitle: empPhone,
                 ),
                 _infoTile(

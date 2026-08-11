@@ -175,6 +175,8 @@ class _AddTaskPageState extends State<AddTaskPage> {
         }
       }
 
+      await AppDataStore().refreshFromSupabase();
+
       if (mounted) {
         Navigator.pop(context);
         ScaffoldMessenger.of(context).showSnackBar(
