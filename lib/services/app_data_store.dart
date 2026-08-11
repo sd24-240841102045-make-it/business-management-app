@@ -496,7 +496,35 @@ class AppDataStore extends ChangeNotifier {
   final List<ClientModel> _clients = [];
   final List<ProjectModel> _projects = [];
   final List<TaskModel> _tasks = [];
-  final List<InvoiceModel> _invoices = [];
+  final List<InvoiceModel> _invoices = [
+    InvoiceModel(
+      id: 'demo-001',
+      invoiceNumber: 'INV-2026-001',
+      clientName: 'Demo Client',
+      amount: 5000.00,
+      status: 'Paid',
+      issueDate: '01 Aug 2026',
+      dueDate: '15 Aug 2026',
+    ),
+    InvoiceModel(
+      id: 'demo-002',
+      invoiceNumber: 'INV-2026-002',
+      clientName: 'Demo Client',
+      amount: 12500.00,
+      status: 'Pending',
+      issueDate: '05 Aug 2026',
+      dueDate: '20 Aug 2026',
+    ),
+    InvoiceModel(
+      id: 'demo-003',
+      invoiceNumber: 'INV-2026-003',
+      clientName: 'Demo Client',
+      amount: 3200.00,
+      status: 'Overdue',
+      issueDate: '10 Jul 2026',
+      dueDate: '25 Jul 2026',
+    ),
+  ];
   final List<LeaveRequest> _leaveRequests = [];
 
   bool _isCheckedIn = false;
@@ -622,18 +650,21 @@ class AppDataStore extends ChangeNotifier {
       }
 
       final remoteInvoices = await SupabaseService().fetchInvoices();
+      // Always replace demo seeds once Supabase responds (even if empty)
       if (remoteInvoices.isNotEmpty) {
-        _invoices.clear();
+        _invoices.removeWhere((inv) => inv.id.startsWith('demo-'));
         for (final inv in remoteInvoices) {
-          _invoices.add(InvoiceModel(
-            id: inv.id,
-            invoiceNumber: inv.invoiceNumber,
-            clientName: 'Client',
-            amount: inv.total,
-            status: inv.status,
-            issueDate: inv.issueDate,
-            dueDate: inv.dueDate,
-          ));
+          if (!_invoices.any((e) => e.id == inv.id)) {
+            _invoices.insert(0, InvoiceModel(
+              id: inv.id,
+              invoiceNumber: inv.invoiceNumber,
+              clientName: 'Client',
+              amount: inv.total,
+              status: inv.status,
+              issueDate: inv.issueDate,
+              dueDate: inv.dueDate,
+            ));
+          }
         }
       }
     } catch (e) {
@@ -775,5 +806,12 @@ class AppDataStore extends ChangeNotifier {
       return success;
     }
     return false;
+  }
+
+  // --- INVOICE MANAGEMENT ---
+  void addInvoice(InvoiceModel invoice) {
+    _invoices.insert(0, invoice);
+    SupabaseService().insertInvoice(invoice);
+    notifyListeners();
   }
 }

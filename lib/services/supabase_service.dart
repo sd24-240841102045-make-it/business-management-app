@@ -1181,6 +1181,76 @@ class SupabaseService {
       return [];
     }
   }
+
+  Future<bool> insertInvoice(InvoiceModel invoice) async {
+    if (currentOrganizationId == null) return false;
+    try {
+      final orgId = currentOrganizationId!;
+
+      // Try to find client_id by matching clientName in AppDataStore first
+      String? clientId;
+      try {
+        final store = AppDataStore();
+        final matchedClient = store.clients.cast<ClientModel?>().firstWhere(
+              (c) => c?.name.toLowerCase() == invoice.clientName.toLowerCase(),
+              orElse: () => store.clients.isNotEmpty ? store.clients.first : null,
+            );
+        if (matchedClient != null && matchedClient.id.isNotEmpty) {
+          clientId = matchedClient.id;
+        } else {
+          // Fallback: fetch from DB
+          final clientResp = await client
+              .from('clients')
+              .select('id')
+              .eq('organization_id', orgId)
+              .limit(1)
+              .maybeSingle();
+          if (clientResp != null) {
+            clientId = clientResp['id'].toString();
+          }
+        }
+      } catch (_) {}
+
+      if (clientId == null) {
+        debugPrint('insertInvoice: no client found, skipping DB insert');
+        return false;
+      }
+
+      // Format dates as ISO 8601 (YYYY-MM-DD) for the DATE column
+      final now = DateTime.now();
+      final issueDateIso =
+          '${now.year}-${now.month.toString().padLeft(2, '0')}-${now.day.toString().padLeft(2, '0')}';
+
+      // Parse due date - if already ISO skip, else default to 30 days from now
+      String dueDateIso;
+      try {
+        final parsedDue = DateTime.parse(invoice.dueDate);
+        dueDateIso =
+            '${parsedDue.year}-${parsedDue.month.toString().padLeft(2, '0')}-${parsedDue.day.toString().padLeft(2, '0')}';
+      } catch (_) {
+        final due = now.add(const Duration(days: 30));
+        dueDateIso =
+            '${due.year}-${due.month.toString().padLeft(2, '0')}-${due.day.toString().padLeft(2, '0')}';
+      }
+
+      // Do NOT send 'id' — let Supabase generate the UUID
+      await client.from('invoices').insert({
+        'organization_id': orgId,
+        'client_id': clientId,
+        'invoice_number': invoice.invoiceNumber,
+        'issue_date': issueDateIso,
+        'due_date': dueDateIso,
+        'subtotal': invoice.amount,
+        'tax': 0.0,
+        'total': invoice.amount,
+        'status': invoice.status,
+      });
+      return true;
+    } catch (e) {
+      debugPrint('Error inserting invoice: $e');
+      return false;
+    }
+  }
 }
 
 class AuthErrorHandler {
