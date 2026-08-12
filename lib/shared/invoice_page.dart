@@ -147,8 +147,8 @@ class _InvoicePageState extends State<InvoicePage> {
                         controller: amountCtrl,
                         keyboardType: TextInputType.number,
                         decoration: const InputDecoration(
-                          labelText: 'Amount (\$)',
-                          prefixIcon: Icon(Icons.attach_money_outlined),
+                          labelText: 'Amount (₹)',
+                          prefixIcon: Icon(Icons.currency_rupee),
                         ),
                       ),
                       const SizedBox(height: 14),
@@ -368,7 +368,7 @@ class _InvoicePageState extends State<InvoicePage> {
                                   _summaryCard(
                                       title: 'Total Value',
                                       value:
-                                          '\$${totalValue.toStringAsFixed(2)}',
+                                          '₹${totalValue.toStringAsFixed(2)}',
                                       icon: Icons.receipt_long,
                                       color: kPremiumGold,
                                       expand: false),
@@ -376,7 +376,7 @@ class _InvoicePageState extends State<InvoicePage> {
                                   _summaryCard(
                                       title: 'Collected',
                                       value:
-                                          '\$${paidValue.toStringAsFixed(2)}',
+                                          '₹${paidValue.toStringAsFixed(2)}',
                                       icon: Icons.check_circle_outline,
                                       color: kPremiumSuccess,
                                       expand: false),
@@ -384,7 +384,7 @@ class _InvoicePageState extends State<InvoicePage> {
                                   _summaryCard(
                                       title: 'Outstanding',
                                       value:
-                                          '\$${outstandingValue.toStringAsFixed(2)}',
+                                          '₹${outstandingValue.toStringAsFixed(2)}',
                                       icon: Icons.pending_actions_outlined,
                                       color: kPremiumWarning,
                                       expand: false),
@@ -403,7 +403,7 @@ class _InvoicePageState extends State<InvoicePage> {
                                 _summaryCard(
                                     title: 'Total Value',
                                     value:
-                                        '\$${totalValue.toStringAsFixed(2)}',
+                                        '₹${totalValue.toStringAsFixed(2)}',
                                     icon: Icons.receipt_long,
                                     color: kPremiumGold,
                                     expand: true),
@@ -411,7 +411,7 @@ class _InvoicePageState extends State<InvoicePage> {
                                 _summaryCard(
                                     title: 'Collected',
                                     value:
-                                        '\$${paidValue.toStringAsFixed(2)}',
+                                        '₹${paidValue.toStringAsFixed(2)}',
                                     icon: Icons.check_circle_outline,
                                     color: kPremiumSuccess,
                                     expand: true),
@@ -419,7 +419,7 @@ class _InvoicePageState extends State<InvoicePage> {
                                 _summaryCard(
                                     title: 'Outstanding',
                                     value:
-                                        '\$${outstandingValue.toStringAsFixed(2)}',
+                                        '₹${outstandingValue.toStringAsFixed(2)}',
                                     icon: Icons.pending_actions_outlined,
                                     color: kPremiumWarning,
                                     expand: true),
@@ -606,7 +606,7 @@ class _InvoicePageState extends State<InvoicePage> {
                                                       fontSize: 12.5,
                                                       color: kPremiumMuted)),
                                               Text(
-                                                  '\$${inv.amount.toStringAsFixed(2)}',
+                                                  '₹${inv.amount.toStringAsFixed(2)}',
                                                   style: const TextStyle(
                                                       fontWeight:
                                                           FontWeight.w800,
@@ -656,7 +656,7 @@ class _InvoicePageState extends State<InvoicePage> {
                                                 CrossAxisAlignment.end,
                                             children: [
                                               Text(
-                                                  '\$${inv.amount.toStringAsFixed(2)}',
+                                                  '₹${inv.amount.toStringAsFixed(2)}',
                                                   style: const TextStyle(
                                                       fontWeight: FontWeight.w800,
                                                       fontSize: 16)),

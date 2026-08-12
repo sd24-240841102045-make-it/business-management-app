@@ -20,9 +20,9 @@ class _SettingsPageState extends State<SettingsPage> {
   bool _emailNotifications = true;
   bool _pushNotifications = true;
   bool _biometricLock = false;
-  String _selectedCurrency = '\$ (USD)';
+  String _selectedCurrency = '₹ (INR)';
 
-  final List<String> _currencies = ['\$ (USD)', '₹ (INR)', '€ (EUR)', '£ (GBP)'];
+  final List<String> _currencies = ['₹ (INR)', '\$ (USD)', '€ (EUR)', '£ (GBP)'];
 
   @override
   void initState() {
@@ -341,12 +341,15 @@ class _SettingsPageState extends State<SettingsPage> {
                         height: 52,
                         child: OutlinedButton.icon(
                           onPressed: () async {
-                            await SupabaseService().signOut();
-                            if (context.mounted) {
-                              Navigator.pushReplacement(
-                                context,
-                                MaterialPageRoute(builder: (context) => const LoginPage()),
-                              );
+                            final confirm = await showLogoutConfirmationDialog(context);
+                            if (confirm) {
+                              await SupabaseService().signOut();
+                              if (context.mounted) {
+                                Navigator.pushReplacement(
+                                  context,
+                                  MaterialPageRoute(builder: (context) => const LoginPage()),
+                                );
+                              }
                             }
                           },
                           icon: const Icon(Icons.logout, color: Colors.redAccent),

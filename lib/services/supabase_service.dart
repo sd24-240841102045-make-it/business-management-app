@@ -33,6 +33,12 @@ class SupabaseService {
   final Set<String> _deletedClientEmails = {};
   final Set<String> _deletedEmployeeIds = {};
   final Set<String> _deletedEmployeeEmails = {};
+  final Set<String> _deletedProjectIds = {};
+
+  bool isProjectDeleted(String id) => _deletedProjectIds.contains(id);
+
+  final Map<String, List<ChatMessage>> _localMessagesCache = {};
+  final StreamController<void> _chatUpdateController = StreamController<void>.broadcast();
 
   bool get isAuthActionInProgress => _isAuthActionInProgress;
 
@@ -465,6 +471,25 @@ class SupabaseService {
         .subscribe();
   }
 
+  /// Returns the set of user IDs that have role='admin' in this organization.
+  /// Used to exclude admins from employee and client lists.
+  Future<Set<String>> _fetchAdminUserIds() async {
+    try {
+      if (currentOrganizationId == null) return {};
+      final rows = await client
+          .from('organization_memberships')
+          .select('user_id')
+          .eq('organization_id', currentOrganizationId!)
+          .eq('role', 'admin');
+      return (rows as List)
+          .map((r) => r['user_id']?.toString())
+          .whereType<String>()
+          .toSet();
+    } catch (_) {
+      return {};
+    }
+  }
+
   Future<List<Employee>?> fetchEmployees() async {
     try {
       if (currentOrganizationId == null) {
@@ -514,13 +539,18 @@ class SupabaseService {
         debugPrint('Employees auto-sync notice: $syncErr');
       }
 
-      final list = (response as List)
+      final adminUserIds = await _fetchAdminUserIds();
+
+      final list = (rawList)
           .where((json) {
             final eId = json['id']?.toString();
+            final eUserId = json['user_id']?.toString();
             final profile = json['profiles'] as Map<String, dynamic>?;
             final eEmail = profile?['email']?.toString()?.trim()?.toLowerCase();
             if (eId != null && _deletedEmployeeIds.contains(eId)) return false;
             if (eEmail != null && _deletedEmployeeEmails.contains(eEmail)) return false;
+            // Exclude admins from the employee list
+            if (eUserId != null && adminUserIds.contains(eUserId)) return false;
             return true;
           })
           .map((json) {
@@ -747,12 +777,17 @@ class SupabaseService {
         debugPrint('Clients auto-sync notice: $syncErr');
       }
 
+      final adminUserIds = await _fetchAdminUserIds();
+
       final list = (response as List)
           .where((json) {
             final cId = json['id']?.toString();
             final cEmail = json['email']?.toString()?.trim()?.toLowerCase();
+            final cUserId = json['user_id']?.toString();
             if (cId != null && _deletedClientIds.contains(cId)) return false;
             if (cEmail != null && _deletedClientEmails.contains(cEmail)) return false;
+            // Exclude admins from the client list
+            if (cUserId != null && adminUserIds.contains(cUserId)) return false;
             return true;
           })
           .map((json) {
@@ -762,6 +797,7 @@ class SupabaseService {
         final company = json['company_name']?.toString() ?? json['company']?.toString() ?? name;
         return ClientModel(
           id: json['id']?.toString() ?? '',
+          userId: json['user_id']?.toString(),
           name: name.isNotEmpty ? name : 'Client',
           company: company.isNotEmpty ? company : 'Client Business',
           email: email,
@@ -847,6 +883,20 @@ class SupabaseService {
           if (dbEmail != null) _deletedClientEmails.add(dbEmail);
 
           if (dbId != null) {
+            try {
+              final clientProjs = await client.from('projects').select('id').eq('client_id', dbId);
+              if (clientProjs is List) {
+                for (final cp in clientProjs) {
+                  final cpId = cp['id']?.toString();
+                  if (cpId != null && cpId.isNotEmpty) {
+                    _deletedProjectIds.add(cpId);
+                    try { await client.from('tasks').delete().eq('project_id', cpId); } catch (_) {}
+                    try { await client.from('invoices').delete().eq('project_id', cpId); } catch (_) {}
+                    try { await client.from('project_members').delete().eq('project_id', cpId); } catch (_) {}
+                  }
+                }
+              }
+            } catch (_) {}
             try { await client.from('projects').delete().eq('client_id', dbId); } catch (_) {}
             try { await client.from('invoices').delete().eq('client_id', dbId); } catch (_) {}
             try { await client.from('chat_messages').delete().eq('client_id', dbId); } catch (_) {}
@@ -971,54 +1021,141 @@ class SupabaseService {
     }
   }
 
-  final Map<String, List<ChatMessage>> _localMessagesCache = {};
-
-  Future<String> getOrCreateDirectConversation(String otherUserId) async {
+  Future<List<AdminModel>> fetchAdmins() async {
     try {
-      if (currentUser == null || currentOrganizationId == null) {
-        final cleanOther = otherUserId.replaceAll(RegExp(r'[^a-zA-Z0-9]'), '');
+      final res = await client.from('profiles').select('*');
+      final list = <AdminModel>[];
+      if (res is List) {
+        for (final p in res) {
+          final role = p['role']?.toString()?.toLowerCase() ?? '';
+          if (role == 'admin' || role == 'owner') {
+            list.add(AdminModel(
+              id: p['id']?.toString() ?? '',
+              name: p['full_name']?.toString() ?? 'Executive Admin',
+              email: p['email']?.toString() ?? 'admin@company.com',
+              phone: p['phone_number']?.toString() ?? '',
+              avatarUrl: p['avatar_url']?.toString() ?? '',
+            ));
+          }
+        }
+      }
+      if (list.isEmpty) {
+        final u = currentUser;
+        if (u != null) {
+          list.add(AdminModel(
+            id: u.id,
+            name: 'Executive Admin',
+            email: u.email ?? 'admin@company.com',
+          ));
+        }
+      }
+      return list;
+    } catch (e) {
+      debugPrint('Error fetching admins from profiles: $e');
+      return [];
+    }
+  }
+
+  Future<String> getOrCreateDirectConversation(String targetId) async {
+    try {
+      final user = currentUser;
+      if (user == null) {
+        final cleanOther = targetId.replaceAll(RegExp(r'[^a-zA-Z0-9]'), '');
         return 'conv_$cleanOther';
       }
-      final myId = currentUser!.id;
-      
+      final myId = user.id;
+
+      // Resolve targetId to real Supabase Auth UUID if targetId is a Client/Employee record ID
+      String otherUserId = targetId;
+      for (final client in AppDataStore().clients) {
+        if ((client.id == targetId || client.email == targetId) && client.userId != null && client.userId!.isNotEmpty) {
+          otherUserId = client.userId!;
+          break;
+        }
+      }
+      if (otherUserId == targetId) {
+        for (final emp in AppDataStore().employees) {
+          if ((emp.id == targetId || emp.email == targetId) && emp.userId.isNotEmpty) {
+            otherUserId = emp.userId;
+            break;
+          }
+        }
+      }
+
+      // Step 1: Look for existing conversation in conversation_members table (checking both targetId & resolved otherUserId)
       try {
-        final res = await client
-            .from('conversations')
-            .select('id, conversation_members!inner(user_id)')
-            .eq('organization_id', currentOrganizationId!)
-            .eq('type', 'direct');
-        
-        for (final conv in (res as List)) {
-          final members = (conv['conversation_members'] as List).map((m) => m['user_id'] as String).toList();
-          if (members.length == 2 && members.contains(myId) && members.contains(otherUserId)) {
-            return conv['id'] as String;
+        final myMembers = await client
+            .from('conversation_members')
+            .select('conversation_id')
+            .eq('user_id', myId);
+
+        if (myMembers is List && myMembers.isNotEmpty) {
+          final myConvIds = myMembers
+              .map((r) => r['conversation_id']?.toString())
+              .whereType<String>()
+              .where((id) => id.isNotEmpty)
+              .toList();
+
+          if (myConvIds.isNotEmpty) {
+            final otherMembers = await client
+                .from('conversation_members')
+                .select('conversation_id')
+                .inFilter('user_id', [targetId, otherUserId])
+                .inFilter('conversation_id', myConvIds);
+
+            if (otherMembers is List && otherMembers.isNotEmpty) {
+              final existingId = otherMembers.first['conversation_id']?.toString();
+              if (existingId != null && existingId.isNotEmpty) {
+                debugPrint('Found existing conversation in database: $existingId');
+                return existingId;
+              }
+            }
           }
         }
       } catch (checkErr) {
-        debugPrint('Direct conversation lookup notice: $checkErr');
+        debugPrint('Notice looking up conversation_members: $checkErr');
       }
-      
+
+      // Step 2: Insert new record into `conversations` table
+      String convId = '';
       try {
-        final newConv = await client.from('conversations').insert({
-          'organization_id': currentOrganizationId,
+        final insertPayload = <String, dynamic>{
           'type': 'direct',
           'title': 'Direct Chat',
-        }).select().single();
-        
-        final convId = newConv['id'] as String;
-        
+        };
+        final newConv = await client
+            .from('conversations')
+            .insert(insertPayload)
+            .select()
+            .single();
+
+        convId = newConv['id']?.toString() ?? '';
+      } catch (convErr) {
+        debugPrint('conversations insert notice (retrying minimal): $convErr');
+        try {
+          final newConv = await client
+              .from('conversations')
+              .insert(<String, dynamic>{})
+              .select()
+              .single();
+          convId = newConv['id']?.toString() ?? '';
+        } catch (retryErr) {
+          debugPrint('conversations retry insert notice: $retryErr');
+        }
+      }
+
+      // Step 3: Insert members into `conversation_members` table
+      if (convId.isNotEmpty) {
         try {
           await client.from('conversation_members').insert([
             {'conversation_id': convId, 'user_id': myId},
             {'conversation_id': convId, 'user_id': otherUserId},
           ]);
+          debugPrint('Successfully created conversation $convId and added members to conversation_members table.');
         } catch (memErr) {
           debugPrint('conversation_members insert notice: $memErr');
         }
-        
         return convId;
-      } catch (convErr) {
-        debugPrint('conversations insert notice: $convErr');
       }
 
       final safeOther = otherUserId.replaceAll(RegExp(r'[^a-zA-Z0-9]'), '');
@@ -1026,57 +1163,84 @@ class SupabaseService {
       return 'conv_${safeMy}_$safeOther';
     } catch (e) {
       debugPrint('Supabase getOrCreateDirectConversation error: $e');
-      final safeOther = otherUserId.replaceAll(RegExp(r'[^a-zA-Z0-9]'), '');
+      final safeOther = targetId.replaceAll(RegExp(r'[^a-zA-Z0-9]'), '');
       return 'conv_$safeOther';
     }
   }
 
+  // Per-conversation stream controllers (stable across rebuilds)
+  final Map<String, StreamController<List<ChatMessage>>> _convStreamControllers = {};
+
   Stream<List<ChatMessage>> getMessagesStream(String conversationId) {
-    Stream<List<ChatMessage>> remoteStream;
+    // Reuse existing controller for this conversation so the StreamBuilder
+    // doesn't resubscribe on every setState
+    if (!_convStreamControllers.containsKey(conversationId)) {
+      final controller = StreamController<List<ChatMessage>>.broadcast();
+      _convStreamControllers[conversationId] = controller;
+
+      // Start the Supabase realtime subscription and push through controller
+      _subscribeToConversation(conversationId, controller);
+    }
+    return _convStreamControllers[conversationId]!.stream;
+  }
+
+  void _subscribeToConversation(String conversationId, StreamController<List<ChatMessage>> controller) {
     try {
-      remoteStream = client
+      client
           .from('messages')
           .stream(primaryKey: ['id'])
           .eq('conversation_id', conversationId)
           .order('created_at', ascending: true)
-          .map((list) {
-            return list.map((json) {
-              final decryptedMessage = EncryptionService.decrypt(json['content']?.toString() ?? '');
+          .listen((list) {
+            if (controller.isClosed) return;
+            final remoteMessages = list.map((json) {
+              final decrypted = EncryptionService.decrypt(json['content']?.toString() ?? '');
               return ChatMessage(
                 id: json['id']?.toString() ?? '',
                 senderId: json['sender_id']?.toString() ?? '',
-                senderName: 'User', // Re-mapped on UI
-                senderRole: 'client', // Re-mapped on UI
+                senderName: 'User',
+                senderRole: 'user',
                 conversationId: conversationId,
-                message: decryptedMessage,
+                message: decrypted,
                 createdAt: json['created_at']?.toString() ?? DateTime.now().toIso8601String(),
               );
             }).toList();
+
+            // Merge remote + local so optimistic messages stay visible
+            _pushMergedMessages(conversationId, controller, remoteMessages);
+          }, onError: (err) {
+            debugPrint('Realtime stream error for $conversationId: $err');
+            // On error push whatever is in local cache
+            if (!controller.isClosed) {
+              controller.add(_localMessagesCache[conversationId] ?? []);
+            }
           });
     } catch (e) {
-      debugPrint('getMessagesStream init notice: $e');
-      remoteStream = Stream.value([]);
-    }
-
-    return remoteStream.map((remoteList) {
-      final localList = _localMessagesCache[conversationId] ?? [];
-      final combined = [...remoteList];
-      for (final loc in localList) {
-        if (!combined.any((r) => r.id == loc.id || (r.message == loc.message && r.senderId == loc.senderId))) {
-          combined.add(loc);
-        }
+      debugPrint('getMessagesStream subscribe error: $e');
+      if (!controller.isClosed) {
+        controller.add(_localMessagesCache[conversationId] ?? []);
       }
-      return combined;
-    }).handleError((err) {
-      debugPrint('getMessagesStream error notice: $err');
-      return _localMessagesCache[conversationId] ?? [];
-    });
+    }
+  }
+
+  void _pushMergedMessages(String conversationId, StreamController<List<ChatMessage>> controller, List<ChatMessage> remoteMessages) {
+    if (controller.isClosed) return;
+    final localList = _localMessagesCache[conversationId] ?? [];
+    final combined = [...remoteMessages];
+    for (final loc in localList) {
+      if (!combined.any((r) => r.id == loc.id || (r.message == loc.message && r.senderId == loc.senderId))) {
+        combined.add(loc);
+      }
+    }
+    combined.sort((a, b) => a.createdAt.compareTo(b.createdAt));
+    controller.add(combined);
   }
 
   Future<bool> sendChatMessage(String conversationId, String content) async {
-    final senderId = currentUser?.id ?? 'user';
+    final senderId = currentUser?.id ?? 'anonymous';
+    final localId = 'loc_${DateTime.now().millisecondsSinceEpoch}';
     final newMsg = ChatMessage(
-      id: 'loc_${DateTime.now().millisecondsSinceEpoch}',
+      id: localId,
       senderId: senderId,
       senderName: 'Me',
       senderRole: 'user',
@@ -1085,30 +1249,35 @@ class SupabaseService {
       createdAt: DateTime.now().toIso8601String(),
     );
 
-    if (!_localMessagesCache.containsKey(conversationId)) {
-      _localMessagesCache[conversationId] = [];
+    // Immediately add to local cache and push to stream so UI updates instantly
+    _localMessagesCache.putIfAbsent(conversationId, () => []).add(newMsg);
+    if (_convStreamControllers.containsKey(conversationId)) {
+      _pushMergedMessages(conversationId, _convStreamControllers[conversationId]!, []);
     }
-    _localMessagesCache[conversationId]!.add(newMsg);
 
     try {
-      if (currentUser == null) return true;
+      if (currentUser == null) {
+        debugPrint('sendChatMessage: No authenticated user, storing locally only.');
+        return true;
+      }
       final encryptedContent = EncryptionService.encrypt(content);
-      
-      final payload = <String, dynamic>{
+      await client.from('messages').insert({
         'conversation_id': conversationId,
         'sender_id': senderId,
         'content': encryptedContent,
-      };
-      if (currentOrganizationId != null) {
-        payload['organization_id'] = currentOrganizationId;
-      }
-
-      await client.from('messages').insert(payload);
+      });
+      // Remove local optimistic message now that DB has it (realtime will bring it back)
+      _localMessagesCache[conversationId]?.removeWhere((m) => m.id == localId);
       return true;
     } catch (e) {
-      debugPrint('Supabase sendChatMessage notice (cached locally): $e');
+      debugPrint('sendChatMessage DB insert error: $e — keeping locally.');
       return true;
     }
+  }
+
+  void closeConversationStream(String conversationId) {
+    _convStreamControllers[conversationId]?.close();
+    _convStreamControllers.remove(conversationId);
   }
 
   Future<List<ProjectDomainModel>> fetchProjects() async {
@@ -1118,10 +1287,32 @@ class SupabaseService {
           .from('projects')
           .select('*, clients(*)')
           .eq('organization_id', currentOrganizationId!);
-      return (response as List).map((json) => ProjectDomainModel.fromMap(json)).toList();
+      return (response as List)
+          .where((json) => !_deletedProjectIds.contains(json['id']?.toString()))
+          .map((json) => ProjectDomainModel.fromMap(json))
+          .toList();
     } catch (e) {
       debugPrint('Error fetching projects: $e');
       return [];
+    }
+  }
+
+  Future<bool> deleteProject(String projectId) async {
+    try {
+      _deletedProjectIds.add(projectId);
+
+      try { await client.from('tasks').delete().eq('project_id', projectId); } catch (_) {}
+      try { await client.from('invoices').delete().eq('project_id', projectId); } catch (_) {}
+      try { await client.from('project_members').delete().eq('project_id', projectId); } catch (_) {}
+      try { await client.from('client_requests').delete().eq('project_id', projectId); } catch (_) {}
+      try { await client.from('approvals').delete().eq('project_id', projectId); } catch (_) {}
+      try { await client.from('conversations').delete().eq('project_id', projectId); } catch (_) {}
+
+      await client.from('projects').delete().eq('id', projectId);
+      return true;
+    } catch (e) {
+      debugPrint('Supabase deleteProject error: $e');
+      return false;
     }
   }
 
@@ -1161,7 +1352,10 @@ class SupabaseService {
         query = query.eq('project_id', projectId);
       }
       final response = await query;
-      return (response as List).map((json) => TaskDomainModel.fromMap(json)).toList();
+      return (response as List)
+          .where((json) => !_deletedProjectIds.contains(json['project_id']?.toString()))
+          .map((json) => TaskDomainModel.fromMap(json))
+          .toList();
     } catch (e) {
       debugPrint('Error fetching tasks: $e');
       return [];
@@ -1248,6 +1442,143 @@ class SupabaseService {
       return true;
     } catch (e) {
       debugPrint('Error inserting invoice: $e');
+      return false;
+    }
+  }
+
+  Future<List<Map<String, dynamic>>> fetchMyAssignedConsultationRequests() async {
+    try {
+      final user = currentUser;
+      if (user == null) return [];
+
+      try {
+        final res = await client
+            .from('client_requests')
+            .select('*')
+            .or('assigned_employee_id.eq.${user.id},assigned_to.eq.${user.id}')
+            .order('created_at', ascending: false);
+        if (res is List && res.isNotEmpty) {
+          return List<Map<String, dynamic>>.from(res);
+        }
+      } catch (_) {}
+
+      try {
+        final res = await client
+            .from('consultations')
+            .select('*')
+            .or('assigned_employee_id.eq.${user.id},assigned_to.eq.${user.id}')
+            .order('created_at', ascending: false);
+        if (res is List && res.isNotEmpty) {
+          return List<Map<String, dynamic>>.from(res);
+        }
+      } catch (_) {}
+
+      return [];
+    } catch (e) {
+      debugPrint('Error fetching consultation requests: $e');
+      return [];
+    }
+  }
+
+  Future<List<Map<String, dynamic>>> fetchAllConsultationRequests() async {
+    try {
+      try {
+        final res = await client.from('client_requests').select('*').order('created_at', ascending: false);
+        if (res is List && res.isNotEmpty) {
+          return List<Map<String, dynamic>>.from(res);
+        }
+      } catch (_) {}
+
+      try {
+        final res = await client.from('consultations').select('*').order('created_at', ascending: false);
+        if (res is List && res.isNotEmpty) {
+          return List<Map<String, dynamic>>.from(res);
+        }
+      } catch (_) {}
+
+      return [];
+    } catch (e) {
+      debugPrint('Error fetching all consultation requests: $e');
+      return [];
+    }
+  }
+
+  Future<bool> acceptConsultationAndConnectClient({
+    required String requestId,
+    required String clientId,
+    required String employeeId,
+    required String employeeName,
+  }) async {
+    try {
+      // 1. Update client_requests or consultations status & assignee
+      try {
+        await client.from('client_requests').update({
+          'status': 'Approved',
+          'assigned_employee_id': employeeId,
+        }).eq('id', requestId);
+      } catch (_) {}
+
+      try {
+        await client.from('consultations').update({
+          'status': 'Approved',
+          'assigned_employee_id': employeeId,
+        }).eq('id', requestId);
+      } catch (_) {}
+
+      // 2. Connect Employee to Client in database
+      if (clientId.isNotEmpty) {
+        try {
+          await client.from('clients').update({
+            'assigned_employee_id': employeeId,
+            'assigned_employee_name': employeeName,
+          }).eq('id', clientId);
+        } catch (e) {
+          debugPrint('Error connecting employee to client: $e');
+        }
+      }
+
+      await AppDataStore().refreshFromSupabase();
+      return true;
+    } catch (e) {
+      debugPrint('Error accepting consultation and connecting client: $e');
+      return false;
+    }
+  }
+
+  Future<bool> createConsultationRequest({
+    required String clientId,
+    required String title,
+    required String description,
+    String? assignedEmployeeId,
+  }) async {
+    try {
+      final user = currentUser;
+      final orgId = currentOrganizationId;
+      final payload = {
+        if (orgId != null) 'organization_id': orgId,
+        if (clientId.isNotEmpty) 'client_id': clientId,
+        if (user?.id != null) 'created_by': user!.id,
+        'title': title,
+        'description': description,
+        'status': assignedEmployeeId != null && assignedEmployeeId.isNotEmpty ? 'Approved' : 'Pending',
+        if (assignedEmployeeId != null && assignedEmployeeId.isNotEmpty) 'assigned_employee_id': assignedEmployeeId,
+        'created_at': DateTime.now().toIso8601String(),
+      };
+
+      try {
+        await client.from('client_requests').insert(payload);
+        return true;
+      } catch (_) {}
+
+      try {
+        await client.from('consultations').insert(payload);
+        return true;
+      } catch (err) {
+        debugPrint('Error inserting into consultations: $err');
+        return false;
+      }
+    } catch (e) {
+      debugPrint('Error creating consultation request: $e');
       return false;
     }
   }

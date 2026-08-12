@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:business_managment_app/services/app_data_store.dart';
 import 'package:business_managment_app/employee/emp_profile.dart';
+import 'package:business_managment_app/shared/chat_page.dart';
 import 'package:business_managment_app/core/premium_theme.dart';
 
 class EmployeesBody extends StatefulWidget {
@@ -160,9 +161,9 @@ class EmployeesBodyState extends State<EmployeesBody> {
                         physics: const NeverScrollableScrollPhysics(),
                         gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
                           crossAxisCount: isDesktop ? 3 : isTablet ? 2 : 1,
-                          mainAxisExtent: 160,
-                          crossAxisSpacing: 16,
-                          mainAxisSpacing: 16,
+                          mainAxisExtent: 135,
+                          crossAxisSpacing: 12,
+                          mainAxisSpacing: 12,
                         ),
                         itemCount: filteredEmployees.length,
                         itemBuilder: (context, index) {
@@ -173,7 +174,7 @@ class EmployeesBodyState extends State<EmployeesBody> {
                             delay: Duration(milliseconds: 50 * (index % 6)),
                             child: GlassCard(
                               margin: EdgeInsets.zero,
-                              padding: const EdgeInsets.all(16),
+                              padding: const EdgeInsets.all(12),
                               onTap: () {
                                 Navigator.push(
                                   context,
@@ -184,15 +185,15 @@ class EmployeesBodyState extends State<EmployeesBody> {
                               },
                               child: Column(
                                 crossAxisAlignment: CrossAxisAlignment.start,
-                                mainAxisSize: MainAxisSize.min,
+                                mainAxisAlignment: MainAxisAlignment.start,
                                 children: [
                                   Row(
                                     children: [
                                       PremiumAvatar(
                                         label: emp.name,
                                         style: AvatarStyle.gradient,
-                                        size: 44,
-                                        radius: 22,
+                                        size: 38,
+                                        radius: 19,
                                       ),
                                       const SizedBox(width: 10),
                                       Expanded(
@@ -201,13 +202,13 @@ class EmployeesBodyState extends State<EmployeesBody> {
                                           children: [
                                             Text(
                                               emp.name,
-                                              style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 15, color: kPremiumText),
+                                              style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14, color: kPremiumText),
                                               maxLines: 1,
                                               overflow: TextOverflow.ellipsis,
                                             ),
                                             const SizedBox(height: 2),
                                             Text(
-                                              emp.role,
+                                              '${emp.role} • ${emp.department}',
                                               style: const TextStyle(color: kPremiumMuted, fontSize: 12),
                                               maxLines: 1,
                                               overflow: TextOverflow.ellipsis,
@@ -215,6 +216,7 @@ class EmployeesBodyState extends State<EmployeesBody> {
                                           ],
                                         ),
                                       ),
+                                      const SizedBox(width: 4),
                                       Container(
                                         padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
                                         decoration: BoxDecoration(
@@ -229,44 +231,63 @@ class EmployeesBodyState extends State<EmployeesBody> {
                                           style: TextStyle(
                                             color: emp.status == 'Active' ? Colors.greenAccent : Colors.orangeAccent,
                                             fontWeight: FontWeight.bold,
-                                            fontSize: 11,
+                                            fontSize: 10,
                                           ),
                                         ),
                                       ),
-                                      const SizedBox(width: 6),
-                                      IconButton(
-                                        icon: const Icon(Icons.delete_outline, color: Colors.redAccent, size: 18),
-                                        onPressed: () => _confirmDelete(emp),
-                                        tooltip: 'Delete Employee',
-                                        padding: EdgeInsets.zero,
-                                        constraints: const BoxConstraints(),
-                                      ),
                                     ],
                                   ),
 
-                                  const Divider(height: 18, color: Colors.white10),
+                                  const SizedBox(height: 10),
+                                  const Divider(height: 1, color: Colors.white10),
+                                  const SizedBox(height: 8),
 
                                   Row(
+                                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
                                     children: [
-                                      const Icon(Icons.business_center_outlined, size: 15, color: kPremiumMuted),
-                                      const SizedBox(width: 6),
-                                      Expanded(
-                                        child: Text(emp.department, style: const TextStyle(fontSize: 12, color: kPremiumMuted)),
+                                      Row(
+                                        children: [
+                                          const Icon(Icons.people_alt_outlined, size: 14, color: kPremiumGold),
+                                          const SizedBox(width: 6),
+                                          Text(
+                                            '$assignedClients Client${assignedClients == 1 ? '' : 's'}',
+                                            style: const TextStyle(fontSize: 12, color: kPremiumGold, fontWeight: FontWeight.w600),
+                                          ),
+                                        ],
                                       ),
-                                    ],
-                                  ),
-
-                                  const SizedBox(height: 6),
-
-                                  Row(
-                                    children: [
-                                      const Icon(Icons.people_alt_outlined, size: 15, color: kPremiumGold),
-                                      const SizedBox(width: 6),
-                                      Expanded(
-                                        child: Text(
-                                          '$assignedClients Assigned Client${assignedClients == 1 ? '' : 's'}',
-                                          style: const TextStyle(fontSize: 12, color: kPremiumGold, fontWeight: FontWeight.w600),
-                                        ),
+                                      Row(
+                                        mainAxisSize: MainAxisSize.min,
+                                        children: [
+                                          IconButton(
+                                            icon: const Icon(Icons.chat_bubble_outline, color: kPremiumGold, size: 18),
+                                            onPressed: () {
+                                              Navigator.push(
+                                                context,
+                                                MaterialPageRoute(
+                                                  builder: (context) => ChatPage(
+                                                    initialTargetId: emp.userId.isNotEmpty ? emp.userId : emp.id,
+                                                    initialTargetName: emp.name,
+                                                    initialTargetSubtitle: '${emp.role} • ${emp.department}',
+                                                    initialTargetType: 'employee',
+                                                    initialTargetEmail: emp.email,
+                                                    initialTargetPhone: emp.phone,
+                                                  ),
+                                                ),
+                                              );
+                                            },
+                                            tooltip: 'Message Employee',
+                                            padding: EdgeInsets.zero,
+                                            constraints: const BoxConstraints(minWidth: 30, minHeight: 30),
+                                          ),
+                                          const SizedBox(width: 4),
+                                          IconButton(
+                                            icon: const Icon(Icons.delete_outline, color: Colors.redAccent, size: 18),
+                                            onPressed: () => _confirmDelete(emp),
+                                            tooltip: 'Delete Employee',
+                                            padding: EdgeInsets.zero,
+                                            constraints: const BoxConstraints(minWidth: 30, minHeight: 30),
+                                          ),
+                                        ],
                                       ),
                                     ],
                                   ),

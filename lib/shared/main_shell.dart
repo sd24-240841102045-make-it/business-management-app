@@ -16,6 +16,7 @@ import 'package:business_managment_app/shared/invoice_page.dart';
 import 'package:business_managment_app/admin/reports_page.dart';
 import 'package:business_managment_app/admin/invite_page.dart';
 import 'package:business_managment_app/client/client_dashboard_page.dart';
+import 'package:business_managment_app/employee/assigned_consultations_page.dart';
 import 'package:business_managment_app/services/supabase_service.dart';
 import 'package:business_managment_app/core/premium_theme.dart';
 
@@ -187,6 +188,7 @@ class _MainShellState extends State<MainShell> {
               ),
             ],
           ),
+          drawer: _buildEnterpriseDrawer(context, isAdmin, isEmployee, isClient),
           endDrawer: _buildEnterpriseDrawer(context, isAdmin, isEmployee, isClient),
           body: isWideScreen
               ? Row(
@@ -396,6 +398,14 @@ class _MainShellState extends State<MainShell> {
                     Navigator.push(context, MaterialPageRoute(builder: (context) => const TaskBoardPage()));
                   },
                 ),
+                ListTile(
+                  leading: const Icon(Icons.assignment_ind_outlined, color: Colors.purpleAccent),
+                  title: const Text('Assigned Consultations'),
+                  onTap: () {
+                    Navigator.pop(context);
+                    Navigator.push(context, MaterialPageRoute(builder: (context) => AssignedConsultationsPage()));
+                  },
+                ),
                 if (isAdmin)
                   ListTile(
                     leading: const Icon(Icons.account_balance_outlined, color: Colors.green),
@@ -457,12 +467,15 @@ class _MainShellState extends State<MainShell> {
             title: const Text('Sign Out', style: TextStyle(color: Colors.redAccent, fontWeight: FontWeight.bold)),
             onTap: () async {
               Navigator.pop(context);
-              await SupabaseService().signOut();
-              if (context.mounted) {
-                Navigator.of(context).pushAndRemoveUntil(
-                  MaterialPageRoute(builder: (context) => const LoginPage()),
-                  (route) => false,
-                );
+              final confirm = await showLogoutConfirmationDialog(context);
+              if (confirm) {
+                await SupabaseService().signOut();
+                if (context.mounted) {
+                  Navigator.of(context).pushAndRemoveUntil(
+                    MaterialPageRoute(builder: (context) => const LoginPage()),
+                    (route) => false,
+                  );
+                }
               }
             },
           ),

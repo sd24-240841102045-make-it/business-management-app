@@ -3,6 +3,8 @@ import 'package:business_managment_app/services/supabase_service.dart';
 import 'package:business_managment_app/services/app_data_store.dart';
 import 'package:business_managment_app/core/premium_theme.dart';
 import 'package:business_managment_app/shared/chat_page.dart';
+import 'package:business_managment_app/shared/project_details_page.dart';
+import 'package:business_managment_app/employee/assigned_consultations_page.dart';
 
 class ClientDashboardPage extends StatefulWidget {
   const ClientDashboardPage({super.key});
@@ -14,16 +16,14 @@ class ClientDashboardPage extends StatefulWidget {
 class _ClientDashboardPageState extends State<ClientDashboardPage> {
   final AppDataStore _store = AppDataStore();
   bool _isLoading = true;
-
-  String _clientName = 'Valued Partner';
+  String _clientName = '';
+  String _clientCompany = '';
   String _clientEmail = '';
-  String _clientCompany = 'Partner Enterprise';
-  String _projectType = 'Enterprise Consulting';
-  double _budget = 15000.0;
+  String _projectType = 'General Consulting';
+  double _budget = 0.0;
   String _status = 'Active';
-  String _assignedManager = 'Senior Account Lead';
+  String _assignedManager = 'Unassigned';
   String? _adminNote;
-
   List<Map<String, dynamic>> _clientProjects = [];
 
   @override
@@ -53,32 +53,89 @@ class _ClientDashboardPageState extends State<ClientDashboardPage> {
     final metaName = user?.userMetadata?['full_name']?.toString() ?? '';
     final metaCompany = user?.userMetadata?['company']?.toString() ?? '';
 
+    if (_store.clients.isEmpty) {
+      await _store.refreshFromSupabase();
+    }
+
     // Match ClientModel in AppDataStore
     ClientModel? matchedClient;
     for (final c in _store.clients) {
-      if (c.id == user?.id || c.email.toLowerCase() == userEmail.toLowerCase()) {
+      if ((user?.id != null && (c.id == user!.id || c.userId == user.id)) ||
+          (userEmail.isNotEmpty && c.email.trim().toLowerCase() == userEmail.trim().toLowerCase())) {
         matchedClient = c;
         break;
       }
     }
 
-    _clientName = matchedClient?.name ?? (metaName.isNotEmpty ? metaName : (userEmail.contains('@') ? userEmail.split('@')[0] : 'Client Partner'));
-    _clientCompany = matchedClient?.company ?? (metaCompany.isNotEmpty ? metaCompany : 'Registered Partner Enterprise');
-    _projectType = matchedClient?.projectType ?? 'Enterprise Consulting';
-    _budget = matchedClient?.budget ?? 15000.0;
-    _status = matchedClient?.status ?? 'Active';
-    _assignedManager = matchedClient?.assignedEmployeeName ?? 'Senior Account Lead';
-    _adminNote = matchedClient?.adminNote;
+    // Direct Supabase lookup if not found in store
+    if (matchedClient == null && user != null) {
+      try {
+        final dbRes = await SupabaseService().client
+            .from('clients')
+            .select('*, profiles(*)')
+            .or('user_id.eq.${user.id},email.ilike.$userEmail')
+            .maybeSingle();
+
+        if (dbRes != null) {
+          final profile = dbRes['profiles'] as Map<String, dynamic>?;
+          final name = dbRes['contact_name']?.toString() ?? dbRes['name']?.toString() ?? profile?['full_name']?.toString() ?? '';
+          final email = dbRes['email']?.toString() ?? profile?['email']?.toString() ?? userEmail;
+          final company = dbRes['company_name']?.toString() ?? dbRes['company']?.toString() ?? name;
+          matchedClient = ClientModel(
+            id: dbRes['id']?.toString() ?? '',
+            userId: dbRes['user_id']?.toString() ?? user.id,
+            name: name.isNotEmpty ? name : 'Client',
+            company: company.isNotEmpty ? company : 'Client Business',
+            email: email,
+            phone: dbRes['phone']?.toString() ?? profile?['phone']?.toString() ?? '',
+            status: dbRes['status']?.toString() ?? 'Active',
+            assignedEmployeeId: dbRes['assigned_employee_id']?.toString(),
+            assignedEmployeeName: dbRes['assigned_employee_name']?.toString(),
+            projectType: dbRes['project_type']?.toString() ?? 'General Consulting',
+            budget: (dbRes['budget'] as num?)?.toDouble() ?? 0.0,
+          );
+
+          if (dbRes['user_id'] == null || dbRes['user_id'].toString().isEmpty) {
+            try {
+              await SupabaseService().client.from('clients').update({'user_id': user.id}).eq('id', dbRes['id']);
+            } catch (_) {}
+          }
+        }
+      } catch (e) {
+        debugPrint('Direct client fetch notice: $e');
+      }
+    }
+
+    if (matchedClient != null) {
+      _clientName = matchedClient.name;
+      _clientCompany = matchedClient.company;
+      _projectType = matchedClient.projectType;
+      _budget = matchedClient.budget;
+      _status = matchedClient.status;
+      _assignedManager = matchedClient.assignedEmployeeName ?? 'Unassigned';
+      _adminNote = matchedClient.adminNote;
+    } else {
+      _clientName = metaName.isNotEmpty ? metaName : (userEmail.contains('@') ? userEmail.split('@')[0] : 'Client User');
+      _clientCompany = metaCompany.isNotEmpty ? metaCompany : 'Client Account';
+      _projectType = 'General Consulting';
+      _budget = 0.0;
+      _status = 'Active';
+      _assignedManager = 'Unassigned';
+      _adminNote = null;
+    }
 
     // Fetch projects for this client
     List<Map<String, dynamic>> projectsData = [];
     try {
-      if (matchedClient != null) {
-        final res = await SupabaseService().client.from('projects').select().eq('client_id', matchedClient.id);
-        projectsData = List<Map<String, dynamic>>.from(res as List);
-      } else {
-        final res = await SupabaseService().client.from('projects').select().limit(5);
-        projectsData = List<Map<String, dynamic>>.from(res as List);
+      if (matchedClient != null && matchedClient.id.isNotEmpty) {
+        final res = await SupabaseService().client
+            .from('projects')
+            .select('*, clients(*)')
+            .eq('client_id', matchedClient.id)
+            .order('created_at', ascending: false);
+        if (res is List) {
+          projectsData = List<Map<String, dynamic>>.from(res);
+        }
       }
     } catch (e) {
       debugPrint('Error fetching client projects: $e');
@@ -113,7 +170,7 @@ class _ClientDashboardPageState extends State<ClientDashboardPage> {
               final width = constraints.maxWidth;
               final bool isDesktop = width >= 900;
               final bool isTablet = width >= 600 && width < 900;
-              final double hPad = isDesktop ? 40 : (isTablet ? 24 : 16);
+              final double hPad = isDesktop ? 32.0 : (isTablet ? 20.0 : 14.0);
 
               return RefreshIndicator(
                 color: kPremiumGold,
@@ -123,25 +180,30 @@ class _ClientDashboardPageState extends State<ClientDashboardPage> {
                 },
                 child: SingleChildScrollView(
                   physics: const AlwaysScrollableScrollPhysics(),
-                  padding: EdgeInsets.symmetric(horizontal: hPad, vertical: 18),
+                  padding: EdgeInsets.only(
+                    left: hPad,
+                    right: hPad,
+                    top: 14,
+                    bottom: MediaQuery.of(context).padding.bottom + 80.0,
+                  ),
                   child: Center(
                     child: ConstrainedBox(
                       constraints: const BoxConstraints(maxWidth: 1100),
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          // ── HERO BANNER (SAME AS ADMIN) ──────────────────────────────
+                          // ── HERO BANNER ──────────────────────────────
                           HeroBanner(
                             title: _clientCompany,
                             subtitle: 'Welcome back 👋, $_clientName',
                             badge: 'Client Portal',
                           ),
 
-                          const SizedBox(height: 20),
+                          const SizedBox(height: 18),
 
-                          // ── OVERVIEW BANNER CARD (SAME AS ADMIN) ─────────────────────
+                          // ── OVERVIEW BANNER CARD ─────────────────────
                           GlassCard(
-                            padding: const EdgeInsets.all(22),
+                            padding: const EdgeInsets.all(18),
                             child: Column(
                               crossAxisAlignment: CrossAxisAlignment.start,
                               children: [
@@ -177,7 +239,7 @@ class _ClientDashboardPageState extends State<ClientDashboardPage> {
                                   _clientCompany,
                                   style: const TextStyle(
                                     color: kPremiumText,
-                                    fontSize: 20,
+                                    fontSize: 18,
                                     fontWeight: FontWeight.bold,
                                   ),
                                   maxLines: 1,
@@ -185,23 +247,23 @@ class _ClientDashboardPageState extends State<ClientDashboardPage> {
                                 ),
                                 const SizedBox(height: 16),
 
-                                // Responsive Overview Stats Layout
+                                // Responsive Overview Stats
                                 LayoutBuilder(
                                   builder: (context, overviewConstraints) {
-                                    final bool isCompact = overviewConstraints.maxWidth < 450;
+                                    final bool isCompact = overviewConstraints.maxWidth < 480;
                                     if (isCompact) {
                                       return Column(
                                         children: [
                                           Row(
                                             children: [
                                               Expanded(child: _overviewItem('Active Projects', '${_clientProjects.length}')),
-                                              Expanded(child: _overviewItem('Allocated Budget', '\$${_budget.toStringAsFixed(0)}')),
+                                              Expanded(child: _overviewItem('Allocated Budget', '₹${_budget.toStringAsFixed(0)}')),
                                             ],
                                           ),
                                           const SizedBox(height: 14),
                                           Row(
                                             children: [
-                                              Expanded(child: _overviewItem('Account Lead', _assignedManager.split(' ').first)),
+                                              Expanded(child: _overviewItem('Account Lead', _assignedManager.isNotEmpty ? _assignedManager.split(' ').first : 'Unassigned')),
                                               Expanded(child: _overviewItem('Support Tier', 'Priority')),
                                             ],
                                           ),
@@ -211,10 +273,10 @@ class _ClientDashboardPageState extends State<ClientDashboardPage> {
                                     return Row(
                                       mainAxisAlignment: MainAxisAlignment.spaceBetween,
                                       children: [
-                                        Expanded(child: FittedBox(fit: BoxFit.scaleDown, child: _overviewItem('Active Projects', '${_clientProjects.length}'))),
-                                        Expanded(child: FittedBox(fit: BoxFit.scaleDown, child: _overviewItem('Allocated Budget', '\$${_budget.toStringAsFixed(0)}'))),
-                                        Expanded(child: FittedBox(fit: BoxFit.scaleDown, child: _overviewItem('Account Lead', _assignedManager.split(' ').first))),
-                                        Expanded(child: FittedBox(fit: BoxFit.scaleDown, child: _overviewItem('Support Tier', 'Priority'))),
+                                        Expanded(child: _overviewItem('Active Projects', '${_clientProjects.length}')),
+                                        Expanded(child: _overviewItem('Allocated Budget', '₹${_budget.toStringAsFixed(0)}')),
+                                        Expanded(child: _overviewItem('Account Lead', _assignedManager.isNotEmpty ? _assignedManager.split(' ').first : 'Unassigned')),
+                                        Expanded(child: _overviewItem('Support Tier', 'Priority')),
                                       ],
                                     );
                                   },
@@ -223,12 +285,12 @@ class _ClientDashboardPageState extends State<ClientDashboardPage> {
                             ),
                           ),
 
-                          const SizedBox(height: 24),
+                          const SizedBox(height: 20),
 
                           // ADMIN NOTICE BANNER
                           if (_adminNote != null && _adminNote!.isNotEmpty) ...[
                             GlassCard(
-                              padding: const EdgeInsets.all(18),
+                              padding: const EdgeInsets.all(16),
                               child: Row(
                                 crossAxisAlignment: CrossAxisAlignment.center,
                                 children: [
@@ -242,7 +304,7 @@ class _ClientDashboardPageState extends State<ClientDashboardPage> {
                                     child: Column(
                                       crossAxisAlignment: CrossAxisAlignment.start,
                                       children: [
-                                        const Text('Notice from Executive Management', style: TextStyle(fontWeight: FontWeight.bold, color: kPremiumGold, fontSize: 14)),
+                                        const Text('Notice from Executive Management', style: TextStyle(fontWeight: FontWeight.bold, color: kPremiumGold, fontSize: 13)),
                                         const SizedBox(height: 2),
                                         Text(_adminNote!, style: const TextStyle(color: kPremiumText, fontSize: 13)),
                                       ],
@@ -251,70 +313,118 @@ class _ClientDashboardPageState extends State<ClientDashboardPage> {
                                 ],
                               ),
                             ),
-                            const SizedBox(height: 24),
+                            const SizedBox(height: 20),
                           ],
 
-                          // ── PORTAL MODULES (SAME AS ADMIN ACTION CARDS) ──────────────
+                          // ── PORTAL MODULES ──────────────
                           const Text(
                             'Client Portal Modules',
-                            style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
+                            style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
                           ),
-                          const SizedBox(height: 14),
+                          const SizedBox(height: 12),
 
-                          GridView.count(
-                            shrinkWrap: true,
-                            physics: const NeverScrollableScrollPhysics(),
-                            crossAxisCount: isDesktop ? 3 : (isTablet ? 3 : (width < 360 ? 1 : 2)),
-                            crossAxisSpacing: 14,
-                            mainAxisSpacing: 14,
-                            childAspectRatio: isDesktop ? 1.6 : (isTablet ? 1.4 : 1.15),
-                            children: [
-                              _actionCard(
-                                icon: Icons.folder_open_outlined,
-                                title: 'My Projects',
-                                subtitle: '${_clientProjects.length} Active Workflows',
-                                color: kPremiumGold,
-                                onTap: () {},
-                              ),
-                              _actionCard(
-                                icon: Icons.person_pin_outlined,
-                                title: 'Account Lead',
-                                subtitle: _assignedManager,
-                                color: kPremiumBlue,
-                                onTap: () {},
-                              ),
-                              _actionCard(
-                                icon: Icons.chat_bubble_outline,
-                                title: 'Live Support Chat',
-                                subtitle: 'Instant HR / Executive Lead',
-                                color: kPremiumTeal,
-                                onTap: () {
-                                  Navigator.push(context, MaterialPageRoute(builder: (context) => const ChatPage()));
-                                },
-                              ),
-                            ],
+                          LayoutBuilder(
+                            builder: (context, moduleConstraints) {
+                              final mWidth = moduleConstraints.maxWidth;
+                              final bool singleCol = mWidth < 500;
+
+                              if (singleCol) {
+                                return Column(
+                                  children: [
+                                    _actionCard(
+                                      icon: Icons.folder_open_outlined,
+                                      title: 'My Projects',
+                                      subtitle: '${_clientProjects.length} Active Workflows',
+                                      color: kPremiumGold,
+                                      onTap: () {},
+                                    ),
+                                    const SizedBox(height: 10),
+                                    _actionCard(
+                                      icon: Icons.person_pin_outlined,
+                                      title: 'Consultations & Lead',
+                                      subtitle: _assignedManager,
+                                      color: kPremiumBlue,
+                                      onTap: () {
+                                        Navigator.push(context, MaterialPageRoute(builder: (context) => AssignedConsultationsPage()));
+                                      },
+                                    ),
+                                    const SizedBox(height: 10),
+                                    _actionCard(
+                                      icon: Icons.chat_bubble_outline,
+                                      title: 'Live Support Chat',
+                                      subtitle: 'Instant HR / Executive Lead',
+                                      color: kPremiumTeal,
+                                      onTap: () {
+                                        Navigator.push(context, MaterialPageRoute(builder: (context) => const ChatPage()));
+                                      },
+                                    ),
+                                  ],
+                                );
+                              }
+
+                              return GridView.count(
+                                shrinkWrap: true,
+                                physics: const NeverScrollableScrollPhysics(),
+                                crossAxisCount: 3,
+                                crossAxisSpacing: 12,
+                                mainAxisSpacing: 12,
+                                childAspectRatio: 1.5,
+                                children: [
+                                  _actionCard(
+                                    icon: Icons.folder_open_outlined,
+                                    title: 'My Projects',
+                                    subtitle: '${_clientProjects.length} Active Workflows',
+                                    color: kPremiumGold,
+                                    onTap: () {},
+                                  ),
+                                  _actionCard(
+                                    icon: Icons.person_pin_outlined,
+                                    title: 'Consultations & Lead',
+                                    subtitle: _assignedManager,
+                                    color: kPremiumBlue,
+                                    onTap: () {
+                                      Navigator.push(context, MaterialPageRoute(builder: (context) => AssignedConsultationsPage()));
+                                    },
+                                  ),
+                                  _actionCard(
+                                    icon: Icons.chat_bubble_outline,
+                                    title: 'Live Support Chat',
+                                    subtitle: 'Instant HR / Executive Lead',
+                                    color: kPremiumTeal,
+                                    onTap: () {
+                                      Navigator.push(context, MaterialPageRoute(builder: (context) => const ChatPage()));
+                                    },
+                                  ),
+                                ],
+                              );
+                            },
                           ),
 
-                          const SizedBox(height: 30),
+                          const SizedBox(height: 24),
 
                           // ── MY LIVE ENTERPRISE PROJECTS ──────────────────────────────
                           Row(
                             mainAxisAlignment: MainAxisAlignment.spaceBetween,
                             children: [
-                              const Text(
-                                'My Active Enterprise Projects',
-                                style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
+                              const Expanded(
+                                child: Text(
+                                  'My Active Enterprise Projects',
+                                  style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                ),
                               ),
+                              const SizedBox(width: 8),
                               Text('${_clientProjects.length} Projects', style: const TextStyle(color: kPremiumMuted, fontSize: 13)),
                             ],
                           ),
-                          const SizedBox(height: 14),
+                          const SizedBox(height: 12),
 
                           if (_clientProjects.isEmpty)
                             GlassCard(
-                              padding: const EdgeInsets.all(24),
+                              padding: const EdgeInsets.all(22),
                               child: const Center(
-                                child: Text('No active projects currently assigned to your account in Supabase database.', style: TextStyle(color: kPremiumMuted, fontSize: 14)),
+                                child: Text('No active projects currently assigned to your account in Supabase database.', style: TextStyle(color: kPremiumMuted, fontSize: 13)),
                               ),
                             )
                           else
@@ -324,14 +434,32 @@ class _ClientDashboardPageState extends State<ClientDashboardPage> {
                               itemCount: _clientProjects.length,
                               itemBuilder: (context, index) {
                                 final p = _clientProjects[index];
-                                final pName = p['name'] ?? 'Enterprise Project';
-                                final pStatus = p['status'] ?? 'In Progress';
-                                final pDeadline = p['deadline'] ?? 'Q4 2026';
-                                final progress = ((p['progress'] ?? 65) as num).toDouble() / 100.0;
+                                final pName = p['name']?.toString() ?? 'Enterprise Project';
+                                final pStatus = p['status']?.toString() ?? 'In Progress';
+                                final pDeadline = p['deadline']?.toString()?.split(' ')?.first ?? 'No deadline set';
+                                final double budgetVal = (p['budget'] as num?)?.toDouble() ?? 0.0;
+                                final double progress = pStatus == 'Completed' ? 1.0 : 0.65;
 
                                 return GlassCard(
                                   margin: const EdgeInsets.only(bottom: 12),
-                                  padding: const EdgeInsets.all(18),
+                                  padding: const EdgeInsets.all(16),
+                                  onTap: () {
+                                    final projModel = ProjectModel(
+                                      id: p['id']?.toString() ?? '',
+                                      name: pName,
+                                      clientId: p['client_id']?.toString() ?? '',
+                                      clientName: _clientName,
+                                      status: pStatus,
+                                      budget: budgetVal,
+                                      deadline: pDeadline,
+                                    );
+                                    Navigator.push(
+                                      context,
+                                      MaterialPageRoute(
+                                        builder: (context) => ProjectDetailsPage(project: projModel),
+                                      ),
+                                    );
+                                  },
                                   child: Column(
                                     crossAxisAlignment: CrossAxisAlignment.start,
                                     children: [
@@ -341,26 +469,32 @@ class _ClientDashboardPageState extends State<ClientDashboardPage> {
                                           PremiumAvatar(
                                             icon: Icons.folder_rounded,
                                             style: AvatarStyle.glowIcon,
-                                            size: 44,
+                                            size: 40,
                                           ),
-                                          const SizedBox(width: 14),
+                                          const SizedBox(width: 12),
                                           Expanded(
                                             child: Column(
                                               crossAxisAlignment: CrossAxisAlignment.start,
                                               children: [
                                                 Text(
                                                   pName,
-                                                  style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16, color: kPremiumText),
+                                                  style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 15, color: kPremiumText),
                                                   maxLines: 1,
                                                   overflow: TextOverflow.ellipsis,
                                                 ),
                                                 const SizedBox(height: 2),
-                                                Text('Target Deadline: $pDeadline', style: const TextStyle(fontSize: 12, color: kPremiumMuted)),
+                                                Text(
+                                                  'Target Deadline: $pDeadline • Budget: ₹${budgetVal.toStringAsFixed(0)}',
+                                                  style: const TextStyle(fontSize: 12, color: kPremiumMuted),
+                                                  maxLines: 1,
+                                                  overflow: TextOverflow.ellipsis,
+                                                ),
                                               ],
                                             ),
                                           ),
+                                          const SizedBox(width: 8),
                                           Container(
-                                            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                                            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
                                             decoration: BoxDecoration(
                                               color: kPremiumGold.withOpacity(0.15),
                                               borderRadius: BorderRadius.circular(10),
@@ -373,7 +507,7 @@ class _ClientDashboardPageState extends State<ClientDashboardPage> {
                                           ),
                                         ],
                                       ),
-                                      const SizedBox(height: 14),
+                                      const SizedBox(height: 12),
                                       Row(
                                         mainAxisAlignment: MainAxisAlignment.spaceBetween,
                                         children: [
@@ -411,13 +545,19 @@ class _ClientDashboardPageState extends State<ClientDashboardPage> {
 
   Widget _overviewItem(String label, String value) {
     return Column(
+      mainAxisSize: MainAxisSize.min,
+      crossAxisAlignment: CrossAxisAlignment.center,
       children: [
-        Text(
-          value,
-          style: const TextStyle(
-            color: kPremiumGold,
-            fontSize: 26,
-            fontWeight: FontWeight.bold,
+        FittedBox(
+          fit: BoxFit.scaleDown,
+          child: Text(
+            value,
+            style: const TextStyle(
+              color: kPremiumGold,
+              fontSize: 20,
+              fontWeight: FontWeight.bold,
+            ),
+            maxLines: 1,
           ),
         ),
         const SizedBox(height: 4),
@@ -425,8 +565,11 @@ class _ClientDashboardPageState extends State<ClientDashboardPage> {
           label,
           style: const TextStyle(
             color: kPremiumMuted,
-            fontSize: 12,
+            fontSize: 11,
           ),
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
+          textAlign: TextAlign.center,
         ),
       ],
     );
@@ -441,10 +584,8 @@ class _ClientDashboardPageState extends State<ClientDashboardPage> {
   }) {
     return GlassCard(
       onTap: onTap,
-      padding: const EdgeInsets.all(18),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+      child: Row(
         children: [
           Container(
             padding: const EdgeInsets.all(10),
@@ -453,33 +594,38 @@ class _ClientDashboardPageState extends State<ClientDashboardPage> {
               borderRadius: BorderRadius.circular(12),
               border: Border.all(color: color.withOpacity(0.3)),
             ),
-            child: Icon(icon, color: color, size: 24),
+            child: Icon(icon, color: color, size: 22),
           ),
-          Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                title,
-                style: const TextStyle(
-                  fontWeight: FontWeight.bold,
-                  fontSize: 15,
-                  color: kPremiumText,
+          const SizedBox(width: 14),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Text(
+                  title,
+                  style: const TextStyle(
+                    fontWeight: FontWeight.bold,
+                    fontSize: 15,
+                    color: kPremiumText,
+                  ),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
                 ),
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-              ),
-              const SizedBox(height: 2),
-              Text(
-                subtitle,
-                style: const TextStyle(
-                  color: kPremiumMuted,
-                  fontSize: 12,
+                const SizedBox(height: 2),
+                Text(
+                  subtitle,
+                  style: const TextStyle(
+                    color: kPremiumMuted,
+                    fontSize: 12,
+                  ),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
                 ),
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-              ),
-            ],
+              ],
+            ),
           ),
+          const Icon(Icons.arrow_forward_ios_rounded, color: kPremiumMuted, size: 14),
         ],
       ),
     );

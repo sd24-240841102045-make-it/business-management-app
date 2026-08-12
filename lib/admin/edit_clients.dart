@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:business_managment_app/shared/chat_page.dart';
 import 'package:business_managment_app/core/premium_theme.dart';
 
 class EditClientPage extends StatefulWidget {
@@ -288,6 +289,35 @@ class _EditClientPageState extends State<EditClientPage> {
                       ),
 
                       const SizedBox(height: 28),
+
+                      // Message Client Button
+                      ElevatedButton.icon(
+                        onPressed: () {
+                          Navigator.push(
+                            context,
+                            MaterialPageRoute(
+                              builder: (context) => ChatPage(
+                                initialTargetId: widget.client['id']?.toString() ?? '',
+                                initialTargetName: nameController.text.trim(),
+                                initialTargetSubtitle: companyController.text.trim(),
+                                initialTargetType: 'client',
+                                initialTargetEmail: emailController.text.trim(),
+                                initialTargetPhone: phoneController.text.trim(),
+                              ),
+                            ),
+                          );
+                        },
+                        icon: const Icon(Icons.chat_bubble_outline, size: 18),
+                        label: const Text('Message Client Account', style: TextStyle(fontWeight: FontWeight.bold)),
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: kPremiumGold,
+                          foregroundColor: kPremiumBg,
+                          minimumSize: const Size(double.infinity, 48),
+                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+                        ),
+                      ),
+
+                      const SizedBox(height: 12),
 
                       // Save Action Button
                       GoldButton(

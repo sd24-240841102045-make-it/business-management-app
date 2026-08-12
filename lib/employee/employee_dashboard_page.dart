@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:business_managment_app/services/supabase_service.dart';
 import 'package:business_managment_app/services/app_data_store.dart';
 import 'package:business_managment_app/core/premium_theme.dart';
+import 'package:business_managment_app/employee/assigned_consultations_page.dart';
 
 class EmployeeDashboardPage extends StatefulWidget {
   const EmployeeDashboardPage({super.key});
@@ -497,6 +498,18 @@ class _EmployeeDashboardPageState extends State<EmployeeDashboardPage> {
                                 subtitle: '$_pendingLeavesCount Pending Requests',
                                 color: kPremiumTeal,
                                 onTap: _showRequestLeaveDialog,
+                              ),
+                              _actionCard(
+                                icon: Icons.assignment_ind_outlined,
+                                title: 'Consultations',
+                                subtitle: 'Assigned Requests',
+                                color: Colors.purpleAccent,
+                                onTap: () {
+                                  Navigator.push(
+                                    context,
+                                    MaterialPageRoute(builder: (context) => AssignedConsultationsPage()),
+                                  );
+                                },
                               ),
                             ],
                           ),

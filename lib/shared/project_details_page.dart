@@ -3,6 +3,7 @@ import 'package:business_managment_app/services/app_data_store.dart';
 import 'package:business_managment_app/services/supabase_service.dart';
 import 'package:business_managment_app/shared/task_board_page.dart';
 import 'package:business_managment_app/shared/invoice_page.dart';
+import 'package:business_managment_app/shared/chat_page.dart';
 import 'package:business_managment_app/core/premium_theme.dart';
 
 class ProjectDetailsPage extends StatefulWidget {
@@ -110,7 +111,7 @@ class _ProjectDetailsPageState extends State<ProjectDetailsPage> {
         backgroundColor: Colors.transparent,
         appBar: AppBar(
           title: const Text('Project Overview', style: TextStyle(fontWeight: FontWeight.w700, color: kPremiumGold, fontSize: 18)),
-          backgroundColor: kPremiumBg,
+          backgroundColor: kPremiumBg.withOpacity(0.85),
           foregroundColor: kPremiumGold,
           elevation: 0,
         ),
@@ -128,11 +129,11 @@ class _ProjectDetailsPageState extends State<ProjectDetailsPage> {
                 constraints: const BoxConstraints(maxWidth: 750),
                 child: FadeInSlide(
                   child: GlassCard(
-                    padding: const EdgeInsets.all(26),
+                    padding: const EdgeInsets.all(24),
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        // Clean Header
+                        // Clean Responsive Header
                         Row(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
@@ -141,6 +142,7 @@ class _ProjectDetailsPageState extends State<ProjectDetailsPage> {
                               decoration: BoxDecoration(
                                 color: kPremiumGold.withOpacity(0.12),
                                 borderRadius: BorderRadius.circular(14),
+                                border: Border.all(color: kPremiumGold.withOpacity(0.25)),
                               ),
                               child: const Icon(Icons.folder_outlined, color: kPremiumGold, size: 26),
                             ),
@@ -151,16 +153,64 @@ class _ProjectDetailsPageState extends State<ProjectDetailsPage> {
                                 children: [
                                   Text(
                                     widget.project.name,
-                                    style: const TextStyle(fontSize: 22, fontWeight: FontWeight.bold, color: kPremiumText),
+                                    style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: kPremiumText),
+                                    maxLines: 2,
+                                    overflow: TextOverflow.ellipsis,
                                   ),
-                                  const SizedBox(height: 4),
-                                  Text(
-                                    'Client: ${widget.project.clientName}',
-                                    style: const TextStyle(fontSize: 13, color: kPremiumMuted),
+                                  const SizedBox(height: 6),
+                                  Wrap(
+                                    crossAxisAlignment: WrapCrossAlignment.center,
+                                    spacing: 8,
+                                    runSpacing: 4,
+                                    children: [
+                                      Text(
+                                        'Client: ${widget.project.clientName}',
+                                        style: const TextStyle(fontSize: 13, color: kPremiumMuted),
+                                      ),
+                                      InkWell(
+                                        borderRadius: BorderRadius.circular(8),
+                                        onTap: () {
+                                          final matchingClient = _store.clients.firstWhere(
+                                            (c) => c.name.toLowerCase() == widget.project.clientName.toLowerCase() || c.id == widget.project.clientId,
+                                            orElse: () => ClientModel(id: widget.project.clientId, name: widget.project.clientName, company: 'Client', email: '', phone: '', status: 'Active'),
+                                          );
+                                          Navigator.push(
+                                            context,
+                                            MaterialPageRoute(
+                                              builder: (context) => ChatPage(
+                                                initialTargetId: matchingClient.id,
+                                                initialTargetName: matchingClient.name,
+                                                initialTargetSubtitle: matchingClient.company,
+                                                initialTargetType: 'client',
+                                                initialTargetEmail: matchingClient.email,
+                                                initialTargetPhone: matchingClient.phone,
+                                              ),
+                                            ),
+                                          );
+                                        },
+                                        child: Container(
+                                          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                                          decoration: BoxDecoration(
+                                            color: kPremiumGold.withOpacity(0.12),
+                                            borderRadius: BorderRadius.circular(8),
+                                            border: Border.all(color: kPremiumGold.withOpacity(0.3)),
+                                          ),
+                                          child: const Row(
+                                            mainAxisSize: MainAxisSize.min,
+                                            children: [
+                                              Icon(Icons.chat_bubble_outline, size: 13, color: kPremiumGold),
+                                              SizedBox(width: 4),
+                                              Text('Message', style: TextStyle(color: kPremiumGold, fontSize: 11, fontWeight: FontWeight.bold)),
+                                            ],
+                                          ),
+                                        ),
+                                      ),
+                                    ],
                                   ),
                                 ],
                               ),
                             ),
+                            const SizedBox(width: 10),
                             Container(
                               padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
                               decoration: BoxDecoration(
@@ -186,7 +236,7 @@ class _ProjectDetailsPageState extends State<ProjectDetailsPage> {
 
                         const SizedBox(height: 24),
 
-                        // Minimal Progress Bar
+                        // Progress Bar Section
                         Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
@@ -217,7 +267,7 @@ class _ProjectDetailsPageState extends State<ProjectDetailsPage> {
                         // Minimal 2x2 Metadata Grid
                         Row(
                           children: [
-                            Expanded(child: _buildMinimalField('Budget', '\$${widget.project.budget.toStringAsFixed(0)}', Icons.attach_money)),
+                            Expanded(child: _buildMinimalField('Budget', '₹${widget.project.budget.toStringAsFixed(0)}', Icons.currency_rupee)),
                             Expanded(child: _buildMinimalField('Project Manager', _managerName, Icons.person_outline)),
                           ],
                         ),
@@ -233,7 +283,7 @@ class _ProjectDetailsPageState extends State<ProjectDetailsPage> {
                         const Divider(height: 1, color: Colors.white10),
                         const SizedBox(height: 20),
 
-                        // Minimal Status Selector
+                        // Status Selector
                         const Text('Status Milestone', style: TextStyle(fontSize: 13, fontWeight: FontWeight.bold, color: kPremiumGold)),
                         const SizedBox(height: 10),
                         SingleChildScrollView(
@@ -261,29 +311,57 @@ class _ProjectDetailsPageState extends State<ProjectDetailsPage> {
 
                         const SizedBox(height: 28),
 
-                        // Sleek Action Buttons
-                        Row(
-                          children: [
-                            Expanded(
-                              child: GoldButton(
-                                label: 'Kanban Board ($_completedTasks/$_totalTasks)',
-                                icon: Icons.view_kanban_outlined,
-                                onPressed: () {
-                                  Navigator.push(context, MaterialPageRoute(builder: (context) => const TaskBoardPage()));
-                                },
-                              ),
-                            ),
-                            const SizedBox(width: 12),
-                            Expanded(
-                              child: GoldButton(
-                                label: 'View Invoices',
-                                icon: Icons.receipt_outlined,
-                                onPressed: () {
-                                  Navigator.push(context, MaterialPageRoute(builder: (context) => const InvoicePage()));
-                                },
-                              ),
-                            ),
-                          ],
+                        // Responsive Sleek Action Buttons
+                        LayoutBuilder(
+                          builder: (context, constraints) {
+                            final isCompact = constraints.maxWidth < 420;
+                            if (isCompact) {
+                              return Column(
+                                children: [
+                                  GoldButton(
+                                    expand: true,
+                                    label: 'Kanban Board ($_completedTasks/$_totalTasks)',
+                                    icon: Icons.view_kanban_outlined,
+                                    onPressed: () {
+                                      Navigator.push(context, MaterialPageRoute(builder: (context) => const TaskBoardPage()));
+                                    },
+                                  ),
+                                  const SizedBox(height: 12),
+                                  GoldButton(
+                                    expand: true,
+                                    label: 'View Invoices',
+                                    icon: Icons.receipt_outlined,
+                                    onPressed: () {
+                                      Navigator.push(context, MaterialPageRoute(builder: (context) => const InvoicePage()));
+                                    },
+                                  ),
+                                ],
+                              );
+                            }
+                            return Row(
+                              children: [
+                                Expanded(
+                                  child: GoldButton(
+                                    label: 'Kanban Board ($_completedTasks/$_totalTasks)',
+                                    icon: Icons.view_kanban_outlined,
+                                    onPressed: () {
+                                      Navigator.push(context, MaterialPageRoute(builder: (context) => const TaskBoardPage()));
+                                    },
+                                  ),
+                                ),
+                                const SizedBox(width: 12),
+                                Expanded(
+                                  child: GoldButton(
+                                    label: 'View Invoices',
+                                    icon: Icons.receipt_outlined,
+                                    onPressed: () {
+                                      Navigator.push(context, MaterialPageRoute(builder: (context) => const InvoicePage()));
+                                    },
+                                  ),
+                                ),
+                              ],
+                            );
+                          },
                         ),
                       ],
                     ),
@@ -300,15 +378,28 @@ class _ProjectDetailsPageState extends State<ProjectDetailsPage> {
   Widget _buildMinimalField(String label, String value, IconData icon) {
     return Row(
       children: [
-        Icon(icon, size: 16, color: kPremiumMuted),
-        const SizedBox(width: 8),
+        Container(
+          padding: const EdgeInsets.all(8),
+          decoration: BoxDecoration(
+            color: kPremiumGold.withOpacity(0.08),
+            borderRadius: BorderRadius.circular(10),
+            border: Border.all(color: kPremiumGold.withOpacity(0.15)),
+          ),
+          child: Icon(icon, size: 16, color: kPremiumGold),
+        ),
+        const SizedBox(width: 10),
         Expanded(
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Text(label, style: const TextStyle(color: kPremiumMuted, fontSize: 11)),
+              Text(label, style: const TextStyle(color: kPremiumMuted, fontSize: 11, fontWeight: FontWeight.w500)),
               const SizedBox(height: 2),
-              Text(value, style: const TextStyle(color: kPremiumText, fontWeight: FontWeight.bold, fontSize: 13), maxLines: 1, overflow: TextOverflow.ellipsis),
+              Text(
+                value,
+                style: const TextStyle(color: kPremiumText, fontWeight: FontWeight.bold, fontSize: 13),
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+              ),
             ],
           ),
         ),

@@ -374,9 +374,9 @@ class _AddProjectPageState extends State<AddProjectPage> {
                           keyboardType: TextInputType.number,
                           style: const TextStyle(color: kPremiumText),
                           decoration: InputDecoration(
-                            labelText: 'Total Budget (\$)',
+                            labelText: 'Total Budget (₹)',
                             labelStyle: const TextStyle(color: kPremiumMuted),
-                            prefixIcon: const Icon(Icons.attach_money, color: kPremiumGold),
+                            prefixIcon: const Icon(Icons.currency_rupee, color: kPremiumGold),
                             filled: true,
                             fillColor: kPremiumSurface.withOpacity(0.5),
                             border: OutlineInputBorder(borderRadius: BorderRadius.circular(14)),

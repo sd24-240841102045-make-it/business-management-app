@@ -54,7 +54,7 @@ class ClientDetailsPage extends StatelessWidget {
                     _infoRow(Icons.email, 'Email Address', client.email),
                     _infoRow(Icons.phone, 'Phone Contact', client.phone),
                     _infoRow(Icons.work, 'Project Scope', client.projectType),
-                    _infoRow(Icons.attach_money, 'Contract Budget', '\$${client.budget.toStringAsFixed(2)}'),
+                    _infoRow(Icons.currency_rupee, 'Contract Budget', '₹${client.budget.toStringAsFixed(2)}'),
                     _infoRow(Icons.person, 'Account Manager Lead', client.assignedEmployeeName ?? 'Unassigned'),
                   ],
                 ),

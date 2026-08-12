@@ -92,6 +92,7 @@ class Employee {
 
 class ClientModel {
   final String id;
+  final String? userId;
   final String name;
   final String company;
   final String email;
@@ -110,6 +111,7 @@ class ClientModel {
 
   ClientModel({
     required this.id,
+    this.userId,
     required this.name,
     required this.company,
     required this.email,
@@ -190,6 +192,7 @@ class ClientModel {
   factory ClientModel.fromMap(Map<String, dynamic> map) {
     return ClientModel(
       id: map['id'] ?? '',
+      userId: map['user_id']?.toString(),
       name: map['name'] ?? map['contact_name'] ?? '',
       company: map['company'] ?? map['company_name'] ?? '',
       email: map['email'] ?? '',
@@ -496,35 +499,7 @@ class AppDataStore extends ChangeNotifier {
   final List<ClientModel> _clients = [];
   final List<ProjectModel> _projects = [];
   final List<TaskModel> _tasks = [];
-  final List<InvoiceModel> _invoices = [
-    InvoiceModel(
-      id: 'demo-001',
-      invoiceNumber: 'INV-2026-001',
-      clientName: 'Demo Client',
-      amount: 5000.00,
-      status: 'Paid',
-      issueDate: '01 Aug 2026',
-      dueDate: '15 Aug 2026',
-    ),
-    InvoiceModel(
-      id: 'demo-002',
-      invoiceNumber: 'INV-2026-002',
-      clientName: 'Demo Client',
-      amount: 12500.00,
-      status: 'Pending',
-      issueDate: '05 Aug 2026',
-      dueDate: '20 Aug 2026',
-    ),
-    InvoiceModel(
-      id: 'demo-003',
-      invoiceNumber: 'INV-2026-003',
-      clientName: 'Demo Client',
-      amount: 3200.00,
-      status: 'Overdue',
-      issueDate: '10 Jul 2026',
-      dueDate: '25 Jul 2026',
-    ),
-  ];
+  final List<InvoiceModel> _invoices = [];
   final List<LeaveRequest> _leaveRequests = [];
 
   bool _isCheckedIn = false;
@@ -562,6 +537,12 @@ class AppDataStore extends ChangeNotifier {
     notifyListeners();
 
     try {
+      final remoteAdmins = await SupabaseService().fetchAdmins();
+      if (remoteAdmins.isNotEmpty) {
+        _admins.clear();
+        _admins.addAll(remoteAdmins);
+      }
+
       final remoteEmployees = await SupabaseService().fetchEmployees();
       if (remoteEmployees != null) {
         _employees.clear();
@@ -620,6 +601,7 @@ class AppDataStore extends ChangeNotifier {
       if (remoteProjects.isNotEmpty) {
         _projects.clear();
         for (final p in remoteProjects) {
+          if (SupabaseService().isProjectDeleted(p.id)) continue;
           _projects.add(ProjectModel(
             id: p.id,
             name: p.name,
@@ -632,10 +614,15 @@ class AppDataStore extends ChangeNotifier {
         }
       }
 
+      final activeProjectIds = _projects.map((p) => p.id).toSet();
+
       final remoteTasks = await SupabaseService().fetchTasks();
       if (remoteTasks.isNotEmpty) {
         _tasks.clear();
         for (final t in remoteTasks) {
+          if (t.projectId.isNotEmpty && !activeProjectIds.contains(t.projectId)) continue;
+          if (SupabaseService().isProjectDeleted(t.projectId)) continue;
+
           _tasks.add(TaskModel(
             id: t.id,
             title: t.title,
@@ -650,22 +637,17 @@ class AppDataStore extends ChangeNotifier {
       }
 
       final remoteInvoices = await SupabaseService().fetchInvoices();
-      // Always replace demo seeds once Supabase responds (even if empty)
-      if (remoteInvoices.isNotEmpty) {
-        _invoices.removeWhere((inv) => inv.id.startsWith('demo-'));
-        for (final inv in remoteInvoices) {
-          if (!_invoices.any((e) => e.id == inv.id)) {
-            _invoices.insert(0, InvoiceModel(
-              id: inv.id,
-              invoiceNumber: inv.invoiceNumber,
-              clientName: 'Client',
-              amount: inv.total,
-              status: inv.status,
-              issueDate: inv.issueDate,
-              dueDate: inv.dueDate,
-            ));
-          }
-        }
+      _invoices.clear();
+      for (final inv in remoteInvoices) {
+        _invoices.add(InvoiceModel(
+          id: inv.id,
+          invoiceNumber: inv.invoiceNumber,
+          clientName: 'Client',
+          amount: inv.total,
+          status: inv.status,
+          issueDate: inv.issueDate,
+          dueDate: inv.dueDate,
+        ));
       }
     } catch (e) {
       debugPrint('Error syncing with Supabase: $e');
@@ -725,6 +707,14 @@ class AppDataStore extends ChangeNotifier {
     _clients.removeWhere((c) => c.id == id || (target.email.isNotEmpty && c.email.toLowerCase() == target.email.toLowerCase()));
     notifyListeners();
     await SupabaseService().deleteClient(id, email: target.email);
+  }
+
+  Future<void> deleteProject(String id) async {
+    _projects.removeWhere((p) => p.id == id);
+    _tasks.removeWhere((t) => t.projectId == id);
+    notifyListeners();
+    await SupabaseService().deleteProject(id);
+    await refreshFromSupabase();
   }
 
   void assignEmployeeToClient(String clientId, String? employeeId) {

@@ -556,7 +556,16 @@ class _TaskBoardPageState extends State<TaskBoardPage> {
                 return const Center(child: CircularProgressIndicator(color: kPremiumGold));
               }
               
-              final tasks = data.map((row) {
+              final activeProjectIds = _store.projects.map((p) => p.id).toSet();
+
+              final tasks = data.where((row) {
+                final projId = row['project_id']?.toString();
+                if (projId != null && projId.isNotEmpty) {
+                  if (SupabaseService().isProjectDeleted(projId)) return false;
+                  if (!activeProjectIds.contains(projId)) return false;
+                }
+                return true;
+              }).map((row) {
                 final projId = row['project_id']?.toString();
                 String projName = row['project_name']?.toString() ?? '';
                 if (projName.isEmpty && projId != null && projId.isNotEmpty) {

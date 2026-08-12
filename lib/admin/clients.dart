@@ -1,7 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:business_managment_app/services/app_data_store.dart';
 import 'package:business_managment_app/admin/edit_clients.dart';
+import 'package:business_managment_app/shared/chat_page.dart';
 import 'package:business_managment_app/core/premium_theme.dart';
+import 'package:business_managment_app/employee/assigned_consultations_page.dart';
 
 class ClientsBody extends StatefulWidget {
   const ClientsBody({super.key});
@@ -78,7 +80,37 @@ class ClientsBodyState extends State<ClientsBody> {
                   badge: 'CRM Directory',
                 ),
 
-                const SizedBox(height: 20),
+                const SizedBox(height: 16),
+
+                GlassCard(
+                  padding: const EdgeInsets.all(14),
+                  onTap: () {
+                    Navigator.push(context, MaterialPageRoute(builder: (context) => AssignedConsultationsPage()));
+                  },
+                  child: Row(
+                    children: [
+                      Container(
+                        padding: const EdgeInsets.all(10),
+                        decoration: BoxDecoration(color: Colors.purpleAccent.withOpacity(0.15), borderRadius: BorderRadius.circular(10)),
+                        child: const Icon(Icons.assignment_ind_outlined, color: Colors.purpleAccent, size: 22),
+                      ),
+                      const SizedBox(width: 14),
+                      const Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text('Review Consultations & Connect Staff', style: TextStyle(fontWeight: FontWeight.bold, color: kPremiumGold, fontSize: 14)),
+                            SizedBox(height: 2),
+                            Text('Accept client requests and assign dedicated employee leads', style: TextStyle(color: kPremiumMuted, fontSize: 12)),
+                          ],
+                        ),
+                      ),
+                      const Icon(Icons.arrow_forward_ios_rounded, color: kPremiumMuted, size: 14),
+                    ],
+                  ),
+                ),
+
+                const SizedBox(height: 16),
 
                 // Search Bar
                 TextField(
@@ -105,9 +137,9 @@ class ClientsBodyState extends State<ClientsBody> {
                         physics: const NeverScrollableScrollPhysics(),
                         gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
                           crossAxisCount: isDesktop ? 2 : 1,
-                          mainAxisExtent: 225,
-                          crossAxisSpacing: 16,
-                          mainAxisSpacing: 16,
+                          mainAxisExtent: 145,
+                          crossAxisSpacing: 14,
+                          mainAxisSpacing: 14,
                         ),
                         itemCount: filteredClients.length,
                         itemBuilder: (context, index) {
@@ -117,7 +149,7 @@ class ClientsBodyState extends State<ClientsBody> {
                             delay: Duration(milliseconds: 50 * (index % 6)),
                             child: GlassCard(
                               margin: EdgeInsets.zero,
-                              padding: const EdgeInsets.all(16),
+                              padding: const EdgeInsets.all(12),
                               onTap: () {
                                 Navigator.push(
                                   context,
@@ -128,7 +160,7 @@ class ClientsBodyState extends State<ClientsBody> {
                               },
                               child: Column(
                                 crossAxisAlignment: CrossAxisAlignment.start,
-                                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                mainAxisAlignment: MainAxisAlignment.start,
                                 children: [
                                   Row(
                                     crossAxisAlignment: CrossAxisAlignment.center,
@@ -136,8 +168,8 @@ class ClientsBodyState extends State<ClientsBody> {
                                       PremiumAvatar(
                                         label: client.name,
                                         style: AvatarStyle.gradient,
-                                        size: 44,
-                                        radius: 22,
+                                        size: 38,
+                                        radius: 19,
                                       ),
                                       const SizedBox(width: 10),
                                       Expanded(
@@ -146,12 +178,13 @@ class ClientsBodyState extends State<ClientsBody> {
                                           children: [
                                             Text(
                                               client.name,
-                                              style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 15, color: kPremiumGold),
+                                              style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14, color: kPremiumGold),
                                               maxLines: 1,
                                               overflow: TextOverflow.ellipsis,
                                             ),
+                                            const SizedBox(height: 2),
                                             Text(
-                                              client.company,
+                                              '${client.company} • ${client.email}',
                                               style: const TextStyle(color: kPremiumMuted, fontSize: 12),
                                               maxLines: 1,
                                               overflow: TextOverflow.ellipsis,
@@ -172,54 +205,35 @@ class ClientsBodyState extends State<ClientsBody> {
                                           style: TextStyle(
                                             color: client.status == 'Active' ? Colors.greenAccent : Colors.redAccent,
                                             fontWeight: FontWeight.bold,
-                                            fontSize: 11,
+                                            fontSize: 10,
                                           ),
                                         ),
                                       ),
                                     ],
                                   ),
 
-                                  const Divider(height: 16, color: Colors.white10),
-
-                                  Row(
-                                    children: [
-                                      const Icon(Icons.email_outlined, size: 15, color: kPremiumGold),
-                                      const SizedBox(width: 6),
-                                      Expanded(child: Text(client.email, style: const TextStyle(fontSize: 12, color: kPremiumMuted), maxLines: 1, overflow: TextOverflow.ellipsis)),
-                                    ],
-                                  ),
-                                  const SizedBox(height: 4),
-                                  Row(
-                                    children: [
-                                      const Icon(Icons.phone_outlined, size: 15, color: kPremiumGold),
-                                      const SizedBox(width: 6),
-                                      Text(client.phone, style: const TextStyle(fontSize: 12, color: kPremiumMuted)),
-                                    ],
-                                  ),
-
+                                  const SizedBox(height: 10),
+                                  const Divider(height: 1, color: Colors.white10),
                                   const SizedBox(height: 8),
 
-                                  // HR Employee Assignment Lead Badge
-                                  Container(
-                                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-                                    decoration: BoxDecoration(
-                                      color: kPremiumGold.withOpacity(0.12),
-                                      borderRadius: BorderRadius.circular(10),
-                                      border: Border.all(color: kPremiumGold.withOpacity(0.3)),
-                                    ),
-                                    child: Row(
-                                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                                      crossAxisAlignment: CrossAxisAlignment.center,
-                                      children: [
-                                        Expanded(
+                                  // HR Employee Assignment Lead Badge + Actions
+                                  Row(
+                                    children: [
+                                      Expanded(
+                                        child: Container(
+                                          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+                                          decoration: BoxDecoration(
+                                            color: kPremiumGold.withOpacity(0.12),
+                                            borderRadius: BorderRadius.circular(10),
+                                            border: Border.all(color: kPremiumGold.withOpacity(0.3)),
+                                          ),
                                           child: Row(
-                                            crossAxisAlignment: CrossAxisAlignment.center,
                                             children: [
-                                              const Icon(Icons.badge_outlined, size: 15, color: kPremiumGold),
+                                              const Icon(Icons.badge_outlined, size: 14, color: kPremiumGold),
                                               const SizedBox(width: 6),
                                               Expanded(
                                                 child: Text(
-                                                  'HR Lead: ${client.assignedEmployeeName ?? "Unassigned"}',
+                                                  'Lead: ${client.assignedEmployeeName ?? "Unassigned"}',
                                                   style: const TextStyle(
                                                     fontSize: 12,
                                                     color: kPremiumGold,
@@ -229,33 +243,52 @@ class ClientsBodyState extends State<ClientsBody> {
                                                   overflow: TextOverflow.ellipsis,
                                                 ),
                                               ),
+                                              InkWell(
+                                                onTap: () => _showAssignEmployeeModal(client),
+                                                child: const Text(
+                                                  'Change',
+                                                  style: TextStyle(color: kPremiumGold, fontWeight: FontWeight.bold, fontSize: 11),
+                                                ),
+                                              ),
                                             ],
                                           ),
                                         ),
-                                        InkWell(
-                                          onTap: () => _showAssignEmployeeModal(client),
-                                          child: const Text(
-                                            'Change',
-                                            style: TextStyle(color: kPremiumGold, fontWeight: FontWeight.bold, fontSize: 11),
-                                          ),
-                                        ),
-                                      ],
-                                    ),
-                                  ),
-
-                                  // Card Action Row (Edit & Delete Buttons)
-                                  Row(
-                                    mainAxisAlignment: MainAxisAlignment.end,
-                                    children: [
-                                      TextButton.icon(
-                                        onPressed: () => _editClient(client),
-                                        icon: const Icon(Icons.edit_outlined, color: kPremiumMuted, size: 16),
-                                        label: const Text('Edit', style: TextStyle(color: kPremiumMuted, fontSize: 12)),
                                       ),
-                                      TextButton.icon(
+                                      const SizedBox(width: 8),
+                                      IconButton(
+                                        icon: const Icon(Icons.chat_bubble_outline, color: kPremiumGold, size: 18),
+                                        onPressed: () {
+                                          Navigator.push(
+                                            context,
+                                            MaterialPageRoute(
+                                              builder: (context) => ChatPage(
+                                                initialTargetId: (client.userId != null && client.userId!.isNotEmpty) ? client.userId! : client.id,
+                                                initialTargetName: client.name,
+                                                initialTargetSubtitle: client.company,
+                                                initialTargetType: 'client',
+                                                initialTargetEmail: client.email,
+                                                initialTargetPhone: client.phone,
+                                              ),
+                                            ),
+                                          );
+                                        },
+                                        tooltip: 'Message Client',
+                                        padding: EdgeInsets.zero,
+                                        constraints: const BoxConstraints(minWidth: 30, minHeight: 30),
+                                      ),
+                                      IconButton(
+                                        icon: const Icon(Icons.edit_outlined, color: kPremiumTeal, size: 18),
+                                        onPressed: () => _editClient(client),
+                                        tooltip: 'Edit Client',
+                                        padding: EdgeInsets.zero,
+                                        constraints: const BoxConstraints(minWidth: 30, minHeight: 30),
+                                      ),
+                                      IconButton(
+                                        icon: const Icon(Icons.delete_outline, color: Colors.redAccent, size: 18),
                                         onPressed: () => _confirmDeleteClient(client),
-                                        icon: const Icon(Icons.delete_outline, color: Colors.redAccent, size: 16),
-                                        label: const Text('Delete', style: TextStyle(color: Colors.redAccent, fontSize: 12)),
+                                        tooltip: 'Delete Client',
+                                        padding: EdgeInsets.zero,
+                                        constraints: const BoxConstraints(minWidth: 30, minHeight: 30),
                                       ),
                                     ],
                                   ),
@@ -263,7 +296,7 @@ class ClientsBodyState extends State<ClientsBody> {
                               ),
                             ),
                           );
-                      },
+                        },
                       ),
               ],
             ),
@@ -852,7 +885,7 @@ class _ClientProfilePageState extends State<ClientProfilePage> {
                   _buildInfoCard(Icons.email_outlined, 'Email Address', _currentClient.email),
                   _buildInfoCard(Icons.phone_outlined, 'Direct Phone', _currentClient.phone.isNotEmpty ? _currentClient.phone : 'Not provided'),
                   _buildInfoCard(Icons.assignment_outlined, 'Project Scope', _currentClient.projectType ?? 'Enterprise Consulting'),
-                  _buildInfoCard(Icons.account_balance_wallet_outlined, 'Allocated Budget', '\$${(_currentClient.budget ?? 12500).toStringAsFixed(0)}'),
+                  _buildInfoCard(Icons.account_balance_wallet_outlined, 'Allocated Budget', '₹${(_currentClient.budget ?? 12500).toStringAsFixed(0)}'),
 
                   const SizedBox(height: 24),
 

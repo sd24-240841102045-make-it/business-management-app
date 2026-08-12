@@ -22,9 +22,9 @@ class FinancePage extends StatelessWidget {
         .where((inv) => inv.status == 'Pending' || inv.status == 'Overdue')
         .fold(0.0, (sum, inv) => sum + inv.amount);
 
-    final formattedRevenue = '\$${totalRevenue.toStringAsFixed(2)}';
-    final formattedPending = '\$${pendingInvoicesTotal.toStringAsFixed(2)}';
-    final formattedProjectBudgets = '\$${projectBudgetsTotal.toStringAsFixed(2)}';
+    final formattedRevenue = '₹${totalRevenue.toStringAsFixed(2)}';
+    final formattedPending = '₹${pendingInvoicesTotal.toStringAsFixed(2)}';
+    final formattedProjectBudgets = '₹${projectBudgetsTotal.toStringAsFixed(2)}';
 
     return LayoutBuilder(
       builder: (context, constraints) {
@@ -93,13 +93,13 @@ class FinancePage extends StatelessWidget {
                             ...store.invoices.map((inv) => _transactionTile(
                               'Invoice #${inv.invoiceNumber} - ${inv.clientName}',
                               inv.issueDate,
-                              '\$${inv.amount.toStringAsFixed(2)} (${inv.status})',
+                              '₹${inv.amount.toStringAsFixed(2)} (${inv.status})',
                               inv.status == 'Paid' ? kPremiumSuccess : kPremiumWarning,
                             )),
                             ...store.projects.map((p) => _transactionTile(
                               'Project Allocated: ${p.name}',
                               p.deadline,
-                              '\$${p.budget.toStringAsFixed(2)}',
+                              '₹${p.budget.toStringAsFixed(2)}',
                               kPremiumBlue,
                             )),
                           ],

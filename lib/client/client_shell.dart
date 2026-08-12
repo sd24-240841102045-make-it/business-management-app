@@ -43,26 +43,9 @@ class _ClientShellState extends State<ClientShell> {
   }
 
   Future<void> _logout() async {
-    final confirm = await showDialog<bool>(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('Confirm Logout'),
-        content: const Text('Are you sure you want to log out of Client Portal?'),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context, false),
-            child: const Text('Cancel'),
-          ),
-          ElevatedButton(
-            onPressed: () => Navigator.pop(context, true),
-            style: ElevatedButton.styleFrom(backgroundColor: Colors.indigo),
-            child: const Text('Logout', style: TextStyle(color: Colors.white)),
-          ),
-        ],
-      ),
-    );
+    final confirm = await showLogoutConfirmationDialog(context);
 
-    if (confirm == true) {
+    if (confirm) {
       await SupabaseService().signOut();
       if (mounted) {
         Navigator.pushReplacement(
@@ -83,7 +66,8 @@ class _ClientShellState extends State<ClientShell> {
     // Search matching client in store
     ClientModel? matchingClient;
     for (final c in _store.clients) {
-      if (c.id == user?.id || c.email.toLowerCase() == userEmail.toLowerCase()) {
+      if ((user?.id != null && (c.id == user!.id || c.userId == user.id)) ||
+          (userEmail.isNotEmpty && c.email.trim().toLowerCase() == userEmail.trim().toLowerCase())) {
         matchingClient = c;
         break;
       }
@@ -385,7 +369,7 @@ class ClientOverviewBody extends StatelessWidget {
                 if (isMobile) ...[
                   _buildMetricCard(title: 'Project Scope', value: projectType, icon: Icons.assignment_turned_in_outlined, color: kPremiumBlue),
                   const SizedBox(height: 10),
-                  _buildMetricCard(title: 'Allocated Budget', value: '\$${budget.toStringAsFixed(0)}', icon: Icons.account_balance_wallet_outlined, color: kPremiumSuccess),
+                  _buildMetricCard(title: 'Allocated Budget', value: '₹${budget.toStringAsFixed(0)}', icon: Icons.account_balance_wallet_outlined, color: kPremiumSuccess),
                   const SizedBox(height: 10),
                   _buildMetricCard(title: 'Account Lead', value: assignedManager, icon: Icons.person_pin_outlined, color: kPremiumTeal),
                   const SizedBox(height: 10),
@@ -395,7 +379,7 @@ class ClientOverviewBody extends StatelessWidget {
                     children: [
                       Expanded(child: _buildMetricCard(title: 'Project Scope', value: projectType, icon: Icons.assignment_turned_in_outlined, color: kPremiumBlue)),
                       const SizedBox(width: 12),
-                      Expanded(child: _buildMetricCard(title: 'Allocated Budget', value: '\$${budget.toStringAsFixed(0)}', icon: Icons.account_balance_wallet_outlined, color: kPremiumSuccess)),
+                      Expanded(child: _buildMetricCard(title: 'Allocated Budget', value: '₹${budget.toStringAsFixed(0)}', icon: Icons.account_balance_wallet_outlined, color: kPremiumSuccess)),
                     ],
                   ),
                   const SizedBox(height: 12),
@@ -546,27 +530,14 @@ class ClientManagerBody extends StatelessWidget {
     }
 
     Employee? manager;
-    if (matchedClient?.assignedEmployeeId != null) {
+    if (matchedClient?.assignedEmployeeId != null && matchedClient!.assignedEmployeeId!.isNotEmpty) {
       for (final e in store.employees) {
-        if (e.id == matchedClient!.assignedEmployeeId) {
+        if (e.id == matchedClient.assignedEmployeeId || e.userId == matchedClient.assignedEmployeeId) {
           manager = e;
           break;
         }
       }
     }
-
-    manager ??= store.employees.isNotEmpty
-        ? store.employees.first
-        : Employee(
-            id: 'E101',
-            name: 'Priya Sharma',
-            role: 'Senior Account Manager',
-            department: 'Client Relations',
-            email: 'priya.s@company.com',
-            phone: '+91 98765 00002',
-            joiningDate: '2022-01-15',
-            status: 'Active',
-          );
 
     return RefreshIndicator(
       onRefresh: () async {
@@ -583,50 +554,78 @@ class ClientManagerBody extends StatelessWidget {
             const SizedBox(height: 14),
 
             // Manager Profile Card
-            GlassCard(
-              padding: const EdgeInsets.all(24),
-              child: Column(
-                children: [
-                  PremiumAvatar(
-                    label: manager.name,
-                    style: AvatarStyle.gradient,
-                    size: 80,
-                    radius: 40,
-                  ),
-                  const SizedBox(height: 16),
-                  Text(
-                    manager.name,
-                    textAlign: TextAlign.center,
-                    style: const TextStyle(fontSize: 22, fontWeight: FontWeight.bold, color: kPremiumText),
-                  ),
-                  const SizedBox(height: 6),
-                  Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 5),
-                    decoration: BoxDecoration(
-                      color: kPremiumGold.withOpacity(0.12),
-                      borderRadius: BorderRadius.circular(12),
-                      border: Border.all(color: kPremiumGold.withOpacity(0.3)),
+            if (manager != null)
+              GlassCard(
+                padding: const EdgeInsets.all(24),
+                child: Column(
+                  children: [
+                    PremiumAvatar(
+                      label: manager.name,
+                      style: AvatarStyle.gradient,
+                      size: 80,
+                      radius: 40,
                     ),
-                    child: Text(
-                      '${manager.role} • ${manager.department}',
+                    const SizedBox(height: 16),
+                    Text(
+                      manager.name,
                       textAlign: TextAlign.center,
-                      style: const TextStyle(color: kPremiumGold, fontWeight: FontWeight.w600, fontSize: 13),
+                      style: const TextStyle(fontSize: 22, fontWeight: FontWeight.bold, color: kPremiumText),
                     ),
-                  ),
-                  const SizedBox(height: 20),
-                  const Divider(color: Colors.white10),
-                  const SizedBox(height: 8),
-                  _managerInfoTile(Icons.email_outlined, 'Email Address', manager.email),
-                  _managerInfoTile(Icons.phone_outlined, 'Direct Phone', manager.phone.isNotEmpty ? manager.phone : 'Not provided'),
-                  _managerInfoTile(
-                    Icons.circle,
-                    'Availability Status',
-                    manager.status,
-                    valueColor: manager.status == 'Active' ? kPremiumSuccess : kPremiumWarning,
-                  ),
-                ],
+                    const SizedBox(height: 6),
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 5),
+                      decoration: BoxDecoration(
+                        color: kPremiumGold.withOpacity(0.12),
+                        borderRadius: BorderRadius.circular(12),
+                        border: Border.all(color: kPremiumGold.withOpacity(0.3)),
+                      ),
+                      child: Text(
+                        '${manager.role} • ${manager.department}',
+                        textAlign: TextAlign.center,
+                        style: const TextStyle(color: kPremiumGold, fontWeight: FontWeight.w600, fontSize: 13),
+                      ),
+                    ),
+                    const SizedBox(height: 20),
+                    const Divider(color: Colors.white10),
+                    const SizedBox(height: 8),
+                    _managerInfoTile(Icons.email_outlined, 'Email Address', manager.email),
+                    _managerInfoTile(Icons.phone_outlined, 'Direct Phone', manager.phone.isNotEmpty ? manager.phone : 'Not provided'),
+                    _managerInfoTile(
+                      Icons.circle,
+                      'Availability Status',
+                      manager.status,
+                      valueColor: manager.status == 'Active' ? kPremiumSuccess : kPremiumWarning,
+                    ),
+                  ],
+                ),
+              )
+            else
+              GlassCard(
+                padding: const EdgeInsets.all(24),
+                child: Column(
+                  children: [
+                    Container(
+                      padding: const EdgeInsets.all(16),
+                      decoration: BoxDecoration(
+                        color: kPremiumGold.withOpacity(0.12),
+                        shape: BoxShape.circle,
+                      ),
+                      child: const Icon(Icons.person_pin_outlined, color: kPremiumGold, size: 42),
+                    ),
+                    const SizedBox(height: 16),
+                    const Text(
+                      'No Account Lead Assigned Yet',
+                      style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: kPremiumText),
+                    ),
+                    const SizedBox(height: 6),
+                    const Text(
+                      'An executive account manager will be assigned by management shortly. In the meantime, feel free to reach out via Live Support Chat.',
+                      textAlign: TextAlign.center,
+                      style: TextStyle(color: kPremiumMuted, fontSize: 13, height: 1.4),
+                    ),
+                  ],
+                ),
               ),
-            ),
 
             const SizedBox(height: 20),
 
@@ -731,7 +730,7 @@ class ClientProfileBody extends StatelessWidget {
   void _editClientProfileDialog(BuildContext context, User? user) {
     final nameCtrl = TextEditingController(text: name);
     final companyCtrl = TextEditingController(text: company);
-    final phoneCtrl = TextEditingController(text: user?.userMetadata?['phone'] ?? '+91 98765 43210');
+    final phoneCtrl = TextEditingController(text: user?.userMetadata?['phone']?.toString() ?? '');
 
     showDialog(
       context: context,

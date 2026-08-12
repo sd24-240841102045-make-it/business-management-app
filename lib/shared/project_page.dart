@@ -223,7 +223,7 @@ class _ProjectPageState extends State<ProjectPage> {
                                               ),
                                               const SizedBox(height: 4),
                                               Text(
-                                                'Client: ${p.clientName}  •  Budget: \$${p.budget.toStringAsFixed(0)}',
+                                                'Client: ${p.clientName}  •  Budget: ₹${p.budget.toStringAsFixed(0)}',
                                                 style: const TextStyle(fontSize: 13, color: kPremiumMuted),
                                                 maxLines: 1,
                                                 overflow: TextOverflow.ellipsis,
@@ -315,8 +315,7 @@ class _ProjectPageState extends State<ProjectPage> {
             style: ElevatedButton.styleFrom(backgroundColor: Colors.redAccent, foregroundColor: Colors.white),
             onPressed: () async {
               Navigator.pop(context);
-              await SupabaseService().client.from('projects').delete().eq('id', project.id);
-              await _store.refreshFromSupabase();
+              await _store.deleteProject(project.id);
               if (mounted) setState(() {});
             },
             child: const Text('Delete Project'),

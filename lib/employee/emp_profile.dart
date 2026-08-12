@@ -4,6 +4,7 @@ import 'package:business_managment_app/services/supabase_service.dart';
 import 'package:business_managment_app/services/app_data_store.dart';
 import 'package:business_managment_app/shared/login_page.dart';
 import 'package:business_managment_app/shared/settings_page.dart';
+import 'package:business_managment_app/shared/chat_page.dart';
 import 'package:business_managment_app/core/premium_theme.dart';
 
 class ProfileBody extends StatefulWidget {
@@ -398,12 +399,15 @@ class _ProfileBodyState extends State<ProfileBody> {
                   height: 50,
                   child: OutlinedButton.icon(
                     onPressed: () async {
-                      await SupabaseService().signOut();
-                      if (context.mounted) {
-                        Navigator.pushReplacement(
-                          context,
-                          MaterialPageRoute(builder: (context) => const LoginPage()),
-                        );
+                      final confirm = await showLogoutConfirmationDialog(context);
+                      if (confirm) {
+                        await SupabaseService().signOut();
+                        if (context.mounted) {
+                          Navigator.pushReplacement(
+                            context,
+                            MaterialPageRoute(builder: (context) => const LoginPage()),
+                          );
+                        }
                       }
                     },
                     icon: const Icon(Icons.logout, color: Colors.red),
@@ -698,10 +702,48 @@ class _EmployeeProfilePageState extends State<EmployeeProfilePage> {
                           ),
                         ),
                         const SizedBox(height: 16),
-                        GoldButton(
-                          label: 'Edit Employee Details',
-                          icon: Icons.edit,
-                          onPressed: _editEmployeeDialog,
+                        Wrap(
+                          spacing: 10,
+                          runSpacing: 10,
+                          alignment: WrapAlignment.center,
+                          children: [
+                            ElevatedButton.icon(
+                              onPressed: () {
+                                Navigator.push(
+                                  context,
+                                  MaterialPageRoute(
+                                    builder: (context) => ChatPage(
+                                      initialTargetId: _currentEmp.userId.isNotEmpty ? _currentEmp.userId : _currentEmp.id,
+                                      initialTargetName: _currentEmp.name,
+                                      initialTargetSubtitle: '${_currentEmp.role} • ${_currentEmp.department}',
+                                      initialTargetType: 'employee',
+                                      initialTargetEmail: _currentEmp.email,
+                                      initialTargetPhone: _currentEmp.phone,
+                                    ),
+                                  ),
+                                );
+                              },
+                              icon: const Icon(Icons.chat_bubble_outline, size: 16),
+                              label: const Text('Message Employee', style: TextStyle(fontWeight: FontWeight.bold)),
+                              style: ElevatedButton.styleFrom(
+                                backgroundColor: kPremiumGold,
+                                foregroundColor: kPremiumBg,
+                                padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 12),
+                                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+                              ),
+                            ),
+                            OutlinedButton.icon(
+                              onPressed: _editEmployeeDialog,
+                              icon: const Icon(Icons.edit, size: 16),
+                              label: const Text('Edit Profile', style: TextStyle(fontWeight: FontWeight.bold)),
+                              style: OutlinedButton.styleFrom(
+                                foregroundColor: kPremiumGold,
+                                side: const BorderSide(color: kPremiumGold),
+                                padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 12),
+                                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+                              ),
+                            ),
+                          ],
                         ),
                       ],
                     ),
