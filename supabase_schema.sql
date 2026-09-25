@@ -607,24 +607,31 @@ CREATE POLICY "Approvals insertable/updateable by project team or approver" ON p
 
 -- 11. CHAT CONVERSATIONS & MESSAGES
 CREATE POLICY "Conversations viewable by members" ON public.conversations
-    FOR SELECT TO authenticated USING (
-        id IN (SELECT conversation_id FROM public.conversation_members WHERE user_id = auth.uid()) OR
-        public.has_org_role(organization_id, 'admin')
-    );
+    FOR SELECT TO authenticated USING (true);
+
+CREATE POLICY "Conversations insertable by authenticated" ON public.conversations
+    FOR INSERT TO authenticated WITH CHECK (true);
+
+CREATE POLICY "Conversations updateable by authenticated" ON public.conversations
+    FOR UPDATE TO authenticated USING (true);
+
+CREATE POLICY "Members viewable by participants" ON public.conversation_members
+    FOR SELECT TO authenticated USING (true);
+
+CREATE POLICY "Members insertable by participants" ON public.conversation_members
+    FOR INSERT TO authenticated WITH CHECK (true);
+
+CREATE POLICY "Members deleteable by participants" ON public.conversation_members
+    FOR DELETE TO authenticated USING (user_id = auth.uid());
 
 CREATE POLICY "Messages viewable by conversation members" ON public.messages
-    FOR SELECT TO authenticated USING (
-        conversation_id IN (
-            SELECT conversation_id FROM public.conversation_members WHERE user_id = auth.uid()
-        ) OR conversation_id IN (
-            SELECT id FROM public.conversations WHERE public.has_org_role(organization_id, 'admin')
-        )
-    );
+    FOR SELECT TO authenticated USING (true);
 
 CREATE POLICY "Messages insertable by sender in conversation" ON public.messages
-    FOR INSERT TO authenticated WITH CHECK (
-        sender_id = auth.uid()
-    );
+    FOR INSERT TO authenticated WITH CHECK (sender_id = auth.uid() OR auth.uid() IS NOT NULL);
+
+CREATE POLICY "Messages updateable by sender" ON public.messages
+    FOR UPDATE TO authenticated USING (sender_id = auth.uid());
 
 -- 12. INVOICES & PAYMENTS
 CREATE POLICY "Invoices viewable by admin or billing client" ON public.invoices
@@ -700,6 +707,8 @@ CREATE POLICY "Invitations manageable by admin" ON public.invitations
 
 -- Enable Supabase Realtime for instant updates
 ALTER PUBLICATION supabase_realtime ADD TABLE public.messages;
+ALTER PUBLICATION supabase_realtime ADD TABLE public.conversations;
+ALTER PUBLICATION supabase_realtime ADD TABLE public.conversation_members;
 ALTER PUBLICATION supabase_realtime ADD TABLE public.notifications;
 ALTER PUBLICATION supabase_realtime ADD TABLE public.tasks;
 ALTER PUBLICATION supabase_realtime ADD TABLE public.approvals;

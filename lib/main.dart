@@ -1,12 +1,13 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
-import 'package:shared_preferences/shared_preferences.dart';
 import 'package:business_managment_app/shared/login_page.dart';
 import 'package:business_managment_app/client/client_shell.dart';
 import 'package:business_managment_app/shared/main_shell.dart';
 import 'package:business_managment_app/services/supabase_service.dart';
 import 'package:business_managment_app/services/app_data_store.dart';
+import 'package:business_managment_app/services/notification_service.dart';
+import 'package:business_managment_app/shared/notification_widgets.dart';
 import 'package:business_managment_app/core/premium_theme.dart';
 
 Future<void> main() async {
@@ -58,7 +59,9 @@ class _MyAppState extends State<MyApp> {
       theme: premiumTheme(),
       darkTheme: premiumTheme(),
       builder: (context, child) {
-        return PremiumBackground(child: child ?? const SizedBox());
+        return ToastManager(
+          child: PremiumBackground(child: child ?? const SizedBox()),
+        );
       },
       home: const AuthGate(),
     );
@@ -157,6 +160,35 @@ class _AuthGateState extends State<AuthGate> {
       // Get user's role
       // --------------------------------------------------------
       final role = SupabaseService().getUserRole(session.user);
+      final orgId = SupabaseService().currentOrganizationId ?? '';
+      final userId = session.user.id;
+
+      // Find employeeId if current user is an employee
+      String? employeeId;
+      for (final e in AppDataStore().employees) {
+        if (e.userId == userId || e.id == userId || e.email.toLowerCase() == (session.user.email ?? '').toLowerCase()) {
+          employeeId = e.id;
+          break;
+        }
+      }
+
+      // Initialize real-time notifications
+      NotificationService().initialize(
+        orgId: orgId,
+        userId: userId,
+        role: role,
+        employeeId: employeeId,
+      );
+
+      // Hook toast callback once context is ready
+      NotificationService().onToast = (notification) {
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (mounted) {
+            final toastMgr = ToastManager.of(context);
+            toastMgr?.showToast(notification);
+          }
+        });
+      };
 
       if (mounted) {
         setState(() {

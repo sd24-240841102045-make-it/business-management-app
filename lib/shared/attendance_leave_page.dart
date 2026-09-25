@@ -526,7 +526,7 @@ class AttendanceLeaveBodyState extends State<AttendanceLeaveBody> {
 
                 const SizedBox(height: 20),
 
-                // ── Overflow-Safe Responsive Header Bar ──────────────────────────
+                // -- Overflow-Safe Responsive Header Bar --------------------------
                 Wrap(
                   alignment: WrapAlignment.spaceBetween,
                   crossAxisAlignment: WrapCrossAlignment.center,
@@ -561,7 +561,7 @@ class AttendanceLeaveBodyState extends State<AttendanceLeaveBody> {
 
                 const SizedBox(height: 16),
 
-                // ── KPI Summary Cards Banner ────────────────────────────────────
+                // -- KPI Summary Cards Banner ------------------------------------
                 LayoutBuilder(
                   builder: (context, constraints) {
                     final bool isMobile = constraints.maxWidth < 600;
@@ -601,7 +601,7 @@ class AttendanceLeaveBodyState extends State<AttendanceLeaveBody> {
 
                 const SizedBox(height: 24),
 
-                // ── Interactive Tab Selector ──────────────────────────────────────────
+                // -- Interactive Tab Selector ------------------------------------------
                 Row(
                   children: [
                     Expanded(
@@ -683,7 +683,7 @@ class AttendanceLeaveBodyState extends State<AttendanceLeaveBody> {
                 const SizedBox(height: 16),
 
                 if (_activeTab == 0) ...[
-                  // ── Search Bar ─────────────────────────────────────────
+                  // -- Search Bar -----------------------------------------
                   TextField(
                     onChanged: (val) => setState(() => _searchQuery = val),
                     style: const TextStyle(color: kPremiumText),
@@ -713,6 +713,9 @@ class AttendanceLeaveBodyState extends State<AttendanceLeaveBody> {
   }
 
   Widget _buildEmployeeAttendanceRoster(BuildContext context, String dateStr) {
+    if (_isLoadingLogs) {
+      return const Center(child: Padding(padding: EdgeInsets.all(40), child: CircularProgressIndicator(color: kPremiumGold)));
+    }
     final filteredEmployees = _store.employees.where((e) {
       final q = _searchQuery.toLowerCase();
       return e.name.toLowerCase().contains(q) || e.department.toLowerCase().contains(q) || e.role.toLowerCase().contains(q);
@@ -751,11 +754,11 @@ class AttendanceLeaveBodyState extends State<AttendanceLeaveBody> {
         }
 
         final checkInDisplay = record != null && record.checkIn.isNotEmpty
-            ? (record.checkIn.contains('T') ? record.checkIn.split('T')[1].substring(0, 5) : record.checkIn)
+            ? (record.checkIn.contains('T') ? (record.checkIn.split('T')[1].length >= 5 ? record.checkIn.split('T')[1].substring(0, 5) : record.checkIn.split('T')[1]) : record.checkIn)
             : (isOnLeave ? 'On Leave' : '09:00 AM');
 
         final checkOutDisplay = record != null && record.checkOut != null
-            ? (record.checkOut!.contains('T') ? record.checkOut!.split('T')[1].substring(0, 5) : record.checkOut!)
+            ? (record.checkOut!.contains('T') ? (record.checkOut!.split('T')[1].length >= 5 ? record.checkOut!.split('T')[1].substring(0, 5) : record.checkOut!.split('T')[1]) : record.checkOut!)
             : (isOnLeave ? 'N/A' : '05:30 PM');
 
         final statusTag = isOnLeave
@@ -815,7 +818,7 @@ class AttendanceLeaveBodyState extends State<AttendanceLeaveBody> {
                         ),
                         const SizedBox(height: 2),
                         Text(
-                          '${emp.role} • ${emp.department}',
+                          '${emp.role} \u2022 ${emp.department}',
                           maxLines: 1,
                           overflow: TextOverflow.ellipsis,
                           style: const TextStyle(fontSize: 11, color: kPremiumMuted),
@@ -953,7 +956,7 @@ class AttendanceLeaveBodyState extends State<AttendanceLeaveBody> {
                         ),
                         const SizedBox(height: 6),
                         Text(
-                          'Type: ${req.type} Leave  •  ${req.startDate} to ${req.endDate}',
+                          'Type: ${req.type} Leave  \u2022  ${req.startDate} to ${req.endDate}',
                           style: const TextStyle(fontSize: 12, color: kPremiumMuted),
                           softWrap: true,
                         ),

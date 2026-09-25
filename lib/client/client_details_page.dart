@@ -9,54 +9,85 @@ class ClientDetailsPage extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor: Colors.transparent,
-      appBar: AppBar(
-        title: Text('${client.name} Details'),
-      ),
-      body: SingleChildScrollView(
-        padding: const EdgeInsets.all(20),
-        child: Center(
-          child: ConstrainedBox(
-            constraints: const BoxConstraints(maxWidth: 800),
-            child: GlassCard(
-              padding: const EdgeInsets.all(24),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Row(
+    final clientDisplayName = client.name.isNotEmpty ? client.name : 'Client Details';
+
+    return PremiumBackground(
+      child: Scaffold(
+        backgroundColor: Colors.transparent,
+        appBar: AppBar(
+          title: Text(clientDisplayName, style: const TextStyle(fontWeight: FontWeight.bold, color: kPremiumGold)),
+          backgroundColor: kPremiumBg,
+          foregroundColor: kPremiumGold,
+          elevation: 0,
+        ),
+        body: SafeArea(
+          bottom: true,
+          child: SingleChildScrollView(
+            padding: const EdgeInsets.all(20),
+            child: Center(
+              child: ConstrainedBox(
+                constraints: const BoxConstraints(maxWidth: 800),
+                child: GlassCard(
+                  padding: const EdgeInsets.all(24),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      PremiumAvatar(
-                        label: client.name,
-                        style: AvatarStyle.gradient,
-                        size: 72,
-                        radius: 36,
-                      ),
-                      const SizedBox(width: 20),
-                        Expanded(
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Text(client.name, style: const TextStyle(fontSize: 22, fontWeight: FontWeight.bold)),
-                              Text(client.company, style: const TextStyle(fontSize: 16, color: Colors.grey)),
-                              const SizedBox(height: 6),
-                              Chip(
-                                label: Text(client.status),
-                                backgroundColor: client.status == 'Active' ? Colors.green.withOpacity(0.12) : Colors.orange.withOpacity(0.12),
-                                labelStyle: TextStyle(color: client.status == 'Active' ? Colors.green : Colors.orange, fontWeight: FontWeight.bold),
-                              ),
-                            ],
+                      Row(
+                        children: [
+                          PremiumAvatar(
+                            label: client.name.isNotEmpty ? client.name : 'Client',
+                            style: AvatarStyle.gradient,
+                            size: 72,
+                            radius: 36,
                           ),
-                        ),
-                      ],
-                    ),
-                    const Divider(height: 40),
-                    _infoRow(Icons.email, 'Email Address', client.email),
-                    _infoRow(Icons.phone, 'Phone Contact', client.phone),
-                    _infoRow(Icons.work, 'Project Scope', client.projectType),
-                    _infoRow(Icons.currency_rupee, 'Contract Budget', '₹${client.budget.toStringAsFixed(2)}'),
-                    _infoRow(Icons.person, 'Account Manager Lead', client.assignedEmployeeName ?? 'Unassigned'),
-                  ],
+                          const SizedBox(width: 20),
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  client.name.isNotEmpty ? client.name : 'Client Organization',
+                                  style: const TextStyle(fontSize: 22, fontWeight: FontWeight.bold, color: kPremiumGold),
+                                ),
+                                const SizedBox(height: 4),
+                                Text(
+                                  client.company.isNotEmpty ? client.company : 'Commercial Partner',
+                                  style: const TextStyle(fontSize: 16, color: kPremiumMuted),
+                                ),
+                                const SizedBox(height: 8),
+                                Container(
+                                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                                  decoration: BoxDecoration(
+                                    color: (client.status == 'Active' ? Colors.greenAccent : Colors.orangeAccent).withOpacity(0.15),
+                                    borderRadius: BorderRadius.circular(8),
+                                    border: Border.all(
+                                      color: (client.status == 'Active' ? Colors.greenAccent : Colors.orangeAccent).withOpacity(0.4),
+                                    ),
+                                  ),
+                                  child: Text(
+                                    client.status,
+                                    style: TextStyle(
+                                      color: client.status == 'Active' ? Colors.greenAccent : Colors.orangeAccent,
+                                      fontWeight: FontWeight.bold,
+                                      fontSize: 12,
+                                    ),
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 24),
+                      const Divider(height: 1, color: Colors.white12),
+                      const SizedBox(height: 16),
+                      _infoRow(Icons.email_outlined, 'Email Address', client.email.isNotEmpty ? client.email : 'Not specified'),
+                      _infoRow(Icons.phone_outlined, 'Phone Contact', client.phone.isNotEmpty ? client.phone : 'Not specified'),
+                      _infoRow(Icons.work_outline, 'Project Scope', client.projectType),
+                      _infoRow(Icons.currency_rupee, 'Contract Budget', '₹${client.budget.toStringAsFixed(2)}'),
+                      _infoRow(Icons.person_outline, 'Account Manager Lead', client.assignedEmployeeName ?? 'Unassigned'),
+                    ],
+                  ),
                 ),
               ),
             ),
@@ -71,14 +102,23 @@ class ClientDetailsPage extends StatelessWidget {
       padding: const EdgeInsets.symmetric(vertical: 10),
       child: Row(
         children: [
-          Icon(icon, color: Colors.indigo, size: 22),
+          PremiumAvatar(
+            icon: icon,
+            style: AvatarStyle.glowIcon,
+            size: 38,
+          ),
           const SizedBox(width: 14),
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(label, style: const TextStyle(fontSize: 12, color: Colors.grey)),
-                Text(value, style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w600), overflow: TextOverflow.ellipsis),
+                Text(label, style: const TextStyle(fontSize: 12, color: kPremiumMuted)),
+                const SizedBox(height: 2),
+                Text(
+                  value,
+                  style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w600, color: kPremiumText),
+                  overflow: TextOverflow.ellipsis,
+                ),
               ],
             ),
           ),

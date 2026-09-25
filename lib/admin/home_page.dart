@@ -2,9 +2,17 @@ import 'package:flutter/material.dart';
 import 'package:business_managment_app/services/app_data_store.dart';
 import 'package:business_managment_app/services/supabase_service.dart';
 import 'package:business_managment_app/shared/project_page.dart';
+import 'package:business_managment_app/shared/task_board_page.dart';
+import 'package:business_managment_app/admin/finance_page.dart';
+import 'package:business_managment_app/shared/invoice_page.dart';
+import 'package:business_managment_app/admin/reports_page.dart';
+import 'package:business_managment_app/employee/assigned_consultations_page.dart';
+import 'package:business_managment_app/shared/chat_page.dart';
+import 'package:business_managment_app/admin/invite_page.dart';
+import 'package:business_managment_app/shared/settings_page.dart';
 import 'package:business_managment_app/core/premium_theme.dart';
 
-/// Body-only Dashboard widget — Scaffold lives in MainShell.
+/// Body-only Dashboard widget -- Scaffold lives in MainShell.
 class HomeBody extends StatefulWidget {
   final void Function(int index) onNavigate;
   const HomeBody({super.key, required this.onNavigate});
@@ -22,6 +30,230 @@ class _HomeBodyState extends State<HomeBody> {
   int? _pendingLeaves;
   int? _totalProjects;
   bool _isLoadingStats = true;
+  final Set<String> _pinnedModules = {};
+
+  final List<Map<String, dynamic>> _extraModulesCatalog = [
+    {
+      'id': 'kanban',
+      'title': 'Task Kanban',
+      'subtitle': 'Agile Task Board',
+      'icon': Icons.view_kanban_outlined,
+      'color': Colors.deepOrangeAccent,
+      'page': () => const TaskBoardPage(),
+    },
+    {
+      'id': 'invoices',
+      'title': 'Invoices & Billing',
+      'subtitle': 'Invoicing & Tax',
+      'icon': Icons.receipt_long_outlined,
+      'color': Colors.purpleAccent,
+      'page': () => const InvoicePage(),
+    },
+    {
+      'id': 'finance',
+      'title': 'Finance & Ledger',
+      'subtitle': 'Cashflow & Balance',
+      'icon': Icons.account_balance_outlined,
+      'color': Colors.greenAccent,
+      'page': () => const FinancePage(),
+    },
+    {
+      'id': 'reports',
+      'title': 'Reports & Analytics',
+      'subtitle': 'KPIs & Performance',
+      'icon': Icons.analytics_outlined,
+      'color': Colors.indigoAccent,
+      'page': () => const ReportsPage(),
+    },
+    {
+      'id': 'consultations',
+      'title': 'Consultations',
+      'subtitle': 'Client Bookings',
+      'icon': Icons.assignment_ind_outlined,
+      'color': Colors.amberAccent,
+      'page': () => const AssignedConsultationsPage(),
+    },
+    {
+      'id': 'chat',
+      'title': 'Live Internal Chat',
+      'subtitle': 'Direct & Team Rooms',
+      'icon': Icons.chat_bubble_outline,
+      'color': Colors.cyanAccent,
+      'page': () => const ChatPage(),
+    },
+    {
+      'id': 'invites',
+      'title': 'Invite Members',
+      'subtitle': 'Onboard Staff/Clients',
+      'icon': Icons.person_add_alt_1_outlined,
+      'color': Colors.orangeAccent,
+      'page': () => const InvitePage(),
+    },
+    {
+      'id': 'settings',
+      'title': 'Settings & Security',
+      'subtitle': 'Workspace Config',
+      'icon': Icons.settings_outlined,
+      'color': Colors.blueGrey,
+      'page': () => const SettingsPage(),
+    },
+  ];
+
+  void _showAddModulesModal() {
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: kPremiumSurface,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+      ),
+      isScrollControlled: true,
+      builder: (modalContext) {
+        return StatefulBuilder(
+          builder: (context, setModalState) {
+            return Container(
+              padding: const EdgeInsets.fromLTRB(20, 16, 20, 24),
+              constraints: BoxConstraints(
+                maxHeight: MediaQuery.of(context).size.height * 0.75,
+              ),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Center(
+                    child: Container(
+                      width: 44,
+                      height: 4,
+                      decoration: BoxDecoration(
+                        color: Colors.white24,
+                        borderRadius: BorderRadius.circular(2),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 16),
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      const Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            'Add Enterprise Modules',
+                            style: TextStyle(
+                              color: kPremiumText,
+                              fontSize: 18,
+                              fontWeight: FontWeight.bold,
+                            ),
+                          ),
+                          SizedBox(height: 2),
+                          Text(
+                            'Select additional modules to pin to your dashboard',
+                            style: TextStyle(color: kPremiumMuted, fontSize: 12),
+                          ),
+                        ],
+                      ),
+                      IconButton(
+                        icon: const Icon(Icons.close, color: kPremiumMuted),
+                        onPressed: () => Navigator.pop(context),
+                      ),
+                    ],
+                  ),
+                  const Divider(height: 24, color: Colors.white10),
+                  Expanded(
+                    child: ListView.separated(
+                      shrinkWrap: true,
+                      itemCount: _extraModulesCatalog.length,
+                      separatorBuilder: (_, __) => const SizedBox(height: 10),
+                      itemBuilder: (context, index) {
+                        final mod = _extraModulesCatalog[index];
+                        final id = mod['id'] as String;
+                        final isPinned = _pinnedModules.contains(id);
+                        final color = mod['color'] as Color;
+
+                        return Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                          decoration: BoxDecoration(
+                            color: isPinned ? color.withOpacity(0.08) : Colors.white.withOpacity(0.03),
+                            borderRadius: BorderRadius.circular(14),
+                            border: Border.all(
+                              color: isPinned ? color.withOpacity(0.4) : Colors.white10,
+                            ),
+                          ),
+                          child: Row(
+                            children: [
+                              CircleAvatar(
+                                radius: 20,
+                                backgroundColor: color.withOpacity(0.18),
+                                child: Icon(mod['icon'] as IconData, color: color, size: 20),
+                              ),
+                              const SizedBox(width: 14),
+                              Expanded(
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Text(
+                                      mod['title'] as String,
+                                      style: const TextStyle(
+                                        color: kPremiumText,
+                                        fontWeight: FontWeight.bold,
+                                        fontSize: 14,
+                                      ),
+                                    ),
+                                    Text(
+                                      mod['subtitle'] as String,
+                                      style: const TextStyle(color: kPremiumMuted, fontSize: 11),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                              TextButton(
+                                style: TextButton.styleFrom(
+                                  foregroundColor: kPremiumMuted,
+                                  padding: const EdgeInsets.symmetric(horizontal: 10),
+                                ),
+                                onPressed: () {
+                                  Navigator.pop(context);
+                                  final pageBuilder = mod['page'] as Widget Function();
+                                  Navigator.push(context, MaterialPageRoute(builder: (_) => pageBuilder()));
+                                },
+                                child: const Text('Open', style: TextStyle(fontSize: 12)),
+                              ),
+                              const SizedBox(width: 4),
+                              ElevatedButton.icon(
+                                style: ElevatedButton.styleFrom(
+                                  backgroundColor: isPinned ? Colors.redAccent.withOpacity(0.18) : kPremiumGold.withOpacity(0.2),
+                                  foregroundColor: isPinned ? Colors.redAccent : kPremiumGold,
+                                  elevation: 0,
+                                  side: BorderSide(color: isPinned ? Colors.redAccent.withOpacity(0.4) : kPremiumGold.withOpacity(0.4)),
+                                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                                ),
+                                icon: Icon(isPinned ? Icons.remove_circle_outline : Icons.add_circle_outline, size: 16),
+                                label: Text(isPinned ? 'Remove' : 'Pin', style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold)),
+                                onPressed: () {
+                                  setModalState(() {
+                                    if (isPinned) {
+                                      _pinnedModules.remove(id);
+                                    } else {
+                                      _pinnedModules.add(id);
+                                    }
+                                  });
+                                  setState(() {});
+                                },
+                              ),
+                            ],
+                          ),
+                        );
+                      },
+                    ),
+                  ),
+                ],
+              ),
+            );
+          },
+        );
+      },
+    );
+  }
 
   @override
   void initState() {
@@ -60,20 +292,16 @@ class _HomeBodyState extends State<HomeBody> {
       final projectsData = await client.from('projects').select('id').eq('organization_id', orgId);
       
       final uniqueClientKeys = <String>{};
-      if (clientsData is List) {
-        for (final item in clientsData) {
+      for (final item in clientsData) {
           final email = item['email']?.toString().trim().toLowerCase();
           final id = item['id']?.toString();
           final key = (email != null && email.isNotEmpty) ? email : id;
           if (key != null) uniqueClientKeys.add(key);
         }
-      }
-      if (clientInvitesData is List) {
-        for (final item in clientInvitesData) {
+      for (final item in clientInvitesData) {
           final email = item['email']?.toString().trim().toLowerCase();
           if (email != null && email.isNotEmpty) uniqueClientKeys.add(email);
         }
-      }
 
       if (mounted) {
         setState(() {
@@ -135,7 +363,7 @@ class _HomeBodyState extends State<HomeBody> {
     final user = SupabaseService().currentUser;
     final name = user?.userMetadata?['full_name'] as String? ?? 'User';
     final firstName = name.split(' ').first;
-    return '$greeting 👋, $firstName';
+    return '$greeting \u{1F44B}, $firstName';
   }
 
   String _getBusinessName() {
@@ -179,7 +407,7 @@ class _HomeBodyState extends State<HomeBody> {
 
               const SizedBox(height: 20),
 
-              // ── Overview Banner ───────────────────────────
+              // -- Overview Banner ---------------------------
               GlassCard(
                 padding: const EdgeInsets.all(22),
                 child: Column(
@@ -198,16 +426,27 @@ class _HomeBodyState extends State<HomeBody> {
                           ),
                         ),
                         const SizedBox(width: 8),
-                        Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-                          decoration: BoxDecoration(
-                            color: kPremiumGold.withOpacity(0.15),
-                            borderRadius: BorderRadius.circular(10),
-                            border: Border.all(color: kPremiumGold.withOpacity(0.3)),
-                          ),
-                          child: const Text(
-                            'Live Metrics',
-                            style: TextStyle(color: kPremiumGold, fontSize: 11, fontWeight: FontWeight.bold),
+                        InkWell(
+                          borderRadius: BorderRadius.circular(10),
+                          onTap: () => _showReportsBottomSheet(context),
+                          child: Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                            decoration: BoxDecoration(
+                              color: kPremiumGold.withOpacity(0.15),
+                              borderRadius: BorderRadius.circular(10),
+                              border: Border.all(color: kPremiumGold.withOpacity(0.3)),
+                            ),
+                            child: const Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                Icon(Icons.analytics_outlined, size: 13, color: kPremiumGold),
+                                SizedBox(width: 4),
+                                Text(
+                                  'Live Metrics & Reports',
+                                  style: TextStyle(color: kPremiumGold, fontSize: 11, fontWeight: FontWeight.bold),
+                                ),
+                              ],
+                            ),
                           ),
                         ),
                       ],
@@ -265,20 +504,30 @@ class _HomeBodyState extends State<HomeBody> {
 
               const SizedBox(height: 24),
 
-              // ── Management Modules ────────────────────────
-              const Text(
-                'Management Modules',
-                style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
+              // -- Management Modules ------------------------
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  const Text(
+                    'Management Modules',
+                    style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
+                  ),
+                  TextButton.icon(
+                    onPressed: _showAddModulesModal,
+                    icon: const Icon(Icons.add_circle_outline, size: 18, color: kPremiumGold),
+                    label: const Text('Add Modules', style: TextStyle(color: kPremiumGold, fontWeight: FontWeight.bold, fontSize: 13)),
+                  ),
+                ],
               ),
               const SizedBox(height: 14),
 
               GridView.count(
                 shrinkWrap: true,
                 physics: const NeverScrollableScrollPhysics(),
-                crossAxisCount: isDesktop ? 4 : isTablet ? 2 : (width < 360 ? 1 : 2),
+                crossAxisCount: isDesktop ? 4 : isTablet ? 3 : (width < 360 ? 1 : 2),
                 crossAxisSpacing: 14,
                 mainAxisSpacing: 14,
-                childAspectRatio: isDesktop ? 1.4 : isTablet ? 1.3 : 1.15,
+                childAspectRatio: isDesktop ? 1.35 : isTablet ? 1.25 : 1.15,
                 children: [
                   _actionCard(
                     icon: Icons.badge_outlined,
@@ -313,12 +562,33 @@ class _HomeBodyState extends State<HomeBody> {
                     color: kPremiumTeal,
                     onTap: () => widget.onNavigate(3),
                   ),
+                  for (final mod in _extraModulesCatalog.where((m) => _pinnedModules.contains(m['id'])))
+                    _actionCard(
+                      icon: mod['icon'] as IconData,
+                      title: mod['title'] as String,
+                      subtitle: mod['subtitle'] as String,
+                      color: mod['color'] as Color,
+                      onTap: () {
+                        final pageBuilder = mod['page'] as Widget Function();
+                        Navigator.push(
+                          context,
+                          MaterialPageRoute(builder: (context) => pageBuilder()),
+                        );
+                      },
+                    ),
+                  _actionCard(
+                    icon: Icons.add_circle_outline_rounded,
+                    title: 'Add Module',
+                    subtitle: 'Customize grid',
+                    color: kPremiumGold,
+                    onTap: _showAddModulesModal,
+                  ),
                 ],
               ),
 
               const SizedBox(height: 30),
 
-              // ── Recent Clients ────────────────────────────
+              // -- Recent Clients ----------------------------
               const Text(
                 'Recent Client Account Leads',
                 style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
@@ -355,7 +625,7 @@ class _HomeBodyState extends State<HomeBody> {
                               ),
                               const SizedBox(height: 2),
                               Text(
-                                'Contact: ${client.name} • ${client.projectType}',
+                                'Contact: ${client.name} \u2022 ${client.projectType}',
                                 style: const TextStyle(
                                   color: kPremiumMuted,
                                   fontSize: 12,
@@ -398,7 +668,7 @@ class _HomeBodyState extends State<HomeBody> {
 );
   }
 
-  // ── Helper widgets ──────────────────────────────────────────
+  // -- Helper widgets ------------------------------------------
 
   Widget _overviewItem(String label, String count) {
     return Column(

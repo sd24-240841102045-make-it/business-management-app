@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
+import 'package:business_managment_app/models/chat_models.dart';
 import 'package:business_managment_app/services/app_data_store.dart';
+import 'package:business_managment_app/services/messaging_service.dart';
 import 'package:business_managment_app/services/supabase_service.dart';
 import 'package:business_managment_app/shared/login_page.dart';
 import 'package:business_managment_app/core/premium_theme.dart';
@@ -16,7 +18,6 @@ class _SettingsPageState extends State<SettingsPage> {
   final AppDataStore _store = AppDataStore();
 
   // Local Settings State
-  bool _darkMode = false;
   bool _emailNotifications = true;
   bool _pushNotifications = true;
   bool _biometricLock = false;
@@ -24,10 +25,49 @@ class _SettingsPageState extends State<SettingsPage> {
 
   final List<String> _currencies = ['₹ (INR)', '\$ (USD)', '€ (EUR)', '£ (GBP)'];
 
+  CommunicationSettingsModel? _commSettings;
+  bool _loadingCommSettings = false;
+
   @override
   void initState() {
     super.initState();
     _store.addListener(_onStoreUpdate);
+    _loadCommSettings();
+  }
+
+  Future<void> _loadCommSettings() async {
+    setState(() => _loadingCommSettings = true);
+    final settings = await MessagingService().getCommunicationSettings();
+    if (mounted) {
+      setState(() {
+        _commSettings = settings;
+        _loadingCommSettings = false;
+      });
+    }
+  }
+
+  Future<void> _updateCommSetting(CommunicationSettingsModel Function(CommunicationSettingsModel current) updater) async {
+    if (_commSettings == null) return;
+    final updated = updater(_commSettings!);
+    setState(() => _commSettings = updated);
+    final success = await MessagingService().updateCommunicationSettings(updated);
+    if (!mounted) return;
+    if (success) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Communication policy updated successfully'),
+          backgroundColor: Colors.green,
+          duration: Duration(seconds: 2),
+        ),
+      );
+    } else {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Failed to update communication policy'),
+          backgroundColor: Colors.red,
+        ),
+      );
+    }
   }
 
   @override
@@ -172,9 +212,6 @@ class _SettingsPageState extends State<SettingsPage> {
                         SwitchListTile(
                           value: _store.isDarkMode,
                           onChanged: (val) {
-                            setState(() {
-                              _darkMode = val;
-                            });
                             _store.toggleDarkMode(val);
                           },
                           secondary: const PremiumAvatar(
@@ -319,7 +356,129 @@ class _SettingsPageState extends State<SettingsPage> {
                       ]),
                       const SizedBox(height: 24),
 
-                      // 5. SYSTEM & ABOUT
+                      // 5. BUSINESS COMMUNICATION & PRIVACY POLICIES (ADMINS)
+                      if (userRole == 'ADMIN' || userRole == 'OWNER') ...[
+                        _buildSectionHeader('Business Communication Policies'),
+                        _buildSettingsCard([
+                          SwitchListTile(
+                            value: _commSettings?.enableEmployeeClientMessaging ?? true,
+                            onChanged: (val) => _updateCommSetting((s) => CommunicationSettingsModel(
+                              id: s.id,
+                              organizationId: s.organizationId,
+                              enableEmployeeClientMessaging: val,
+                              restrictClientToProjects: s.restrictClientToProjects,
+                              allowEmployeeEmployeeChat: s.allowEmployeeEmployeeChat,
+                              showBusinessContactInfo: s.showBusinessContactInfo,
+                              allowFileSharing: s.allowFileSharing,
+                              allowMessageEditing: s.allowMessageEditing,
+                              allowMessageDeletion: s.allowMessageDeletion,
+                              maxMessageLength: s.maxMessageLength,
+                            )),
+                            secondary: const PremiumAvatar(
+                              icon: Icons.forum_outlined,
+                              style: AvatarStyle.glowIcon,
+                              size: 40,
+                            ),
+                            title: const Text('Employee ↔ Client Messaging', style: TextStyle(fontWeight: FontWeight.bold, color: kPremiumText)),
+                            subtitle: const Text('Allow communication between staff and clients on assigned workflows', style: TextStyle(color: kPremiumMuted)),
+                          ),
+                          const Divider(height: 1, color: Colors.white10),
+                          SwitchListTile(
+                            value: _commSettings?.restrictClientToProjects ?? true,
+                            onChanged: (val) => _updateCommSetting((s) => CommunicationSettingsModel(
+                              id: s.id,
+                              organizationId: s.organizationId,
+                              enableEmployeeClientMessaging: s.enableEmployeeClientMessaging,
+                              restrictClientToProjects: val,
+                              allowEmployeeEmployeeChat: s.allowEmployeeEmployeeChat,
+                              showBusinessContactInfo: s.showBusinessContactInfo,
+                              allowFileSharing: s.allowFileSharing,
+                              allowMessageEditing: s.allowMessageEditing,
+                              allowMessageDeletion: s.allowMessageDeletion,
+                              maxMessageLength: s.maxMessageLength,
+                            )),
+                            secondary: const PremiumAvatar(
+                              icon: Icons.folder_shared_outlined,
+                              style: AvatarStyle.glowIcon,
+                              size: 40,
+                            ),
+                            title: const Text('Restrict Clients to Assigned Projects', style: TextStyle(fontWeight: FontWeight.bold, color: kPremiumText)),
+                            subtitle: const Text('Ensure clients can only communicate within projects they are assigned to', style: TextStyle(color: kPremiumMuted)),
+                          ),
+                          const Divider(height: 1, color: Colors.white10),
+                          SwitchListTile(
+                            value: _commSettings?.allowEmployeeEmployeeChat ?? true,
+                            onChanged: (val) => _updateCommSetting((s) => CommunicationSettingsModel(
+                              id: s.id,
+                              organizationId: s.organizationId,
+                              enableEmployeeClientMessaging: s.enableEmployeeClientMessaging,
+                              restrictClientToProjects: s.restrictClientToProjects,
+                              allowEmployeeEmployeeChat: val,
+                              showBusinessContactInfo: s.showBusinessContactInfo,
+                              allowFileSharing: s.allowFileSharing,
+                              allowMessageEditing: s.allowMessageEditing,
+                              allowMessageDeletion: s.allowMessageDeletion,
+                              maxMessageLength: s.maxMessageLength,
+                            )),
+                            secondary: const PremiumAvatar(
+                              icon: Icons.groups_outlined,
+                              style: AvatarStyle.glowIcon,
+                              size: 40,
+                            ),
+                            title: const Text('Employee ↔ Employee Chat', style: TextStyle(fontWeight: FontWeight.bold, color: kPremiumText)),
+                            subtitle: const Text('Allow colleagues within the same organization to communicate directly', style: TextStyle(color: kPremiumMuted)),
+                          ),
+                          const Divider(height: 1, color: Colors.white10),
+                          SwitchListTile(
+                            value: _commSettings?.showBusinessContactInfo ?? true,
+                            onChanged: (val) => _updateCommSetting((s) => CommunicationSettingsModel(
+                              id: s.id,
+                              organizationId: s.organizationId,
+                              enableEmployeeClientMessaging: s.enableEmployeeClientMessaging,
+                              restrictClientToProjects: s.restrictClientToProjects,
+                              allowEmployeeEmployeeChat: s.allowEmployeeEmployeeChat,
+                              showBusinessContactInfo: val,
+                              allowFileSharing: s.allowFileSharing,
+                              allowMessageEditing: s.allowMessageEditing,
+                              allowMessageDeletion: s.allowMessageDeletion,
+                              maxMessageLength: s.maxMessageLength,
+                            )),
+                            secondary: const PremiumAvatar(
+                              icon: Icons.contact_phone_outlined,
+                              style: AvatarStyle.glowIcon,
+                              size: 40,
+                            ),
+                            title: const Text('Display Business Contact Info', style: TextStyle(fontWeight: FontWeight.bold, color: kPremiumText)),
+                            subtitle: const Text('Display official business email and office extensions on work profiles', style: TextStyle(color: kPremiumMuted)),
+                          ),
+                          const Divider(height: 1, color: Colors.white10),
+                          SwitchListTile(
+                            value: _commSettings?.allowMessageDeletion ?? false,
+                            onChanged: (val) => _updateCommSetting((s) => CommunicationSettingsModel(
+                              id: s.id,
+                              organizationId: s.organizationId,
+                              enableEmployeeClientMessaging: s.enableEmployeeClientMessaging,
+                              restrictClientToProjects: s.restrictClientToProjects,
+                              allowEmployeeEmployeeChat: s.allowEmployeeEmployeeChat,
+                              showBusinessContactInfo: s.showBusinessContactInfo,
+                              allowFileSharing: s.allowFileSharing,
+                              allowMessageEditing: s.allowMessageEditing,
+                              allowMessageDeletion: val,
+                              maxMessageLength: s.maxMessageLength,
+                            )),
+                            secondary: const PremiumAvatar(
+                              icon: Icons.history_edu_outlined,
+                              style: AvatarStyle.glowIcon,
+                              size: 40,
+                            ),
+                            title: const Text('Allow Message Deletion', style: TextStyle(fontWeight: FontWeight.bold, color: kPremiumText)),
+                            subtitle: const Text('When disabled, all sent messages remain archived as immutable business records', style: TextStyle(color: kPremiumMuted)),
+                          ),
+                        ]),
+                        const SizedBox(height: 24),
+                      ],
+
+                      // 6. SYSTEM & ABOUT
                       _buildSectionHeader('System & Information'),
                       _buildSettingsCard([
                         ListTile(

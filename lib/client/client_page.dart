@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:business_managment_app/services/app_data_store.dart';
 import 'package:business_managment_app/client/client_details_page.dart';
+import 'package:business_managment_app/core/premium_theme.dart';
 
 class ClientPage extends StatefulWidget {
   const ClientPage({super.key});
@@ -30,65 +31,109 @@ class _ClientPageState extends State<ClientPage> {
 
   @override
   Widget build(BuildContext context) {
-    return LayoutBuilder(
-      builder: (context, constraints) {
-        final double width = constraints.maxWidth;
-        final bool isDesktop = width >= 900;
-        final double hPad = isDesktop ? 36 : 16;
-
-        return RefreshIndicator(
-          onRefresh: () async {
-            await _store.refreshFromSupabase();
-          },
-          child: SingleChildScrollView(
-            physics: const AlwaysScrollableScrollPhysics(),
-            padding: EdgeInsets.symmetric(horizontal: hPad, vertical: 20),
-            child: Center(
-              child: ConstrainedBox(
-                constraints: const BoxConstraints(maxWidth: 1100),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    const Text('Client Enterprise Accounts', style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold)),
-                    const SizedBox(height: 16),
-                    ListView.builder(
-                      shrinkWrap: true,
-                      physics: const NeverScrollableScrollPhysics(),
-                      itemCount: _store.clients.length,
-                      itemBuilder: (context, index) {
-                        final client = _store.clients[index];
-                        return Card(
-                          margin: const EdgeInsets.only(bottom: 12),
-                          elevation: 2,
-                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-                          child: ListTile(
-                            contentPadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
-                            leading: CircleAvatar(
-                              backgroundColor: Colors.indigo.shade100,
-                              child: Text(client.name.substring(0, 1), style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.indigo)),
+    return PremiumBackground(
+      child: Scaffold(
+        backgroundColor: Colors.transparent,
+        appBar: AppBar(
+          title: const Text('Client Accounts', style: TextStyle(fontWeight: FontWeight.bold, color: kPremiumGold)),
+          backgroundColor: kPremiumBg,
+          foregroundColor: kPremiumGold,
+          elevation: 0,
+        ),
+        body: SafeArea(
+          bottom: true,
+          child: RefreshIndicator(
+            color: kPremiumGold,
+            onRefresh: () async {
+              await _store.refreshFromSupabase();
+            },
+            child: SingleChildScrollView(
+              physics: const AlwaysScrollableScrollPhysics(),
+              padding: EdgeInsets.only(
+                left: 20,
+                right: 20,
+                top: 20,
+                bottom: MediaQuery.of(context).padding.bottom + 80.0,
+              ),
+              child: Center(
+                child: ConstrainedBox(
+                  constraints: const BoxConstraints(maxWidth: 1100),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      FadeInSlide(
+                        index: 0,
+                        child: HeroBanner(
+                          title: 'Client Enterprise Accounts',
+                          subtitle: '${_store.clients.length} Active Client Organizations',
+                          badge: 'Partnerships',
+                        ),
+                      ),
+                      const SizedBox(height: 20),
+                      if (_store.clients.isEmpty)
+                        const Padding(
+                          padding: EdgeInsets.symmetric(vertical: 40),
+                          child: Center(
+                            child: Text(
+                              'No client accounts found.',
+                              style: TextStyle(color: kPremiumMuted, fontSize: 16),
                             ),
-                            title: Text(client.name, style: const TextStyle(fontWeight: FontWeight.bold)),
-                            subtitle: Text('${client.company} • ${client.projectType}'),
-                            trailing: const Icon(Icons.arrow_forward_ios, size: 16),
-                            onTap: () {
-                              Navigator.push(
-                                context,
-                                MaterialPageRoute(
-                                  builder: (context) => ClientDetailsPage(client: client),
-                                ),
-                              );
-                            },
                           ),
-                        );
-                      },
-                    ),
-                  ],
+                        )
+                      else
+                        ListView.builder(
+                          shrinkWrap: true,
+                          physics: const NeverScrollableScrollPhysics(),
+                          itemCount: _store.clients.length,
+                          itemBuilder: (context, index) {
+                            final client = _store.clients[index];
+                            return FadeInSlide(
+                              index: index + 1,
+                              child: Container(
+                                margin: const EdgeInsets.only(bottom: 12),
+                                child: GlassCard(
+                                  padding: const EdgeInsets.all(16),
+                                  child: ListTile(
+                                    contentPadding: EdgeInsets.zero,
+                                    leading: PremiumAvatar(
+                                      label: client.name.isNotEmpty ? client.name : 'Client',
+                                      style: AvatarStyle.gradient,
+                                      size: 48,
+                                    ),
+                                    title: Text(
+                                      client.name.isNotEmpty ? client.name : 'Unnamed Client',
+                                      style: const TextStyle(fontWeight: FontWeight.bold, color: kPremiumGold, fontSize: 16),
+                                    ),
+                                    subtitle: Padding(
+                                      padding: const EdgeInsets.only(top: 4),
+                                      child: Text(
+                                        '${client.company} • ${client.projectType}',
+                                        style: const TextStyle(color: kPremiumMuted, fontSize: 13),
+                                      ),
+                                    ),
+                                    trailing: const Icon(Icons.arrow_forward_ios_rounded, size: 16, color: kPremiumGold),
+                                    onTap: () {
+                                      Navigator.push(
+                                        context,
+                                        MaterialPageRoute(
+                                          builder: (context) => ClientDetailsPage(client: client),
+                                        ),
+                                      );
+                                    },
+                                  ),
+                                ),
+                              ),
+                            );
+                          },
+                        ),
+                    ],
+                  ),
                 ),
               ),
             ),
           ),
-        );
-      },
+        ),
+      ),
     );
   }
 }

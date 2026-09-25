@@ -46,8 +46,8 @@ class _ProjectDetailsPageState extends State<ProjectDetailsPage> {
       if (pRes != null) {
         _description = pRes['description']?.toString() ?? '';
         _health = pRes['health']?.toString() ?? 'On Track';
-        _startDate = pRes['start_date']?.toString()?.split(' ').first ?? 'Not set';
-        _deadline = pRes['deadline']?.toString()?.split(' ').first ?? widget.project.deadline;
+        _startDate = pRes['start_date']?.toString().split(' ').first ?? 'Not set';
+        _deadline = pRes['deadline']?.toString().split(' ').first ?? widget.project.deadline;
         
         final mId = pRes['manager_id']?.toString();
         if (mId != null && mId.isNotEmpty) {
@@ -65,10 +65,8 @@ class _ProjectDetailsPageState extends State<ProjectDetailsPage> {
             .from('tasks')
             .select('id, status')
             .eq('project_id', widget.project.id);
-        if (tasksRes is List) {
-          _totalTasks = tasksRes.length;
+        _totalTasks = tasksRes.length;
           _completedTasks = tasksRes.where((t) => t['status'] == 'Completed').length;
-        }
       } catch (_) {}
 
     } catch (e) {
@@ -114,6 +112,7 @@ class _ProjectDetailsPageState extends State<ProjectDetailsPage> {
           backgroundColor: kPremiumBg.withOpacity(0.85),
           foregroundColor: kPremiumGold,
           elevation: 0,
+          bottom: _isLoading ? const PreferredSize(preferredSize: Size.fromHeight(2), child: LinearProgressIndicator(color: kPremiumGold, backgroundColor: Colors.transparent)) : null,
         ),
         body: SafeArea(
           bottom: true,
@@ -267,7 +266,7 @@ class _ProjectDetailsPageState extends State<ProjectDetailsPage> {
                         // Minimal 2x2 Metadata Grid
                         Row(
                           children: [
-                            Expanded(child: _buildMinimalField('Budget', '₹${widget.project.budget.toStringAsFixed(0)}', Icons.currency_rupee)),
+                            Expanded(child: _buildMinimalField('Budget', '\u{20B9}${widget.project.budget.toStringAsFixed(0)}', Icons.currency_rupee)),
                             Expanded(child: _buildMinimalField('Project Manager', _managerName, Icons.person_outline)),
                           ],
                         ),
@@ -320,6 +319,23 @@ class _ProjectDetailsPageState extends State<ProjectDetailsPage> {
                                 children: [
                                   GoldButton(
                                     expand: true,
+                                    label: 'Project Team Chat',
+                                    icon: Icons.forum_outlined,
+                                    onPressed: () {
+                                      Navigator.push(
+                                        context,
+                                        MaterialPageRoute(
+                                          builder: (context) => ChatPage(
+                                            initialProjectId: widget.project.id,
+                                            initialProjectTitle: widget.project.name,
+                                          ),
+                                        ),
+                                      );
+                                    },
+                                  ),
+                                  const SizedBox(height: 12),
+                                  GoldButton(
+                                    expand: true,
                                     label: 'Kanban Board ($_completedTasks/$_totalTasks)',
                                     icon: Icons.view_kanban_outlined,
                                     onPressed: () {
@@ -338,26 +354,47 @@ class _ProjectDetailsPageState extends State<ProjectDetailsPage> {
                                 ],
                               );
                             }
-                            return Row(
+                            return Column(
                               children: [
-                                Expanded(
-                                  child: GoldButton(
-                                    label: 'Kanban Board ($_completedTasks/$_totalTasks)',
-                                    icon: Icons.view_kanban_outlined,
-                                    onPressed: () {
-                                      Navigator.push(context, MaterialPageRoute(builder: (context) => const TaskBoardPage()));
-                                    },
-                                  ),
+                                GoldButton(
+                                  expand: true,
+                                  label: 'Project Team Chat & Communications',
+                                  icon: Icons.forum_outlined,
+                                  onPressed: () {
+                                    Navigator.push(
+                                      context,
+                                      MaterialPageRoute(
+                                        builder: (context) => ChatPage(
+                                          initialProjectId: widget.project.id,
+                                          initialProjectTitle: widget.project.name,
+                                        ),
+                                      ),
+                                    );
+                                  },
                                 ),
-                                const SizedBox(width: 12),
-                                Expanded(
-                                  child: GoldButton(
-                                    label: 'View Invoices',
-                                    icon: Icons.receipt_outlined,
-                                    onPressed: () {
-                                      Navigator.push(context, MaterialPageRoute(builder: (context) => const InvoicePage()));
-                                    },
-                                  ),
+                                const SizedBox(height: 12),
+                                Row(
+                                  children: [
+                                    Expanded(
+                                      child: GoldButton(
+                                        label: 'Kanban Board ($_completedTasks/$_totalTasks)',
+                                        icon: Icons.view_kanban_outlined,
+                                        onPressed: () {
+                                          Navigator.push(context, MaterialPageRoute(builder: (context) => const TaskBoardPage()));
+                                        },
+                                      ),
+                                    ),
+                                    const SizedBox(width: 12),
+                                    Expanded(
+                                      child: GoldButton(
+                                        label: 'View Invoices',
+                                        icon: Icons.receipt_outlined,
+                                        onPressed: () {
+                                          Navigator.push(context, MaterialPageRoute(builder: (context) => const InvoicePage()));
+                                        },
+                                      ),
+                                    ),
+                                  ],
                                 ),
                               ],
                             );

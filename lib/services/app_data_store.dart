@@ -3,7 +3,7 @@ import 'supabase_service.dart';
 
 class Employee {
   final String id;
-  final String userId; // auth.uid() — used for chat/conversation_members
+  final String userId; // auth.uid() -- used for chat/conversation_members
   final String name;
   final String role;
   final String department;
@@ -393,6 +393,7 @@ class TaskModel {
   final String title;
   final String projectId;
   final String projectName;
+  final String assignedToId;
   final String assignedToName;
   final String status;
   final String priority;
@@ -403,6 +404,7 @@ class TaskModel {
     required this.title,
     this.projectId = '',
     this.projectName = 'General Work',
+    this.assignedToId = '',
     required this.assignedToName,
     this.status = 'To Do',
     this.priority = 'Medium',
@@ -415,6 +417,7 @@ class TaskModel {
       'title': title,
       'project_id': projectId,
       'project_name': projectName,
+      'assigned_to': assignedToId,
       'assigned_to_name': assignedToName,
       'status': status,
       'priority': priority,
@@ -428,6 +431,7 @@ class TaskModel {
       title: map['title'] ?? '',
       projectId: map['project_id'] ?? '',
       projectName: map['project_name'] ?? 'General Work',
+      assignedToId: map['assigned_to'] ?? map['assigned_to_id'] ?? '',
       assignedToName: map['assigned_to_name'] ?? '',
       status: map['status'] ?? 'To Do',
       priority: map['priority'] ?? 'Medium',
@@ -623,11 +627,18 @@ class AppDataStore extends ChangeNotifier {
           if (t.projectId.isNotEmpty && !activeProjectIds.contains(t.projectId)) continue;
           if (SupabaseService().isProjectDeleted(t.projectId)) continue;
 
+          String pName = 'General Work';
+          if (t.projectId.isNotEmpty) {
+            final match = _projects.where((p) => p.id == t.projectId);
+            if (match.isNotEmpty) pName = match.first.name;
+          }
+
           _tasks.add(TaskModel(
             id: t.id,
             title: t.title,
             projectId: t.projectId,
-            projectName: 'Project',
+            projectName: pName,
+            assignedToId: t.assignedTo ?? '',
             assignedToName: t.assignee?.fullName ?? 'Unassigned',
             status: t.status,
             priority: t.priority,
@@ -639,10 +650,15 @@ class AppDataStore extends ChangeNotifier {
       final remoteInvoices = await SupabaseService().fetchInvoices();
       _invoices.clear();
       for (final inv in remoteInvoices) {
+        String cName = 'Client';
+        if (inv.clientId.isNotEmpty) {
+          final m = _clients.where((c) => c.id == inv.clientId);
+          if (m.isNotEmpty) cName = m.first.name;
+        }
         _invoices.add(InvoiceModel(
           id: inv.id,
           invoiceNumber: inv.invoiceNumber,
-          clientName: 'Client',
+          clientName: cName,
           amount: inv.total,
           status: inv.status,
           issueDate: inv.issueDate,

@@ -1,17 +1,25 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
-import 'package:business_managment_app/services/app_data_store.dart';
-import 'package:business_managment_app/services/supabase_service.dart';
 import 'package:business_managment_app/core/premium_theme.dart';
+import 'package:business_managment_app/models/chat_models.dart';
+import 'package:business_managment_app/services/app_data_store.dart';
+import 'package:business_managment_app/services/messaging_service.dart';
+import 'package:business_managment_app/services/supabase_service.dart';
+import 'package:business_managment_app/widgets/chat/conversation_tile.dart';
+import 'package:business_managment_app/widgets/chat/message_bubble.dart';
+import 'package:business_managment_app/widgets/chat/message_input.dart';
 
 class ChatPage extends StatefulWidget {
   final String? initialTargetId;
   final String? initialTargetName;
   final String? initialTargetSubtitle;
-  final String? initialTargetType; // 'employee' or 'client'
+  final String? initialTargetType; // 'employee', 'client', 'admin'
   final String? initialTargetEmail;
   final String? initialTargetPhone;
+  final String? initialProjectId;
+  final String? initialProjectTitle;
 
   const ChatPage({
     super.key,
@@ -21,6 +29,8 @@ class ChatPage extends StatefulWidget {
     this.initialTargetType,
     this.initialTargetEmail,
     this.initialTargetPhone,
+    this.initialProjectId,
+    this.initialProjectTitle,
   });
 
   @override
@@ -28,27 +38,39 @@ class ChatPage extends StatefulWidget {
 }
 
 class _ChatPageState extends State<ChatPage> {
+  final MessagingService _messagingService = MessagingService();
   final AppDataStore _store = AppDataStore();
+
   final TextEditingController _msgController = TextEditingController();
   final TextEditingController _searchController = TextEditingController();
   final ScrollController _scrollController = ScrollController();
 
-  // Cache the stream per conversationId so StreamBuilder doesn't re-subscribe on setState
-  String? _streamedConversationId;
-  Stream<List<ChatMessage>>? _messagesStream;
-
+  // Active conversation state
+  String? _activeConversationId;
   String? _selectedTargetId;
+  String? _activeProjectId;
   String _selectedTargetName = '';
   String _selectedTargetSubtitle = '';
-  String _selectedTargetType = 'client';
+  String _selectedTargetType = 'client'; // 'employee', 'client', 'admin', 'project'
   String _selectedTargetEmail = '';
   String _selectedTargetPhone = '';
-  
-  String? _activeConversationId;
+
+  Stream<List<ChatMessageModel>>? _messagesStream;
+  Stream<Set<String>>? _typingStream;
+  String? _streamedConversationId;
+
   bool _isLoadingConversation = false;
-  String _searchQuery = '';
+  bool _isLoadingOlder = false;
+  bool _hasMoreOlder = true;
   bool _showProfileInfo = false;
-  int _filterTabIndex = 0;
+  bool _showScrollToBottom = false;
+  bool _isSending = false;
+
+  String _searchQuery = '';
+  int _inboxTab = 0; // 0 = Directory, 1 = Recent Chats
+
+  List<ConversationModel> _recentConversations = [];
+  bool _loadingRecentChats = false;
 
   @override
   void initState() {
@@ -56,7 +78,15 @@ class _ChatPageState extends State<ChatPage> {
     _store.addListener(_onStoreUpdate);
     _store.refreshFromSupabase();
 
-    if (widget.initialTargetId != null) {
+    _scrollController.addListener(_onScroll);
+    _loadRecentConversations();
+
+    if (widget.initialProjectId != null) {
+      _selectProject(
+        widget.initialProjectId!,
+        widget.initialProjectTitle ?? 'Project Chat',
+      );
+    } else if (widget.initialTargetId != null) {
       _selectTarget(
         widget.initialTargetId!,
         widget.initialTargetName ?? 'Contact',
@@ -68,6 +98,143 @@ class _ChatPageState extends State<ChatPage> {
     }
   }
 
+  @override
+  void dispose() {
+    _scrollController.removeListener(_onScroll);
+    _scrollController.dispose();
+    _msgController.dispose();
+    _searchController.dispose();
+    _store.removeListener(_onStoreUpdate);
+
+    if (_activeConversationId != null) {
+      _messagingService.sendTyping(_activeConversationId!, isTyping: false);
+      _messagingService.unsubscribeFromConversation(_activeConversationId!);
+    }
+
+    super.dispose();
+  }
+
+  void _onStoreUpdate() {
+    if (mounted) setState(() {});
+  }
+
+  Future<void> _loadRecentConversations() async {
+    if (!mounted) return;
+    setState(() => _loadingRecentChats = true);
+
+    final convs = await _messagingService.getConversations();
+
+    if (mounted) {
+      setState(() {
+        _recentConversations = convs;
+        _loadingRecentChats = false;
+      });
+    }
+  }
+
+  void _onScroll() {
+    if (!_scrollController.hasClients) return;
+
+    final maxScroll = _scrollController.position.maxScrollExtent;
+    final currentScroll = _scrollController.position.pixels;
+    final isNearBottom = (maxScroll - currentScroll) < 150;
+
+    if (_showScrollToBottom != !isNearBottom) {
+      setState(() => _showScrollToBottom = !isNearBottom);
+    }
+
+    if (currentScroll <= 60 && !_isLoadingOlder && _hasMoreOlder && _activeConversationId != null) {
+      _loadOlderMessages();
+    }
+  }
+
+  Future<void> _loadOlderMessages() async {
+    final convId = _activeConversationId;
+    if (convId == null || _isLoadingOlder || !_hasMoreOlder) return;
+
+    final prevMaxScroll = _scrollController.hasClients ? _scrollController.position.maxScrollExtent : 0.0;
+    final prevPixels = _scrollController.hasClients ? _scrollController.position.pixels : 0.0;
+
+    setState(() => _isLoadingOlder = true);
+
+    final cached = _messagingService.loadInitialMessages(convId);
+    final messages = await cached;
+    if (messages.isEmpty) {
+      if (mounted) setState(() => _isLoadingOlder = false);
+      return;
+    }
+
+    final oldestTimestamp = messages.first.createdAt;
+    final older = await _messagingService.loadOlderMessages(
+      convId,
+      beforeTimestamp: oldestTimestamp,
+      limit: 30,
+    );
+
+    if (mounted) {
+      setState(() {
+        _isLoadingOlder = false;
+        if (older.isEmpty || older.length < 30) {
+          _hasMoreOlder = false;
+        }
+      });
+
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (_scrollController.hasClients) {
+          final newMaxScroll = _scrollController.position.maxScrollExtent;
+          final diff = newMaxScroll - prevMaxScroll;
+          if (diff > 0) {
+            _scrollController.jumpTo(prevPixels + diff);
+          }
+        }
+      });
+    }
+  }
+
+  // ---------------------------------------------------------------------------
+  // PROJECT-BASED CHAT SELECTION
+  // ---------------------------------------------------------------------------
+  Future<void> _selectProject(String projectId, String projectTitle) async {
+    if (!mounted) return;
+
+    if (_activeConversationId != null) {
+      _messagingService.sendTyping(_activeConversationId!, isTyping: false);
+      _messagingService.unsubscribeFromConversation(_activeConversationId!);
+    }
+
+    setState(() {
+      _activeProjectId = projectId;
+      _selectedTargetId = projectId;
+      _selectedTargetName = projectTitle;
+      _selectedTargetSubtitle = 'Project Communications';
+      _selectedTargetType = 'project';
+      _selectedTargetEmail = '';
+      _selectedTargetPhone = '';
+      _isLoadingConversation = true;
+      _showProfileInfo = false;
+      _hasMoreOlder = true;
+    });
+
+    final convId = await _messagingService.getOrCreateProjectConversation(
+      projectId,
+      projectTitle: projectTitle,
+    );
+
+    if (mounted && convId != null) {
+      setState(() {
+        _activeConversationId = convId;
+        _isLoadingConversation = false;
+        _streamedConversationId = convId;
+        _messagesStream = _messagingService.getMessagesStream(convId);
+        _typingStream = _messagingService.getTypingStream(convId);
+      });
+      _scrollToBottom(smooth: false);
+    }
+  }
+
+  // ---------------------------------------------------------------------------
+  // DIRECT USER CHAT SELECTION (RELATIONSHIP CONTROLLED)
+  // ---------------------------------------------------------------------------
   Future<void> _selectTarget(
     String id,
     String name,
@@ -78,10 +245,35 @@ class _ChatPageState extends State<ChatPage> {
   ]) async {
     if (!mounted) return;
 
+    if (_activeConversationId != null) {
+      _messagingService.sendTyping(_activeConversationId!, isTyping: false);
+      _messagingService.unsubscribeFromConversation(_activeConversationId!);
+    }
+
+    // Check business relationship permission
+    final canChat = await _messagingService.canDirectChatWith(
+      targetUserId: id,
+      targetRole: type,
+    );
+
+    if (!canChat) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text(
+              '🔒 Direct communication restricted. Please use the assigned Project Chat for work-related discussions.',
+            ),
+            backgroundColor: kPremiumDanger,
+            duration: Duration(seconds: 4),
+          ),
+        );
+      }
+      return;
+    }
+
     String resolvedEmail = email.trim();
     String resolvedPhone = phone.trim();
 
-    // Dynamically lookup phone & email if not provided
     if (resolvedPhone.isEmpty || resolvedEmail.isEmpty) {
       for (final emp in _store.employees) {
         if (emp.id == id || emp.userId == id || emp.name.toLowerCase() == name.toLowerCase()) {
@@ -90,7 +282,6 @@ class _ChatPageState extends State<ChatPage> {
           break;
         }
       }
-
       for (final client in _store.clients) {
         if (client.id == id || client.name.toLowerCase() == name.toLowerCase()) {
           if (resolvedEmail.isEmpty && client.email.trim().isNotEmpty) resolvedEmail = client.email.trim();
@@ -101,6 +292,7 @@ class _ChatPageState extends State<ChatPage> {
     }
 
     setState(() {
+      _activeProjectId = null;
       _selectedTargetId = id;
       _selectedTargetName = name;
       _selectedTargetSubtitle = subtitle;
@@ -109,113 +301,145 @@ class _ChatPageState extends State<ChatPage> {
       _selectedTargetPhone = resolvedPhone;
       _isLoadingConversation = true;
       _showProfileInfo = false;
+      _hasMoreOlder = true;
     });
 
-    final convId = await SupabaseService().getOrCreateDirectConversation(id);
-    
+    final convId = await _messagingService.getOrCreateDirectConversation(id, targetName: name);
+
     if (mounted) {
       setState(() {
         _activeConversationId = convId;
         _isLoadingConversation = false;
-        // Only create a new stream if conversation changed
-        if (_streamedConversationId != convId) {
-          _streamedConversationId = convId;
-          _messagesStream = SupabaseService().getMessagesStream(convId);
-        }
+        _streamedConversationId = convId;
+        _messagesStream = _messagingService.getMessagesStream(convId);
+        _typingStream = _messagingService.getTypingStream(convId);
+      });
+      _scrollToBottom(smooth: false);
+    }
+  }
+
+  void _selectConversationModel(ConversationModel conv) {
+    if (!mounted) return;
+
+    if (_activeConversationId != null) {
+      _messagingService.sendTyping(_activeConversationId!, isTyping: false);
+      _messagingService.unsubscribeFromConversation(_activeConversationId!);
+    }
+
+    if (conv.isProjectChat) {
+      setState(() {
+        _activeProjectId = conv.projectId;
+        _selectedTargetId = conv.projectId ?? conv.id;
+        _selectedTargetName = conv.title.isNotEmpty ? conv.title : 'Project Chat';
+        _selectedTargetSubtitle = 'Project Communications';
+        _selectedTargetType = 'project';
+        _activeConversationId = conv.id;
+        _streamedConversationId = conv.id;
+        _messagesStream = _messagingService.getMessagesStream(conv.id);
+        _typingStream = _messagingService.getTypingStream(conv.id);
+        _hasMoreOlder = true;
+        _showProfileInfo = false;
+      });
+    } else {
+      final myId = _messagingService.currentUserId;
+      final otherMember = conv.members.firstWhere(
+        (m) => m.userId != myId,
+        orElse: () => conv.members.isNotEmpty ? conv.members.first : ConversationMemberModel(
+          id: '',
+          conversationId: conv.id,
+          userId: '',
+          joinedAt: DateTime.now(),
+          lastReadAt: DateTime.now(),
+        ),
+      );
+
+      setState(() {
+        _activeProjectId = null;
+        _selectedTargetId = otherMember.userId.isNotEmpty ? otherMember.userId : conv.id;
+        _selectedTargetName = conv.title.isNotEmpty ? conv.title : (otherMember.fullName ?? 'Direct Conversation');
+        _selectedTargetSubtitle = otherMember.role ?? conv.conversationType.name;
+        _selectedTargetType = otherMember.role?.toLowerCase() ?? 'user';
+        _activeConversationId = conv.id;
+        _streamedConversationId = conv.id;
+        _messagesStream = _messagingService.getMessagesStream(conv.id);
+        _typingStream = _messagingService.getTypingStream(conv.id);
+        _hasMoreOlder = true;
+        _showProfileInfo = false;
       });
     }
+
+    _messagingService.markAsRead(conv.id);
+    _scrollToBottom(smooth: false);
   }
 
   void _backToInbox() {
+    if (_activeConversationId != null) {
+      _messagingService.sendTyping(_activeConversationId!, isTyping: false);
+      _messagingService.unsubscribeFromConversation(_activeConversationId!);
+    }
+
     setState(() {
       _selectedTargetId = null;
+      _activeProjectId = null;
       _activeConversationId = null;
       _streamedConversationId = null;
       _messagesStream = null;
+      _typingStream = null;
       _showProfileInfo = false;
     });
-  }
 
-  @override
-  void dispose() {
-    _store.removeListener(_onStoreUpdate);
-    _msgController.dispose();
-    _searchController.dispose();
-    _scrollController.dispose();
-    super.dispose();
-  }
-
-  void _onStoreUpdate() {
-    if (mounted) {
-      setState(() {});
-    }
+    _loadRecentConversations();
   }
 
   Future<void> _sendMessage([String? predefinedText]) async {
     final textToSend = predefinedText ?? _msgController.text.trim();
-    if (textToSend.isEmpty) return;
+    if (textToSend.isEmpty || _isSending) return;
 
     if (_activeConversationId == null && _selectedTargetId != null) {
-      final fallbackConv = await SupabaseService().getOrCreateDirectConversation(_selectedTargetId!);
-      if (mounted) {
-        setState(() {
-          _activeConversationId = fallbackConv;
-        });
+      if (_selectedTargetType == 'project' && _activeProjectId != null) {
+        final fallbackConv = await _messagingService.getOrCreateProjectConversation(_activeProjectId!);
+        if (mounted) setState(() => _activeConversationId = fallbackConv);
+      } else {
+        final fallbackConv = await _messagingService.getOrCreateDirectConversation(_selectedTargetId!);
+        if (mounted) setState(() => _activeConversationId = fallbackConv);
       }
     }
 
-    if (_activeConversationId == null) return;
+    final convId = _activeConversationId;
+    if (convId == null) return;
 
     if (predefinedText == null) {
       _msgController.clear();
     }
-    
-    await SupabaseService().sendChatMessage(_activeConversationId!, textToSend);
+
+    setState(() => _isSending = true);
+
+    await _messagingService.sendMessage(
+      conversationId: convId,
+      content: textToSend,
+    );
 
     if (mounted) {
-      setState(() {});
+      setState(() => _isSending = false);
     }
 
-    Future.delayed(const Duration(milliseconds: 100), () {
+    _scrollToBottom(smooth: true);
+  }
+
+  void _scrollToBottom({bool smooth = true}) {
+    WidgetsBinding.instance.addPostFrameCallback((_) {
       if (_scrollController.hasClients) {
-        _scrollController.animateTo(
-          _scrollController.position.maxScrollExtent,
-          duration: const Duration(milliseconds: 200),
-          curve: Curves.easeOut,
-        );
+        if (smooth) {
+          _scrollController.animateTo(
+            _scrollController.position.maxScrollExtent,
+            duration: const Duration(milliseconds: 250),
+            curve: Curves.easeOut,
+          );
+        } else {
+          _scrollController.jumpTo(_scrollController.position.maxScrollExtent);
+        }
       }
     });
-  }
-
-  Map<String, String> _getSenderInfo(String senderId, bool isClient) {
-    if (senderId == Supabase.instance.client.auth.currentUser?.id) {
-      return {'name': 'Me', 'role': isClient ? 'Client' : 'Admin'};
-    }
-    for (final c in _store.clients) {
-      if (c.id == senderId) return {'name': c.name, 'role': 'Client'};
-    }
-    for (final e in _store.employees) {
-      if (e.id == senderId) return {'name': e.name, 'role': e.role};
-    }
-    for (final a in _store.admins) {
-      if (a.id == senderId) return {'name': a.name, 'role': 'Admin'};
-    }
-    return {'name': 'User', 'role': 'Member'};
-  }
-
-  String _formatTime(String isoString) {
-    try {
-      final dt = DateTime.parse(isoString).toLocal();
-      final hour = dt.hour % 12 == 0 ? 12 : dt.hour % 12;
-      final minute = dt.minute.toString().padLeft(2, '0');
-      final period = dt.hour >= 12 ? 'PM' : 'AM';
-      return '$hour:$minute $period';
-    } catch (_) {
-      if (isoString.contains('T')) {
-        return isoString.split('T')[1].substring(0, 5);
-      }
-      return isoString;
-    }
   }
 
   String _formatDateHeader(DateTime date) {
@@ -229,24 +453,327 @@ class _ChatPageState extends State<ChatPage> {
     } else if (msgDate == yesterday) {
       return 'Yesterday';
     } else {
-      final months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+      const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
       return '${months[date.month - 1]} ${date.day}, ${date.year}';
     }
   }
 
+  // ---------------------------------------------------------------------------
+  // MESSAGE EDIT & DELETE ACTIONS
+  // ---------------------------------------------------------------------------
+  Future<void> _handleEditMessage(ChatMessageModel msg) async {
+    final editCtrl = TextEditingController(text: msg.message);
+    final convId = _activeConversationId;
+    if (convId == null) return;
+
+    final updated = await showDialog<String>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: kPremiumSurface,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(18), side: const BorderSide(color: kPremiumBorder)),
+        title: const Text('Edit Message', style: TextStyle(fontWeight: FontWeight.bold, color: kPremiumGold)),
+        content: TextField(
+          controller: editCtrl,
+          autofocus: true,
+          maxLines: 4,
+          minLines: 1,
+          style: const TextStyle(color: kPremiumText),
+          decoration: InputDecoration(
+            hintText: 'Edit your message...',
+            hintStyle: const TextStyle(color: kPremiumMuted),
+            filled: true,
+            fillColor: Colors.black26,
+            border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: const BorderSide(color: kPremiumBorder)),
+            focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: const BorderSide(color: kPremiumGold)),
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text('Cancel', style: TextStyle(color: kPremiumMuted)),
+          ),
+          ElevatedButton(
+            onPressed: () {
+              final text = editCtrl.text.trim();
+              if (text.isNotEmpty && text != msg.message) {
+                Navigator.pop(ctx, text);
+              } else {
+                Navigator.pop(ctx);
+              }
+            },
+            style: ElevatedButton.styleFrom(backgroundColor: kPremiumGold, foregroundColor: kPremiumBg),
+            child: const Text('Save Changes', style: TextStyle(fontWeight: FontWeight.bold)),
+          ),
+        ],
+      ),
+    );
+
+    if (updated != null && updated.isNotEmpty && mounted) {
+      final success = await _messagingService.editMessage(convId, msg.id, updated);
+      if (!success && mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Failed to edit message. Please check organization permissions.'), backgroundColor: kPremiumDanger),
+        );
+      }
+    }
+  }
+
+  Future<void> _handleDeleteMessage(ChatMessageModel msg) async {
+    final convId = _activeConversationId;
+    if (convId == null) return;
+
+    final confirm = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: kPremiumSurface,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(18), side: const BorderSide(color: kPremiumBorder)),
+        title: const Row(
+          children: [
+            Icon(Icons.delete_outline_rounded, color: kPremiumDanger, size: 24),
+            SizedBox(width: 8),
+            Text('Delete Message?', style: TextStyle(fontWeight: FontWeight.bold, color: kPremiumText)),
+          ],
+        ),
+        content: const Text(
+          'Are you sure you want to delete this message? It will be marked as deleted in the chat thread.',
+          style: TextStyle(color: kPremiumMuted, fontSize: 13),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('Cancel', style: TextStyle(color: kPremiumMuted)),
+          ),
+          ElevatedButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            style: ElevatedButton.styleFrom(backgroundColor: kPremiumDanger, foregroundColor: Colors.white),
+            child: const Text('Delete', style: TextStyle(fontWeight: FontWeight.bold)),
+          ),
+        ],
+      ),
+    );
+
+    if (confirm == true && mounted) {
+      final success = await _messagingService.deleteMessage(convId, msg.id, softDelete: true);
+      if (!success && mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Failed to delete message. Retention policy may restrict deletion.'), backgroundColor: kPremiumDanger),
+        );
+      }
+    }
+  }
+
+  Future<void> _confirmClearMessages() async {
+    final convId = _activeConversationId;
+    if (convId == null) return;
+
+    final confirm = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: kPremiumSurface,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(18), side: const BorderSide(color: kPremiumBorder)),
+        title: const Text('Clear Chat History?', style: TextStyle(fontWeight: FontWeight.bold, color: kPremiumGold)),
+        content: const Text(
+          'This will clear all messages in this conversation thread for everyone.',
+          style: TextStyle(color: kPremiumMuted, fontSize: 13),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('Cancel', style: TextStyle(color: kPremiumMuted)),
+          ),
+          ElevatedButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            style: ElevatedButton.styleFrom(backgroundColor: Colors.amber, foregroundColor: Colors.black),
+            child: const Text('Clear All', style: TextStyle(fontWeight: FontWeight.bold)),
+          ),
+        ],
+      ),
+    );
+
+    if (confirm == true && mounted) {
+      await _messagingService.clearMessages(convId);
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Chat messages cleared'), backgroundColor: Colors.green),
+        );
+      }
+    }
+  }
+
+  Future<void> _confirmDeleteConversation([String? targetConvId]) async {
+    final convId = targetConvId ?? _activeConversationId;
+    if (convId == null) return;
+
+    final confirm = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: kPremiumSurface,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(18), side: const BorderSide(color: kPremiumBorder)),
+        title: const Text('Delete Entire Chat?', style: TextStyle(fontWeight: FontWeight.bold, color: kPremiumDanger)),
+        content: const Text(
+          'Are you sure you want to permanently delete this chat thread and all its history?',
+          style: TextStyle(color: kPremiumMuted, fontSize: 13),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('Cancel', style: TextStyle(color: kPremiumMuted)),
+          ),
+          ElevatedButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            style: ElevatedButton.styleFrom(backgroundColor: kPremiumDanger, foregroundColor: Colors.white),
+            child: const Text('Delete Chat', style: TextStyle(fontWeight: FontWeight.bold)),
+          ),
+        ],
+      ),
+    );
+
+    if (confirm == true && mounted) {
+      await _messagingService.deleteConversation(convId);
+      if (_activeConversationId == convId) {
+        _backToInbox();
+      } else {
+        _loadRecentConversations();
+      }
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Chat thread deleted successfully'), backgroundColor: Colors.green),
+        );
+      }
+    }
+  }
+
+  // ---------------------------------------------------------------------------
+  // ADMIN COMMUNICATION SETTINGS MODAL
+  // ---------------------------------------------------------------------------
+  Future<void> _showCommunicationSettingsDialog() async {
+    final currentSettings = await _messagingService.getCommunicationSettings();
+    bool enableEmpClient = currentSettings.enableEmployeeClientMessaging;
+    bool restrictToProjects = currentSettings.restrictClientToProjects;
+    bool allowEmpEmp = currentSettings.allowEmployeeEmployeeChat;
+    bool showContact = currentSettings.showBusinessContactInfo;
+    bool allowDeletion = currentSettings.allowMessageDeletion;
+
+    if (!mounted) return;
+
+    await showDialog(
+      context: context,
+      builder: (ctx) {
+        return StatefulBuilder(
+          builder: (context, setModalState) {
+            return AlertDialog(
+              backgroundColor: kPremiumBg2,
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20), side: const BorderSide(color: kPremiumBorder)),
+              title: const Row(
+                children: [
+                  Icon(Icons.shield_outlined, color: kPremiumGold, size: 22),
+                  SizedBox(width: 10),
+                  Text('Communication Settings', style: TextStyle(color: kPremiumText, fontSize: 18, fontWeight: FontWeight.bold)),
+                ],
+              ),
+              content: SingleChildScrollView(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    const Text(
+                      'Configure organizational relationship permissions. Changes take effect immediately via database policies.',
+                      style: TextStyle(color: kPremiumMuted, fontSize: 12),
+                    ),
+                    const SizedBox(height: 16),
+                    SwitchListTile(
+                      activeColor: kPremiumGold,
+                      contentPadding: EdgeInsets.zero,
+                      title: const Text('Restrict Client Chat to Assigned Projects', style: TextStyle(color: kPremiumText, fontSize: 13, fontWeight: FontWeight.w600)),
+                      subtitle: const Text('Clients can only communicate with employees assigned to their workflows', style: TextStyle(color: kPremiumMuted, fontSize: 11)),
+                      value: restrictToProjects,
+                      onChanged: (val) => setModalState(() => restrictToProjects = val),
+                    ),
+                    const Divider(color: Colors.white10),
+                    SwitchListTile(
+                      activeColor: kPremiumGold,
+                      contentPadding: EdgeInsets.zero,
+                      title: const Text('Enable Employee-Client Messaging', style: TextStyle(color: kPremiumText, fontSize: 13, fontWeight: FontWeight.w600)),
+                      subtitle: const Text('Allows communication between authorized project members and clients', style: TextStyle(color: kPremiumMuted, fontSize: 11)),
+                      value: enableEmpClient,
+                      onChanged: (val) => setModalState(() => enableEmpClient = val),
+                    ),
+                    const Divider(color: Colors.white10),
+                    SwitchListTile(
+                      activeColor: kPremiumGold,
+                      contentPadding: EdgeInsets.zero,
+                      title: const Text('Allow Employee-to-Employee Chat', style: TextStyle(color: kPremiumText, fontSize: 13, fontWeight: FontWeight.w600)),
+                      subtitle: const Text('Permits direct messaging between internal team members', style: TextStyle(color: kPremiumMuted, fontSize: 11)),
+                      value: allowEmpEmp,
+                      onChanged: (val) => setModalState(() => allowEmpEmp = val),
+                    ),
+                    const Divider(color: Colors.white10),
+                    SwitchListTile(
+                      activeColor: kPremiumGold,
+                      contentPadding: EdgeInsets.zero,
+                      title: const Text('Show Business Contact Details', style: TextStyle(color: kPremiumText, fontSize: 13, fontWeight: FontWeight.w600)),
+                      subtitle: const Text('Display official role and business contact info on profiles', style: TextStyle(color: kPremiumMuted, fontSize: 11)),
+                      value: showContact,
+                      onChanged: (val) => setModalState(() => showContact = val),
+                    ),
+                    const Divider(color: Colors.white10),
+                    SwitchListTile(
+                      activeColor: kPremiumDanger,
+                      contentPadding: EdgeInsets.zero,
+                      title: const Text('Allow Message Deletion', style: TextStyle(color: kPremiumText, fontSize: 13, fontWeight: FontWeight.w600)),
+                      subtitle: const Text('Disabling keeps business project records intact for audit history', style: TextStyle(color: kPremiumMuted, fontSize: 11)),
+                      value: allowDeletion,
+                      onChanged: (val) => setModalState(() => allowDeletion = val),
+                    ),
+                  ],
+                ),
+              ),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.pop(ctx),
+                  child: const Text('Cancel', style: TextStyle(color: kPremiumMuted)),
+                ),
+                ElevatedButton(
+                  style: ElevatedButton.styleFrom(backgroundColor: kPremiumGold, foregroundColor: kPremiumBg),
+                  onPressed: () async {
+                    final updated = CommunicationSettingsModel(
+                      id: currentSettings.id,
+                      organizationId: currentSettings.organizationId,
+                      enableEmployeeClientMessaging: enableEmpClient,
+                      restrictClientToProjects: restrictToProjects,
+                      allowEmployeeEmployeeChat: allowEmpEmp,
+                      showBusinessContactInfo: showContact,
+                      allowMessageDeletion: allowDeletion,
+                    );
+                    await _messagingService.updateCommunicationSettings(updated);
+                    if (context.mounted) Navigator.pop(ctx);
+                    if (mounted) {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        const SnackBar(content: Text('Communication settings saved successfully')),
+                      );
+                      setState(() {});
+                    }
+                  },
+                  child: const Text('Save Policy', style: TextStyle(fontWeight: FontWeight.bold)),
+                ),
+              ],
+            );
+          },
+        );
+      },
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
-    final user = Supabase.instance.client.auth.currentUser;
+    final user = _messagingService.currentUser;
     if (user == null) {
       return const Scaffold(
         body: Center(
-          child: Text('Please log in to access Live Chat', style: TextStyle(color: kPremiumText)),
+          child: Text('Please log in to access Communications', style: TextStyle(color: kPremiumText)),
         ),
       );
     }
 
-    final currentRole = SupabaseService().getUserRole(user);
-    final isClient = currentRole == 'client';
     final canPop = Navigator.of(context).canPop();
 
     return PremiumBackground(
@@ -256,7 +783,7 @@ class _ChatPageState extends State<ChatPage> {
         appBar: canPop
             ? AppBar(
                 title: const Text(
-                  'Enterprise Live Chat',
+                  'Enterprise Communications',
                   style: TextStyle(fontWeight: FontWeight.w800, color: kPremiumGold, letterSpacing: 0.3),
                 ),
                 backgroundColor: kPremiumBg.withOpacity(0.85),
@@ -266,36 +793,31 @@ class _ChatPageState extends State<ChatPage> {
             : null,
         body: SafeArea(
           top: !canPop,
-          bottom: false, // Handled inside bottom bars so container backgrounds extend smoothly
+          bottom: false,
           child: LayoutBuilder(
             builder: (context, constraints) {
-              final isDesktop = constraints.maxWidth >= 750;
+              final isDesktop = constraints.maxWidth >= 760;
 
               if (isDesktop) {
-                // Desktop split-pane view
                 return Row(
                   children: [
                     SizedBox(
-                      width: 350,
+                      width: 370,
                       child: _buildInboxView(isDesktop: true),
                     ),
-                    Container(
-                      width: 1,
-                      color: kPremiumBorder,
-                    ),
+                    Container(width: 1, color: kPremiumBorder),
                     Expanded(
                       child: _selectedTargetId != null
-                          ? _buildConversationView(isDesktop: true, user: user, isClient: isClient)
+                          ? _buildConversationView(isDesktop: true, user: user)
                           : _buildEmptyWorkspaceView(),
                     ),
                   ],
                 );
               } else {
-                // Mobile view with navigation state
                 if (_selectedTargetId == null) {
                   return _buildInboxView(isDesktop: false);
                 } else {
-                  return _buildConversationView(isDesktop: false, user: user, isClient: isClient);
+                  return _buildConversationView(isDesktop: false, user: user);
                 }
               }
             },
@@ -305,41 +827,15 @@ class _ChatPageState extends State<ChatPage> {
     );
   }
 
-  // ───────────────────────────────────────────────────────────────────────────
-  // INBOX & CONTACTS LIST VIEW
-  // ───────────────────────────────────────────────────────────────────────────
+  // ---------------------------------------------------------------------------
+  // INBOX & RELATIONSHIP-BASED DIRECTORY
+  // ---------------------------------------------------------------------------
   Widget _buildInboxView({required bool isDesktop}) {
-    final filteredAdmins = _store.admins.where((a) {
-      final q = _searchQuery.toLowerCase();
-      final matchesSearch = a.name.toLowerCase().contains(q) ||
-          a.email.toLowerCase().contains(q);
-      if (!matchesSearch) return false;
-      return _filterTabIndex == 0 || _filterTabIndex == 1;
-    }).toList();
-
-    final filteredEmployees = _store.employees.where((e) {
-      final q = _searchQuery.toLowerCase();
-      final matchesSearch = e.name.toLowerCase().contains(q) ||
-          e.role.toLowerCase().contains(q) ||
-          e.department.toLowerCase().contains(q);
-      if (!matchesSearch) return false;
-      return _filterTabIndex == 0 || _filterTabIndex == 1;
-    }).toList();
-
-    final filteredClients = _store.clients.where((c) {
-      final q = _searchQuery.toLowerCase();
-      final matchesSearch = c.name.toLowerCase().contains(q) ||
-          c.company.toLowerCase().contains(q) ||
-          c.email.toLowerCase().contains(q);
-      if (!matchesSearch) return false;
-      return _filterTabIndex == 0 || _filterTabIndex == 2;
-    }).toList();
-
-    final totalCount = filteredAdmins.length + filteredEmployees.length + filteredClients.length;
+    final myRole = SupabaseService().currentRole.toLowerCase();
+    final isAdmin = myRole == 'admin' || myRole == 'owner';
 
     return Column(
       children: [
-        // Inbox Top Header & Search
         Padding(
           padding: const EdgeInsets.fromLTRB(16, 16, 16, 8),
           child: Column(
@@ -349,7 +845,7 @@ class _ChatPageState extends State<ChatPage> {
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
                   const Text(
-                    'Messages',
+                    'Workspace Chat',
                     style: TextStyle(
                       fontSize: 22,
                       fontWeight: FontWeight.w800,
@@ -357,32 +853,34 @@ class _ChatPageState extends State<ChatPage> {
                       letterSpacing: -0.4,
                     ),
                   ),
-                  Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-                    decoration: BoxDecoration(
-                      color: kPremiumGold.withOpacity(0.15),
-                      borderRadius: BorderRadius.circular(12),
-                      border: Border.all(color: kPremiumGold.withOpacity(0.3)),
-                    ),
-                    child: Text(
-                      '$totalCount contacts',
-                      style: const TextStyle(
-                        color: kPremiumGold,
-                        fontSize: 11,
-                        fontWeight: FontWeight.w700,
+                  Row(
+                    children: [
+                      if (isAdmin)
+                        IconButton(
+                          icon: const Icon(Icons.shield_outlined, size: 20, color: kPremiumGold),
+                          tooltip: 'Communication Policies',
+                          onPressed: _showCommunicationSettingsDialog,
+                        ),
+                      IconButton(
+                        icon: const Icon(Icons.refresh_rounded, size: 20, color: kPremiumMuted),
+                        tooltip: 'Refresh',
+                        onPressed: () {
+                          _loadRecentConversations();
+                          _store.refreshFromSupabase();
+                        },
                       ),
-                    ),
+                    ],
                   ),
                 ],
               ),
-              const SizedBox(height: 12),
+              const SizedBox(height: 10),
 
               // Search Bar
               TextField(
                 onChanged: (val) => setState(() => _searchQuery = val),
                 style: const TextStyle(color: kPremiumText, fontSize: 14),
                 decoration: InputDecoration(
-                  hintText: 'Search contacts or accounts...',
+                  hintText: 'Search projects or contacts...',
                   hintStyle: const TextStyle(color: kPremiumMuted, fontSize: 13),
                   prefixIcon: const Icon(Icons.search_rounded, color: kPremiumGold, size: 20),
                   filled: true,
@@ -402,136 +900,34 @@ class _ChatPageState extends State<ChatPage> {
                   ),
                 ),
               ),
-
               const SizedBox(height: 12),
 
-              // Category Filter Tabs
+              // Navigation Tabs
               Row(
                 children: [
-                  _filterTabChip('All', 0),
+                  _inboxTabChip('Directory & Projects', 0),
                   const SizedBox(width: 8),
-                  _filterTabChip('Staff & HR', 1),
-                  const SizedBox(width: 8),
-                  _filterTabChip('Clients', 2),
+                  _inboxTabChip('Recent Chats', 1),
                 ],
               ),
             ],
           ),
         ),
 
-        const Divider(height: 16, color: kPremiumBorder),
-
-        // Contacts List
         Expanded(
-          child: (filteredAdmins.isEmpty && filteredEmployees.isEmpty && filteredClients.isEmpty)
-              ? Center(
-                  child: Column(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Icon(Icons.person_search_outlined, size: 48, color: kPremiumMuted.withOpacity(0.5)),
-                      const SizedBox(height: 12),
-                      const Text(
-                        'No contacts found',
-                        style: TextStyle(color: kPremiumMuted, fontWeight: FontWeight.w600),
-                      ),
-                    ],
-                  ),
-                )
-              : SafeArea(
-                  top: false,
-                  bottom: !isDesktop,
-                  child: ListView(
-                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
-                    children: [
-                      if (_filterTabIndex != 2 && filteredAdmins.isNotEmpty) ...[
-                        const Padding(
-                          padding: EdgeInsets.fromLTRB(8, 8, 8, 8),
-                          child: Text(
-                            'ADMIN & EXECUTIVE LEADS',
-                            style: TextStyle(
-                              fontSize: 11,
-                              fontWeight: FontWeight.w800,
-                              color: kPremiumGold,
-                              letterSpacing: 1.0,
-                            ),
-                          ),
-                        ),
-                        ...filteredAdmins.map((a) => _buildContactCard(
-                              id: a.id,
-                              name: a.name,
-                              subtitle: 'Executive Admin • ${a.email}',
-                              type: 'admin',
-                              email: a.email,
-                              phone: a.phone,
-                              badgeColor: kPremiumGold,
-                              badgeLabel: 'Admin',
-                            )),
-                        const SizedBox(height: 12),
-                      ],
-
-                      if (_filterTabIndex != 2 && filteredEmployees.isNotEmpty) ...[
-                        const Padding(
-                          padding: EdgeInsets.fromLTRB(8, 8, 8, 8),
-                          child: Text(
-                            'EMPLOYEES & HR TEAM',
-                            style: TextStyle(
-                              fontSize: 11,
-                              fontWeight: FontWeight.w800,
-                              color: kPremiumViolet,
-                              letterSpacing: 1.0,
-                            ),
-                          ),
-                        ),
-                        ...filteredEmployees.map((e) => _buildContactCard(
-                              id: e.userId.isNotEmpty ? e.userId : e.id,
-                              name: e.name,
-                              subtitle: '${e.role} • ${e.department}',
-                              type: 'employee',
-                              email: e.email,
-                              phone: e.phone,
-                              badgeColor: kPremiumViolet,
-                              badgeLabel: 'Staff',
-                            )),
-                      ],
-
-                      if (_filterTabIndex != 1 && filteredClients.isNotEmpty) ...[
-                        const SizedBox(height: 12),
-                        const Padding(
-                          padding: EdgeInsets.fromLTRB(8, 8, 8, 8),
-                          child: Text(
-                            'CLIENTS & BUSINESS ACCOUNTS',
-                            style: TextStyle(
-                              fontSize: 11,
-                              fontWeight: FontWeight.w800,
-                              color: kPremiumBlue,
-                              letterSpacing: 1.0,
-                            ),
-                          ),
-                        ),
-                        ...filteredClients.map((c) => _buildContactCard(
-                              id: (c.userId != null && c.userId!.isNotEmpty) ? c.userId! : c.id,
-                              name: c.name,
-                              subtitle: '${c.company} • ${c.email}',
-                              type: 'client',
-                              email: c.email,
-                              phone: c.phone,
-                              badgeColor: kPremiumBlue,
-                              badgeLabel: 'Client',
-                            )),
-                      ],
-                    ],
-                  ),
-                ),
+          child: _inboxTab == 0
+              ? _buildControlledDirectoryList()
+              : _buildRecentChatsList(),
         ),
       ],
     );
   }
 
-  Widget _filterTabChip(String label, int index) {
-    final isSelected = _filterTabIndex == index;
+  Widget _inboxTabChip(String label, int index) {
+    final isSelected = _inboxTab == index;
     return Expanded(
       child: GestureDetector(
-        onTap: () => setState(() => _filterTabIndex = index),
+        onTap: () => setState(() => _inboxTab = index),
         child: AnimatedContainer(
           duration: const Duration(milliseconds: 200),
           padding: const EdgeInsets.symmetric(vertical: 8),
@@ -556,210 +952,315 @@ class _ChatPageState extends State<ChatPage> {
     );
   }
 
-  Widget _buildContactCard({
-    required String id,
-    required String name,
-    required String subtitle,
-    required String type,
-    required String email,
-    required String phone,
-    required Color badgeColor,
-    required String badgeLabel,
-  }) {
-    final isSelected = _selectedTargetId == id;
+  Widget _buildControlledDirectoryList() {
+    final q = _searchQuery.toLowerCase();
+    final myUserId = _messagingService.currentUserId;
+    final myRole = SupabaseService().currentRole.toLowerCase();
+    final isClient = myRole == 'client';
+    final isEmployee = myRole == 'employee';
 
-    return GlassCard(
-      margin: const EdgeInsets.only(bottom: 8),
-      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
-      radius: 16,
-      glow: isSelected ? kPremiumGold : null,
-      onTap: () => _selectTarget(id, name, subtitle, type, email, phone),
-      child: Row(
-        children: [
-          Stack(
-            children: [
-              PremiumAvatar(
-                label: name,
-                size: 42,
-                radius: 14,
-                style: AvatarStyle.gradient,
-              ),
-              Positioned(
-                right: 0,
-                bottom: 0,
-                child: Container(
-                  width: 11,
-                  height: 11,
-                  decoration: BoxDecoration(
-                    color: kPremiumSuccess,
-                    shape: BoxShape.circle,
-                    border: Border.all(color: kPremiumBg, width: 2),
-                    boxShadow: [
-                      BoxShadow(
-                        color: kPremiumSuccess.withOpacity(0.5),
-                        blurRadius: 4,
-                      ),
-                    ],
-                  ),
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(width: 12),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
+    // 1. Authorized Projects List
+    final List<ProjectModel> authorizedProjects = _store.projects.where((p) {
+      if (q.isNotEmpty && !p.name.toLowerCase().contains(q) && !p.clientName.toLowerCase().contains(q)) {
+        return false;
+      }
+      if (isClient) {
+        // Client only sees their own projects
+        final clientRec = _store.clients.firstWhere(
+          (c) => c.userId == myUserId || c.id == myUserId,
+          orElse: () => ClientModel(id: '', name: '', company: '', email: '', phone: '', status: ''),
+        );
+        return p.clientId == clientRec.id;
+      } else if (isEmployee) {
+        // Employee only sees projects they are assigned to
+        return p.teamMembers.contains(myUserId) ||
+            _store.tasks.any((t) => t.projectId == p.id && t.assignedToId == myUserId);
+      }
+      return true; // Admin sees all projects
+    }).toList();
+
+    // 2. Authorized Admins
+    final filteredAdmins = _store.admins.where((a) {
+      if (myUserId != null && a.id == myUserId) return false;
+      if (q.isEmpty) return true;
+      return a.name.toLowerCase().contains(q) || a.email.toLowerCase().contains(q);
+    }).toList();
+
+    // 3. Authorized Employees
+    final filteredEmployees = _store.employees.where((e) {
+      final eUid = e.userId.isNotEmpty ? e.userId : e.id;
+      if (myUserId != null && (e.userId == myUserId || e.id == myUserId)) return false;
+
+      if (isClient) {
+        // CLIENT CANNOT SEE UNRELATED EMPLOYEES
+        // Client only sees employees assigned to their active projects or account manager
+        final clientRec = _store.clients.firstWhere(
+          (c) => c.userId == myUserId || c.id == myUserId,
+          orElse: () => ClientModel(id: '', name: '', company: '', email: '', phone: '', status: ''),
+        );
+        if (clientRec.assignedEmployeeId == e.id || clientRec.assignedEmployeeId == e.userId) return true;
+        final hasSharedProject = _store.projects.any((p) =>
+            p.clientId == clientRec.id &&
+            (p.teamMembers.contains(eUid) || _store.tasks.any((t) => t.projectId == p.id && t.assignedToId == eUid)));
+        if (!hasSharedProject) return false;
+      }
+
+      if (q.isEmpty) return true;
+      return e.name.toLowerCase().contains(q) || e.role.toLowerCase().contains(q);
+    }).toList();
+
+    // 4. Authorized Clients
+    final filteredClients = _store.clients.where((c) {
+      final cUid = (c.userId != null && c.userId!.isNotEmpty) ? c.userId! : c.id;
+      if (myUserId != null && (c.userId == myUserId || c.id == myUserId)) return false;
+
+      if (isClient) {
+        // CLIENTS CAN NEVER CHAT WITH OTHER CLIENTS
+        return false;
+      }
+
+      if (isEmployee) {
+        // EMPLOYEE ONLY SEES CLIENTS WITH WHOM THEY SHARE A WORKFLOW OR ACCOUNT
+        final hasAssignment = c.assignedEmployeeId == myUserId ||
+            _store.employees.any((e) => e.userId == myUserId && e.id == c.assignedEmployeeId);
+        final hasProject = _store.projects.any((p) =>
+            p.clientId == c.id &&
+            (p.teamMembers.contains(myUserId) || _store.tasks.any((t) => t.projectId == p.id && t.assignedToId == myUserId)));
+        if (!hasAssignment && !hasProject) return false;
+      }
+
+      if (q.isEmpty) return true;
+      return c.name.toLowerCase().contains(q) || c.company.toLowerCase().contains(q);
+    }).toList();
+
+    return ListView(
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+      children: [
+        // Controlled Communication Notice for Clients
+        if (isClient)
+          Container(
+            margin: const EdgeInsets.only(bottom: 12),
+            padding: const EdgeInsets.all(12),
+            decoration: BoxDecoration(
+              color: kPremiumBlue.withOpacity(0.08),
+              borderRadius: BorderRadius.circular(14),
+              border: Border.all(color: kPremiumBlue.withOpacity(0.25)),
+            ),
+            child: const Row(
               children: [
-                Text(
-                  name,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: TextStyle(
-                    fontWeight: FontWeight.w700,
-                    fontSize: 14.5,
-                    color: isSelected ? kPremiumGold : kPremiumText,
+                Icon(Icons.lock_clock_outlined, size: 18, color: kPremiumBlue),
+                SizedBox(width: 10),
+                Expanded(
+                  child: Text(
+                    'Project-Centered Workspace: Communications are organized around your active project workflows and assigned managers.',
+                    style: TextStyle(fontSize: 11, color: kPremiumMuted, height: 1.3),
                   ),
-                ),
-                const SizedBox(height: 3),
-                Row(
-                  children: [
-                    Container(
-                      width: 6,
-                      height: 6,
-                      decoration: const BoxDecoration(
-                        color: kPremiumSuccess,
-                        shape: BoxShape.circle,
-                      ),
-                    ),
-                    const SizedBox(width: 5),
-                    const Text(
-                      'Active',
-                      style: TextStyle(
-                        fontSize: 11.5,
-                        color: kPremiumSuccess,
-                        fontWeight: FontWeight.w600,
-                      ),
-                    ),
-                  ],
                 ),
               ],
             ),
+          ),
+
+        // 1. PRIMARY: PROJECT WORKFLOW CHATS
+        if (authorizedProjects.isNotEmpty) ...[
+          const Padding(
+            padding: EdgeInsets.fromLTRB(4, 6, 4, 8),
+            child: Text(
+              'PROJECT WORKFLOW COMMUNICATIONS',
+              style: TextStyle(fontSize: 10.5, fontWeight: FontWeight.w800, color: kPremiumGold, letterSpacing: 1.0),
+            ),
+          ),
+          ...authorizedProjects.map((p) => ConversationTile(
+            title: p.name,
+            subtitle: 'Client: ${p.clientName} \u2022 ${p.status}',
+            isSelected: _selectedTargetId == p.id,
+            badgeLabel: 'Project',
+            badgeColor: kPremiumGold,
+            onTap: () => _selectProject(p.id, p.name),
+          )),
+        ],
+
+        // 2. MANAGEMENT & ACCOUNT EXECUTIVES
+        if (filteredAdmins.isNotEmpty) ...[
+          const Padding(
+            padding: EdgeInsets.fromLTRB(4, 12, 4, 8),
+            child: Text(
+              'MANAGEMENT & EXECUTIVE LEAD',
+              style: TextStyle(fontSize: 10.5, fontWeight: FontWeight.w800, color: kPremiumGoldSoft, letterSpacing: 1.0),
+            ),
+          ),
+          ...filteredAdmins.map((a) => ConversationTile(
+            title: a.name,
+            subtitle: a.email,
+            isSelected: _selectedTargetId == a.id,
+            badgeLabel: 'Admin',
+            badgeColor: kPremiumGold,
+            onTap: () => _selectTarget(a.id, a.name, 'Admin', 'admin', a.email),
+          )),
+        ],
+
+        // 3. ASSIGNED EMPLOYEES (Only shown if authorized)
+        if (filteredEmployees.isNotEmpty) ...[
+          Padding(
+            padding: const EdgeInsets.fromLTRB(4, 12, 4, 8),
+            child: Text(
+              isClient ? 'ASSIGNED PROJECT SPECIALISTS' : 'TEAM MEMBERS & SPECIALISTS',
+              style: const TextStyle(fontSize: 10.5, fontWeight: FontWeight.w800, color: kPremiumViolet, letterSpacing: 1.0),
+            ),
+          ),
+          ...filteredEmployees.map((e) => ConversationTile(
+            title: e.name,
+            subtitle: '${e.role} \u2022 ${e.department}',
+            isSelected: _selectedTargetId == (e.userId.isNotEmpty ? e.userId : e.id),
+            badgeLabel: e.role.isNotEmpty ? e.role : 'Specialist',
+            badgeColor: kPremiumViolet,
+            onTap: () => _selectTarget(
+              e.userId.isNotEmpty ? e.userId : e.id,
+              e.name,
+              e.role,
+              'employee',
+              e.email,
+              e.phone,
+            ),
+          )),
+        ],
+
+        // 4. CLIENTS & BUSINESS ACCOUNTS (Only shown to authorized employees / admins)
+        if (filteredClients.isNotEmpty && !isClient) ...[
+          const Padding(
+            padding: EdgeInsets.fromLTRB(4, 12, 4, 8),
+            child: Text(
+              'CLIENTS & BUSINESS PARTNERS',
+              style: TextStyle(fontSize: 10.5, fontWeight: FontWeight.w800, color: kPremiumBlue, letterSpacing: 1.0),
+            ),
+          ),
+          ...filteredClients.map((c) => ConversationTile(
+            title: c.name,
+            subtitle: '${c.company} \u2022 ${c.email}',
+            isSelected: _selectedTargetId == (c.userId != null && c.userId!.isNotEmpty ? c.userId! : c.id),
+            badgeLabel: 'Client',
+            badgeColor: kPremiumBlue,
+            onTap: () => _selectTarget(
+              c.userId != null && c.userId!.isNotEmpty ? c.userId! : c.id,
+              c.name,
+              c.company,
+              'client',
+              c.email,
+              c.phone,
+            ),
+          )),
+        ],
+      ],
+    );
+  }
+
+  Widget _buildRecentChatsList() {
+    if (_loadingRecentChats) {
+      return const Center(child: CircularProgressIndicator(color: kPremiumGold));
+    }
+
+    if (_recentConversations.isEmpty) {
+      return Center(
+        child: Padding(
+          padding: const EdgeInsets.all(24),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(Icons.chat_bubble_outline_rounded, size: 40, color: kPremiumMuted.withOpacity(0.5)),
+              const SizedBox(height: 12),
+              const Text(
+                'No recent conversations',
+                style: TextStyle(color: kPremiumMuted, fontSize: 13),
+              ),
+              const SizedBox(height: 4),
+              const Text(
+                'Select a project or contact from the Directory to open communication.',
+                style: TextStyle(color: kPremiumMuted, fontSize: 11),
+                textAlign: TextAlign.center,
+              ),
+            ],
+          ),
+        ),
+      );
+    }
+
+    return ListView.builder(
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+      itemCount: _recentConversations.length,
+      itemBuilder: (ctx, index) {
+        final conv = _recentConversations[index];
+        final isSelected = _activeConversationId == conv.id;
+        final lastMsg = conv.lastMessage;
+
+        return GestureDetector(
+          onSecondaryTap: () => _confirmDeleteConversation(conv.id),
+          child: ConversationTile(
+            conversation: conv,
+            title: conv.title,
+            subtitle: lastMsg != null
+                ? (lastMsg.isDeleted ? 'Message deleted' : lastMsg.message)
+                : (conv.isProjectChat ? 'Project communication thread' : 'No messages yet'),
+            timeText: lastMsg != null ? _formatDateHeader(lastMsg.createdAt) : null,
+            unreadCount: conv.unreadCount,
+            badgeLabel: conv.isProjectChat ? 'Project' : null,
+            badgeColor: conv.isProjectChat ? kPremiumGold : null,
+            isSelected: isSelected,
+            onTap: () => _selectConversationModel(conv),
+          ),
+        );
+      },
+    );
+  }
+
+  Widget _buildEmptyWorkspaceView() {
+    return Center(
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Container(
+            padding: const EdgeInsets.all(24),
+            decoration: BoxDecoration(
+              color: kPremiumGold.withOpacity(0.08),
+              shape: BoxShape.circle,
+              border: Border.all(color: kPremiumGold.withOpacity(0.2)),
+            ),
+            child: const Icon(Icons.forum_outlined, size: 64, color: kPremiumGold),
+          ),
+          const SizedBox(height: 20),
+          const Text(
+            'Secure Business Communications Workspace',
+            style: TextStyle(
+              fontSize: 18,
+              fontWeight: FontWeight.w800,
+              color: kPremiumText,
+            ),
+          ),
+          const SizedBox(height: 6),
+          const Text(
+            'Select an assigned project or team member from the directory to start.',
+            style: TextStyle(color: kPremiumMuted, fontSize: 13),
+            textAlign: TextAlign.center,
           ),
         ],
       ),
     );
   }
 
-  // ───────────────────────────────────────────────────────────────────────────
-  // DESKTOP UNSELECTED EMPTY WORKSPACE STATE
-  // ───────────────────────────────────────────────────────────────────────────
-  Widget _buildEmptyWorkspaceView() {
-    return Center(
-      child: FadeInSlide(
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Container(
-              padding: const EdgeInsets.all(24),
-              decoration: BoxDecoration(
-                color: kPremiumGold.withOpacity(0.08),
-                shape: BoxShape.circle,
-                border: Border.all(color: kPremiumGold.withOpacity(0.2)),
-              ),
-              child: const Icon(Icons.forum_outlined, size: 64, color: kPremiumGold),
-            ),
-            const SizedBox(height: 20),
-            const Text(
-              'Enterprise Communications Workspace',
-              style: TextStyle(
-                fontSize: 18,
-                fontWeight: FontWeight.w800,
-                color: kPremiumText,
-              ),
-            ),
-            const SizedBox(height: 6),
-            const Text(
-              'Select a team member or client account from the list to start chatting.',
-              style: TextStyle(color: kPremiumMuted, fontSize: 13),
-              textAlign: TextAlign.center,
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  Widget _buildEmptyChatState() {
-    return Center(
-      child: SingleChildScrollView(
-        padding: const EdgeInsets.all(24),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Container(
-              padding: const EdgeInsets.all(20),
-              decoration: BoxDecoration(
-                color: kPremiumGold.withOpacity(0.1),
-                shape: BoxShape.circle,
-                border: Border.all(color: kPremiumGold.withOpacity(0.3)),
-              ),
-              child: const Icon(Icons.lock_outline_rounded, color: kPremiumGold, size: 44),
-            ),
-            const SizedBox(height: 16),
-            Text(
-              'Encrypted Session with $_selectedTargetName',
-              style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 17, color: kPremiumText),
-              textAlign: TextAlign.center,
-            ),
-            const SizedBox(height: 6),
-            const Text(
-              'Messages are end-to-end encrypted. Type a message below or tap a quick prompt to start chatting.',
-              style: TextStyle(color: kPremiumMuted, fontSize: 13, height: 1.4),
-              textAlign: TextAlign.center,
-            ),
-            const SizedBox(height: 20),
-            Wrap(
-              spacing: 8,
-              runSpacing: 8,
-              alignment: WrapAlignment.center,
-              children: [
-                ActionChip(
-                  avatar: const Text('👋'),
-                  label: const Text('Say Hello', style: TextStyle(color: kPremiumGold, fontWeight: FontWeight.bold, fontSize: 12)),
-                  backgroundColor: kPremiumGold.withOpacity(0.12),
-                  side: BorderSide(color: kPremiumGold.withOpacity(0.3)),
-                  onPressed: () => _sendMessage('Hello! Hope you are doing well.'),
-                ),
-                ActionChip(
-                  avatar: const Text('📋'),
-                  label: const Text('Request Update', style: TextStyle(color: kPremiumBlue, fontWeight: FontWeight.bold, fontSize: 12)),
-                  backgroundColor: kPremiumBlue.withOpacity(0.12),
-                  side: BorderSide(color: kPremiumBlue.withOpacity(0.3)),
-                  onPressed: () => _sendMessage('Could you please share an update on current deliverables?'),
-                ),
-              ],
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  // ───────────────────────────────────────────────────────────────────────────
-  // CONVERSATION THREAD & PROFILE DRAWER VIEW
-  // ───────────────────────────────────────────────────────────────────────────
+  // ---------------------------------------------------------------------------
+  // CONVERSATION VIEW & REAL-TIME STREAM
+  // ---------------------------------------------------------------------------
   Widget _buildConversationView({
     required bool isDesktop,
     required User user,
-    required bool isClient,
   }) {
+    final isProject = _selectedTargetType == 'project';
+
     return Column(
       children: [
-        // Thread Top Header Bar
+        // Top Header Bar
         Container(
           padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
           decoration: BoxDecoration(
-            color: kPremiumSurface.withOpacity(0.85),
+            color: kPremiumSurface.withOpacity(0.88),
             border: const Border(bottom: BorderSide(color: kPremiumBorder)),
           ),
           child: Row(
@@ -767,14 +1268,14 @@ class _ChatPageState extends State<ChatPage> {
               if (!isDesktop)
                 IconButton(
                   icon: const Icon(Icons.arrow_back_ios_new_rounded, color: kPremiumGold, size: 20),
-                  tooltip: 'Back to contacts',
+                  tooltip: 'Back to directory',
                   onPressed: _backToInbox,
                 ),
               PremiumAvatar(
                 label: _selectedTargetName,
                 size: 40,
                 radius: 13,
-                style: AvatarStyle.gradient,
+                style: isProject ? AvatarStyle.pattern : AvatarStyle.gradient,
               ),
               const SizedBox(width: 12),
               Expanded(
@@ -806,9 +1307,9 @@ class _ChatPageState extends State<ChatPage> {
                             ),
                           ),
                           const SizedBox(width: 5),
-                          const Text(
-                            'Active',
-                            style: TextStyle(
+                          Text(
+                            isProject ? 'Project Workspace Channel' : 'Active Direct Session',
+                            style: const TextStyle(
                               fontSize: 11.5,
                               color: kPremiumSuccess,
                               fontWeight: FontWeight.w600,
@@ -825,14 +1326,63 @@ class _ChatPageState extends State<ChatPage> {
                   _showProfileInfo ? Icons.info_rounded : Icons.info_outline_rounded,
                   color: _showProfileInfo ? kPremiumGold : kPremiumMuted,
                 ),
-                tooltip: 'View Profile & Contact Info',
+                tooltip: isProject ? 'Project Info' : 'Contact Details',
                 onPressed: () => setState(() => _showProfileInfo = !_showProfileInfo),
+              ),
+              PopupMenuButton<String>(
+                icon: const Icon(Icons.more_vert_rounded, color: kPremiumMuted, size: 20),
+                color: kPremiumSurface,
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(14),
+                  side: const BorderSide(color: kPremiumBorder),
+                ),
+                onSelected: (val) {
+                  if (val == 'clear') {
+                    _confirmClearMessages();
+                  } else if (val == 'delete_conv') {
+                    _confirmDeleteConversation();
+                  } else if (val == 'info') {
+                    setState(() => _showProfileInfo = !_showProfileInfo);
+                  }
+                },
+                itemBuilder: (ctx) => [
+                  const PopupMenuItem(
+                    value: 'info',
+                    child: Row(
+                      children: [
+                        Icon(Icons.info_outline, size: 18, color: kPremiumGold),
+                        SizedBox(width: 10),
+                        Text('Channel Details', style: TextStyle(color: kPremiumText, fontSize: 13)),
+                      ],
+                    ),
+                  ),
+                  const PopupMenuItem(
+                    value: 'clear',
+                    child: Row(
+                      children: [
+                        Icon(Icons.cleaning_services_outlined, size: 18, color: Colors.amberAccent),
+                        SizedBox(width: 10),
+                        Text('Clear Messages', style: TextStyle(color: kPremiumText, fontSize: 13)),
+                      ],
+                    ),
+                  ),
+                  const PopupMenuItem(
+                    value: 'delete_conv',
+                    child: Row(
+                      children: [
+                        Icon(Icons.delete_forever_outlined, size: 18, color: kPremiumDanger),
+                        SizedBox(width: 10),
+                        Text('Delete Chat', style: TextStyle(color: kPremiumDanger, fontSize: 13, fontWeight: FontWeight.bold)),
+                      ],
+                    ),
+                  ),
+                ],
               ),
             ],
           ),
         ),
 
-        // Conversation Body + Profile Side Drawer
+        // Conversation Body + Profile Drawer
         Expanded(
           child: Stack(
             children: [
@@ -841,13 +1391,13 @@ class _ChatPageState extends State<ChatPage> {
                   Expanded(
                     child: Column(
                       children: [
-                        // Chat Messages Area
+                        // Messages Stream Area
                         Expanded(
                           child: _isLoadingConversation
                               ? const Center(child: CircularProgressIndicator(color: kPremiumGold))
                               : _messagesStream == null
                                   ? _buildEmptyChatState()
-                                  : StreamBuilder<List<ChatMessage>>(
+                                  : StreamBuilder<List<ChatMessageModel>>(
                                       stream: _messagesStream,
                                       builder: (context, snapshot) {
                                         if (snapshot.hasError) {
@@ -856,43 +1406,60 @@ class _ChatPageState extends State<ChatPage> {
                                                 style: const TextStyle(color: Colors.redAccent)),
                                           );
                                         }
+
                                         final messages = snapshot.data ?? [];
                                         if (messages.isEmpty) {
                                           return _buildEmptyChatState();
                                         }
-                                        WidgetsBinding.instance.addPostFrameCallback((_) {
-                                          if (_scrollController.hasClients) {
-                                            _scrollController.animateTo(
-                                              _scrollController.position.maxScrollExtent,
-                                              duration: const Duration(milliseconds: 300),
-                                              curve: Curves.easeOut,
-                                            );
-                                          }
-                                        });
+
+                                        if (!_showScrollToBottom) {
+                                          WidgetsBinding.instance.addPostFrameCallback((_) {
+                                            if (_scrollController.hasClients) {
+                                              _scrollController.jumpTo(_scrollController.position.maxScrollExtent);
+                                            }
+                                          });
+                                        }
+
                                         return ListView.builder(
                                           controller: _scrollController,
                                           padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
-                                          itemCount: messages.length,
+                                          itemCount: messages.length + (_isLoadingOlder ? 1 : 0),
                                           itemBuilder: (ctx, index) {
-                                            final msg = messages[index];
+                                            if (_isLoadingOlder && index == 0) {
+                                              return const Padding(
+                                                padding: EdgeInsets.symmetric(vertical: 8),
+                                                child: Center(
+                                                  child: SizedBox(
+                                                    width: 18,
+                                                    height: 18,
+                                                    child: CircularProgressIndicator(
+                                                      strokeWidth: 2,
+                                                      valueColor: AlwaysStoppedAnimation<Color>(kPremiumGold),
+                                                    ),
+                                                  ),
+                                                ),
+                                              );
+                                            }
+
+                                            final msgIndex = _isLoadingOlder ? index - 1 : index;
+                                            final msg = messages[msgIndex];
                                             final isMe = msg.senderId == user.id;
-                                            final senderInfo = _getSenderInfo(msg.senderId, isClient);
+
                                             bool showDateDivider = false;
-                                            DateTime? msgDate;
-                                            try {
-                                              msgDate = DateTime.parse(msg.createdAt).toLocal();
-                                              if (index == 0) {
+                                            if (msgIndex == 0) {
+                                              showDateDivider = true;
+                                            } else {
+                                              final prev = messages[msgIndex - 1].createdAt;
+                                              if (msg.createdAt.day != prev.day ||
+                                                  msg.createdAt.month != prev.month ||
+                                                  msg.createdAt.year != prev.year) {
                                                 showDateDivider = true;
-                                              } else {
-                                                final prev = DateTime.parse(messages[index - 1].createdAt).toLocal();
-                                                if (msgDate.day != prev.day || msgDate.month != prev.month || msgDate.year != prev.year) {
-                                                  showDateDivider = true;
-                                                }
                                               }
-                                            } catch (_) {}
+                                            }
+
                                             return Column(
                                               children: [
-                                                if (showDateDivider && msgDate != null)
+                                                if (showDateDivider)
                                                   Padding(
                                                     padding: const EdgeInsets.symmetric(vertical: 12),
                                                     child: Container(
@@ -903,59 +1470,19 @@ class _ChatPageState extends State<ChatPage> {
                                                         border: Border.all(color: kPremiumBorder),
                                                       ),
                                                       child: Text(
-                                                        _formatDateHeader(msgDate),
+                                                        _formatDateHeader(msg.createdAt),
                                                         style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w600, color: kPremiumMuted),
                                                       ),
                                                     ),
                                                   ),
-                                                Align(
-                                                  alignment: isMe ? Alignment.centerRight : Alignment.centerLeft,
-                                                  child: Container(
-                                                    margin: const EdgeInsets.symmetric(vertical: 4),
-                                                    constraints: BoxConstraints(
-                                                      maxWidth: MediaQuery.of(ctx).size.width * (isDesktop ? 0.6 : 0.78),
-                                                    ),
-                                                    decoration: BoxDecoration(
-                                                      gradient: isMe ? kGradBlue : null,
-                                                      color: isMe ? null : kPremiumCard,
-                                                      borderRadius: BorderRadius.only(
-                                                        topLeft: const Radius.circular(18),
-                                                        topRight: const Radius.circular(18),
-                                                        bottomLeft: isMe ? const Radius.circular(18) : const Radius.circular(3),
-                                                        bottomRight: isMe ? const Radius.circular(3) : const Radius.circular(18),
-                                                      ),
-                                                      border: isMe ? Border.all(color: kPremiumBlue.withOpacity(0.4)) : Border.all(color: kPremiumBorder),
-                                                      boxShadow: [BoxShadow(color: (isMe ? kPremiumBlue : Colors.black).withOpacity(0.12), blurRadius: 10, offset: const Offset(0, 4))],
-                                                    ),
-                                                    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
-                                                    child: Column(
-                                                      crossAxisAlignment: isMe ? CrossAxisAlignment.end : CrossAxisAlignment.start,
-                                                      children: [
-                                                        if (!isMe) ...[
-                                                          Text(
-                                                            senderInfo['name'] ?? 'User',
-                                                            style: const TextStyle(fontSize: 10.5, fontWeight: FontWeight.w800, color: kPremiumGold),
-                                                          ),
-                                                          const SizedBox(height: 4),
-                                                        ],
-                                                        Text(msg.message, style: const TextStyle(fontSize: 14, height: 1.35, color: Colors.white)),
-                                                        const SizedBox(height: 4),
-                                                        Row(
-                                                          mainAxisSize: MainAxisSize.min,
-                                                          children: [
-                                                            Text(
-                                                              _formatTime(msg.createdAt),
-                                                              style: TextStyle(fontSize: 10, color: isMe ? Colors.white70 : kPremiumMuted),
-                                                            ),
-                                                            if (isMe) ...[
-                                                              const SizedBox(width: 4),
-                                                              const Icon(Icons.done_all_rounded, size: 13, color: Colors.white70),
-                                                            ],
-                                                          ],
-                                                        ),
-                                                      ],
-                                                    ),
-                                                  ),
+                                                MessageBubble(
+                                                  message: msg,
+                                                  isMe: isMe,
+                                                  isDesktop: isDesktop,
+                                                  showSenderHeader: !isMe,
+                                                  onRetry: () => _sendMessage(msg.message),
+                                                  onEdit: isMe && !msg.isDeleted ? () => _handleEditMessage(msg) : null,
+                                                  onDelete: !msg.isDeleted ? () => _handleDeleteMessage(msg) : null,
                                                 ),
                                               ],
                                             );
@@ -965,97 +1492,82 @@ class _ChatPageState extends State<ChatPage> {
                                     ),
                         ),
 
-                        // Quick Prompt Suggestions
-                        Container(
-                          height: 38,
-                          padding: const EdgeInsets.symmetric(horizontal: 12),
-                          child: ListView(
-                            scrollDirection: Axis.horizontal,
-                            children: [
-                              _quickPromptChip('👋 Quick Hello', 'Hello! Hope you are doing well.'),
-                              _quickPromptChip('📋 Request Update', 'Could you please share an update on current deliverables?'),
-                              _quickPromptChip('📅 Schedule Call', 'Let\'s schedule a brief sync when you are available.'),
-                              _quickPromptChip('✅ Approved', 'Thanks! Looks good to proceed.'),
-                            ],
-                          ),
-                        ),
+                        // Typing Indicator Banner
+                        if (_typingStream != null)
+                          StreamBuilder<Set<String>>(
+                            stream: _typingStream,
+                            builder: (context, snapshot) {
+                              final typers = snapshot.data ?? {};
+                              if (typers.isEmpty) return const SizedBox.shrink();
 
-                        // Enterprise Message Input Bar with System Navigation Safe Area
-                        Container(
-                          decoration: BoxDecoration(
-                            color: kPremiumSurface.withOpacity(0.95),
-                            border: const Border(top: BorderSide(color: kPremiumBorder)),
-                          ),
-                          child: SafeArea(
-                            top: false,
-                            left: true,
-                            right: true,
-                            bottom: true,
-                            child: Padding(
-                              padding: const EdgeInsets.fromLTRB(14, 8, 14, 8),
-                              child: Row(
-                                children: [
-                                  Expanded(
-                                    child: TextField(
-                                      controller: _msgController,
-                                      textInputAction: TextInputAction.send,
-                                      onSubmitted: (_) => _sendMessage(),
-                                      style: const TextStyle(color: kPremiumText, fontSize: 14),
-                                      decoration: InputDecoration(
-                                        hintText: 'Write an encrypted message...',
-                                        hintStyle: const TextStyle(color: kPremiumMuted, fontSize: 13),
-                                        border: OutlineInputBorder(
-                                          borderRadius: BorderRadius.circular(24),
-                                          borderSide: const BorderSide(color: kPremiumBorder),
-                                        ),
-                                        enabledBorder: OutlineInputBorder(
-                                          borderRadius: BorderRadius.circular(24),
-                                          borderSide: const BorderSide(color: kPremiumBorder),
-                                        ),
-                                        focusedBorder: OutlineInputBorder(
-                                          borderRadius: BorderRadius.circular(24),
-                                          borderSide: const BorderSide(color: kPremiumGold, width: 1.5),
-                                        ),
-                                        filled: true,
-                                        fillColor: Colors.white.withOpacity(0.04),
-                                        contentPadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+                              final typingText = typers.length == 1
+                                  ? '${typers.first} is typing...'
+                                  : '${typers.join(", ")} are typing...';
+
+                              return Container(
+                                width: double.infinity,
+                                padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 4),
+                                color: kPremiumSurface.withOpacity(0.5),
+                                child: Row(
+                                  children: [
+                                    const SizedBox(
+                                      width: 10,
+                                      height: 10,
+                                      child: CircularProgressIndicator(
+                                        strokeWidth: 1.5,
+                                        valueColor: AlwaysStoppedAnimation<Color>(kPremiumGold),
                                       ),
                                     ),
-                                  ),
-                                  const SizedBox(width: 10),
-                                  Container(
-                                    decoration: BoxDecoration(
-                                      gradient: kGradBlue,
-                                      shape: BoxShape.circle,
-                                      boxShadow: [
-                                        BoxShadow(
-                                          color: kPremiumBlue.withOpacity(0.4),
-                                          blurRadius: 10,
-                                          offset: const Offset(0, 4),
-                                        ),
-                                      ],
+                                    const SizedBox(width: 8),
+                                    Text(
+                                      typingText,
+                                      style: const TextStyle(
+                                        fontSize: 11,
+                                        fontStyle: FontStyle.italic,
+                                        color: kPremiumGold,
+                                      ),
                                     ),
-                                    child: IconButton(
-                                      icon: const Icon(Icons.send_rounded, color: Colors.white, size: 20),
-                                      tooltip: 'Send Message',
-                                      onPressed: () => _sendMessage(),
-                                    ),
-                                  ),
-                                ],
-                              ),
-                            ),
+                                  ],
+                                ),
+                              );
+                            },
                           ),
+
+                        // Message Input
+                        MessageInput(
+                          controller: _msgController,
+                          isSending: _isSending,
+                          onSend: (text) => _sendMessage(text),
+                          onTypingChanged: (isTyping) {
+                            if (_activeConversationId != null) {
+                              _messagingService.sendTyping(_activeConversationId!, isTyping: isTyping);
+                            }
+                          },
                         ),
                       ],
                     ),
                   ),
 
-                  // Desktop Side Drawer
-                  if (isDesktop && _showProfileInfo) _buildProfileDrawer(),
+                  // Desktop Profile / Project Drawer
+                  if (isDesktop && _showProfileInfo) _buildInfoDrawer(),
                 ],
               ),
 
-              // Mobile Floating Drawer Overlay
+              // "New Messages" Floating Button
+              if (_showScrollToBottom)
+                Positioned(
+                  right: 20,
+                  bottom: 75,
+                  child: FloatingActionButton.small(
+                    backgroundColor: kPremiumGold,
+                    foregroundColor: kPremiumBg,
+                    tooltip: 'Scroll to bottom',
+                    onPressed: () => _scrollToBottom(smooth: true),
+                    child: const Icon(Icons.keyboard_arrow_down_rounded, size: 24),
+                  ),
+                ),
+
+              // Mobile Floating Info Drawer
               if (!isDesktop && _showProfileInfo)
                 Positioned.fill(
                   child: Container(
@@ -1063,7 +1575,7 @@ class _ChatPageState extends State<ChatPage> {
                     alignment: Alignment.centerRight,
                     child: SizedBox(
                       width: MediaQuery.of(context).size.width * 0.85,
-                      child: _buildProfileDrawer(),
+                      child: _buildInfoDrawer(),
                     ),
                   ),
                 ),
@@ -1074,30 +1586,59 @@ class _ChatPageState extends State<ChatPage> {
     );
   }
 
-  Widget _quickPromptChip(String label, String messageText) {
-    return Padding(
-      padding: const EdgeInsets.only(right: 8),
-      child: ActionChip(
-        label: Text(
-          label,
-          style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w600, color: kPremiumGold),
+  Widget _buildEmptyChatState() {
+    final isProject = _selectedTargetType == 'project';
+    return Center(
+      child: SingleChildScrollView(
+        padding: const EdgeInsets.all(24),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Container(
+              padding: const EdgeInsets.all(20),
+              decoration: BoxDecoration(
+                color: kPremiumGold.withOpacity(0.1),
+                shape: BoxShape.circle,
+                border: Border.all(color: kPremiumGold.withOpacity(0.3)),
+              ),
+              child: Icon(
+                isProject ? Icons.folder_special_outlined : Icons.lock_outline_rounded,
+                color: kPremiumGold,
+                size: 44,
+              ),
+            ),
+            const SizedBox(height: 16),
+            Text(
+              isProject ? 'Project Communications: $_selectedTargetName' : 'Business Session: $_selectedTargetName',
+              style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 17, color: kPremiumText),
+              textAlign: TextAlign.center,
+            ),
+            const SizedBox(height: 6),
+            Text(
+              isProject
+                  ? 'All project members, assignees, and managers have access to this workflow log. Messages are preserved for project history.'
+                  : 'Relationship-controlled communication. Type a message below to coordinate on business deliverables.',
+              style: const TextStyle(color: kPremiumMuted, fontSize: 13, height: 1.4),
+              textAlign: TextAlign.center,
+            ),
+          ],
         ),
-        backgroundColor: kPremiumGold.withOpacity(0.08),
-        side: BorderSide(color: kPremiumGold.withOpacity(0.3)),
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-        onPressed: () => _sendMessage(messageText),
       ),
     );
   }
 
-  // ───────────────────────────────────────────────────────────────────────────
-  // PROFILE & CONTACT DETAILS SIDE DRAWER
-  // ───────────────────────────────────────────────────────────────────────────
-  Widget _buildProfileDrawer() {
+  // ---------------------------------------------------------------------------
+  // PROFILE / PROJECT DRAWER (WITH PRIVACY PROTECTIONS)
+  // ---------------------------------------------------------------------------
+  Widget _buildInfoDrawer() {
+    final myRole = SupabaseService().currentRole.toLowerCase();
+    final isViewerClient = myRole == 'client';
+    final isProject = _selectedTargetType == 'project';
+
     return Container(
-      width: 270,
+      width: 290,
       decoration: BoxDecoration(
-        color: kPremiumSurface.withOpacity(0.95),
+        color: kPremiumSurface.withOpacity(0.96),
         border: const Border(left: BorderSide(color: kPremiumBorder)),
       ),
       child: Column(
@@ -1107,9 +1648,9 @@ class _ChatPageState extends State<ChatPage> {
             child: Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
-                const Text(
-                  'Contact Information',
-                  style: TextStyle(fontWeight: FontWeight.w800, fontSize: 14, color: kPremiumGold),
+                Text(
+                  isProject ? 'Project Details' : 'Contact Information',
+                  style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 14, color: kPremiumGold),
                 ),
                 IconButton(
                   icon: const Icon(Icons.close_rounded, size: 18, color: kPremiumMuted),
@@ -1130,7 +1671,7 @@ class _ChatPageState extends State<ChatPage> {
                         label: _selectedTargetName,
                         size: 72,
                         radius: 22,
-                        style: AvatarStyle.pattern,
+                        style: isProject ? AvatarStyle.pattern : AvatarStyle.gradient,
                       ),
                       const SizedBox(height: 14),
                       Text(
@@ -1148,16 +1689,16 @@ class _ChatPageState extends State<ChatPage> {
                       Container(
                         padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
                         decoration: BoxDecoration(
-                          color: (_selectedTargetType == 'client' ? kPremiumBlue : kPremiumViolet).withOpacity(0.15),
+                          color: (isProject ? kPremiumGold : (_selectedTargetType == 'client' ? kPremiumBlue : kPremiumViolet)).withOpacity(0.15),
                           borderRadius: BorderRadius.circular(12),
                           border: Border.all(
-                            color: (_selectedTargetType == 'client' ? kPremiumBlue : kPremiumViolet).withOpacity(0.3),
+                            color: (isProject ? kPremiumGold : (_selectedTargetType == 'client' ? kPremiumBlue : kPremiumViolet)).withOpacity(0.3),
                           ),
                         ),
                         child: Text(
                           _selectedTargetType.toUpperCase(),
                           style: TextStyle(
-                            color: _selectedTargetType == 'client' ? kPremiumBlue : kPremiumViolet,
+                            color: isProject ? kPremiumGold : (_selectedTargetType == 'client' ? kPremiumBlue : kPremiumViolet),
                             fontSize: 10,
                             fontWeight: FontWeight.w800,
                           ),
@@ -1167,83 +1708,118 @@ class _ChatPageState extends State<ChatPage> {
                   ),
                 ),
                 const SizedBox(height: 24),
-                const Text(
-                  'DIRECT CONTACT DETAILS',
-                  style: TextStyle(fontSize: 10, fontWeight: FontWeight.w800, color: kPremiumMuted, letterSpacing: 0.8),
-                ),
-                const SizedBox(height: 10),
 
-                // Email Detail Card
-                GlassCard(
-                  margin: const EdgeInsets.only(bottom: 8),
-                  padding: const EdgeInsets.all(12),
-                  radius: 14,
-                  child: Row(
-                    children: [
-                      const Icon(Icons.email_outlined, size: 18, color: kPremiumGold),
-                      const SizedBox(width: 10),
-                      Expanded(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
+                if (isProject) ...[
+                  const Text(
+                    'WORKFLOW SCOPE & SECURITY',
+                    style: TextStyle(fontSize: 10, fontWeight: FontWeight.w800, color: kPremiumMuted, letterSpacing: 0.8),
+                  ),
+                  const SizedBox(height: 10),
+                  GlassCard(
+                    padding: const EdgeInsets.all(12),
+                    radius: 14,
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: const [
+                        Row(
                           children: [
-                            const Text('Email', style: TextStyle(fontSize: 10, color: kPremiumMuted)),
-                            Text(
-                              _selectedTargetEmail.isNotEmpty ? _selectedTargetEmail : 'Not provided',
-                              style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: kPremiumText),
-                              maxLines: 1,
-                              overflow: TextOverflow.ellipsis,
-                            ),
+                            Icon(Icons.shield_outlined, size: 16, color: kPremiumGold),
+                            SizedBox(width: 8),
+                            Text('Project-Bounded Access', style: TextStyle(color: kPremiumText, fontWeight: FontWeight.bold, fontSize: 12)),
                           ],
                         ),
-                      ),
-                      if (_selectedTargetEmail.isNotEmpty)
-                        InkWell(
-                          onTap: () {
-                            Clipboard.setData(ClipboardData(text: _selectedTargetEmail));
-                            ScaffoldMessenger.of(context).showSnackBar(
-                              const SnackBar(content: Text('Email copied to clipboard!')),
-                            );
-                          },
-                          child: const Icon(Icons.copy_rounded, size: 16, color: kPremiumMuted),
+                        SizedBox(height: 6),
+                        Text(
+                          'Only assigned specialists, managers, and the designated client account can participate in this channel.',
+                          style: TextStyle(color: kPremiumMuted, fontSize: 11, height: 1.3),
                         ),
-                    ],
+                      ],
+                    ),
                   ),
-                ),
+                ] else ...[
+                  const Text(
+                    'BUSINESS CONTACT DETAILS',
+                    style: TextStyle(fontSize: 10, fontWeight: FontWeight.w800, color: kPremiumMuted, letterSpacing: 0.8),
+                  ),
+                  const SizedBox(height: 10),
 
-                // Phone Detail Card (100% Dynamic Number)
-                GlassCard(
-                  margin: const EdgeInsets.only(bottom: 8),
-                  padding: const EdgeInsets.all(12),
-                  radius: 14,
-                  child: Row(
-                    children: [
-                      const Icon(Icons.phone_outlined, size: 18, color: kPremiumGold),
-                      const SizedBox(width: 10),
-                      Expanded(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            const Text('Phone', style: TextStyle(fontSize: 10, color: kPremiumMuted)),
-                            Text(
-                              _selectedTargetPhone.isNotEmpty ? _selectedTargetPhone : 'Not provided',
-                              style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: kPremiumText),
-                            ),
-                          ],
-                        ),
+                  // Privacy Notice for Clients Viewing Employees
+                  if (isViewerClient && _selectedTargetType == 'employee') ...[
+                    Container(
+                      margin: const EdgeInsets.only(bottom: 12),
+                      padding: const EdgeInsets.all(10),
+                      decoration: BoxDecoration(
+                        color: Colors.white.withOpacity(0.04),
+                        borderRadius: BorderRadius.circular(10),
+                        border: Border.all(color: Colors.white10),
                       ),
-                      if (_selectedTargetPhone.isNotEmpty)
-                        InkWell(
-                          onTap: () {
-                            Clipboard.setData(ClipboardData(text: _selectedTargetPhone));
-                            ScaffoldMessenger.of(context).showSnackBar(
-                              const SnackBar(content: Text('Phone number copied to clipboard!')),
-                            );
-                          },
-                          child: const Icon(Icons.copy_rounded, size: 16, color: kPremiumMuted),
-                        ),
-                    ],
-                  ),
-                ),
+                      child: const Row(
+                        children: [
+                          Icon(Icons.privacy_tip_outlined, size: 15, color: kPremiumGold),
+                          SizedBox(width: 8),
+                          Expanded(
+                            child: Text(
+                              'Personal phone and email are protected. Please coordinate via project channels.',
+                              style: TextStyle(color: kPremiumMuted, fontSize: 10.5, height: 1.3),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ] else ...[
+                    // Email Card (Only for non-clients or admin-configured)
+                    GlassCard(
+                      margin: const EdgeInsets.only(bottom: 8),
+                      padding: const EdgeInsets.all(12),
+                      radius: 14,
+                      child: Row(
+                        children: [
+                          const Icon(Icons.email_outlined, size: 18, color: kPremiumGold),
+                          const SizedBox(width: 10),
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                const Text('Business Email', style: TextStyle(fontSize: 10, color: kPremiumMuted)),
+                                Text(
+                                  _selectedTargetEmail.isNotEmpty ? _selectedTargetEmail : 'Confidential / Workspace Chat',
+                                  style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: kPremiumText),
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                ),
+                              ],
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+
+                    // Phone Card
+                    GlassCard(
+                      margin: const EdgeInsets.only(bottom: 8),
+                      padding: const EdgeInsets.all(12),
+                      radius: 14,
+                      child: Row(
+                        children: [
+                          const Icon(Icons.phone_outlined, size: 18, color: kPremiumGold),
+                          const SizedBox(width: 10),
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                const Text('Office Contact', style: TextStyle(fontSize: 10, color: kPremiumMuted)),
+                                Text(
+                                  _selectedTargetPhone.isNotEmpty ? _selectedTargetPhone : 'Office / Internal Channel',
+                                  style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: kPremiumText),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+                ],
               ],
             ),
           ),

@@ -76,7 +76,7 @@ class ClientsBodyState extends State<ClientsBody> {
                       ],
                 HeroBanner(
                   title: 'Client CRM Directory',
-                  subtitle: '${_store.clients.length} Total Accounts • $activeClientsCount Active Partners',
+                  subtitle: '${_store.clients.length} Total Accounts \u2022 $activeClientsCount Active Partners',
                   badge: 'CRM Directory',
                 ),
 
@@ -184,7 +184,7 @@ class ClientsBodyState extends State<ClientsBody> {
                                             ),
                                             const SizedBox(height: 2),
                                             Text(
-                                              '${client.company} • ${client.email}',
+                                              '${client.company} \u2022 ${client.email}',
                                               style: const TextStyle(color: kPremiumMuted, fontSize: 12),
                                               maxLines: 1,
                                               overflow: TextOverflow.ellipsis,
@@ -273,6 +273,13 @@ class ClientsBodyState extends State<ClientsBody> {
                                           );
                                         },
                                         tooltip: 'Message Client',
+                                        padding: EdgeInsets.zero,
+                                        constraints: const BoxConstraints(minWidth: 30, minHeight: 30),
+                                      ),
+                                      IconButton(
+                                        icon: const Icon(Icons.tune_outlined, color: kPremiumGold, size: 18),
+                                        onPressed: () => _showClientPortalConfigModal(client),
+                                        tooltip: 'Portal Permissions',
                                         padding: EdgeInsets.zero,
                                         constraints: const BoxConstraints(minWidth: 30, minHeight: 30),
                                       ),
@@ -884,8 +891,8 @@ class _ClientProfilePageState extends State<ClientProfilePage> {
                   _buildInfoCard(Icons.business_outlined, 'Company / Organization', _currentClient.company),
                   _buildInfoCard(Icons.email_outlined, 'Email Address', _currentClient.email),
                   _buildInfoCard(Icons.phone_outlined, 'Direct Phone', _currentClient.phone.isNotEmpty ? _currentClient.phone : 'Not provided'),
-                  _buildInfoCard(Icons.assignment_outlined, 'Project Scope', _currentClient.projectType ?? 'Enterprise Consulting'),
-                  _buildInfoCard(Icons.account_balance_wallet_outlined, 'Allocated Budget', '₹${(_currentClient.budget ?? 12500).toStringAsFixed(0)}'),
+                  _buildInfoCard(Icons.assignment_outlined, 'Project Scope', _currentClient.projectType.isNotEmpty ? _currentClient.projectType : 'Enterprise Consulting'),
+                  _buildInfoCard(Icons.account_balance_wallet_outlined, 'Allocated Budget', '₹'),
 
                   const SizedBox(height: 24),
 

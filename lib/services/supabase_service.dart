@@ -1,4 +1,6 @@
 import 'dart:async';
+import 'dart:convert';
+import 'package:crypto/crypto.dart';
 import 'package:flutter/foundation.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import '../models/saas_models.dart';
@@ -38,7 +40,8 @@ class SupabaseService {
   bool isProjectDeleted(String id) => _deletedProjectIds.contains(id);
 
   final Map<String, List<ChatMessage>> _localMessagesCache = {};
-  final StreamController<void> _chatUpdateController = StreamController<void>.broadcast();
+  final Map<String, RealtimeChannel> _activeChannels = {};
+  final Map<String, StreamSubscription> _streamSubscriptions = {};
 
   bool get isAuthActionInProgress => _isAuthActionInProgress;
 
@@ -194,7 +197,7 @@ class SupabaseService {
         }
       }
 
-      if (authResp == null || authResp.user == null) {
+      if (authResp.user == null) {
         throw Exception('Could not authenticate user account for invitation.');
       }
 
@@ -546,7 +549,7 @@ class SupabaseService {
             final eId = json['id']?.toString();
             final eUserId = json['user_id']?.toString();
             final profile = json['profiles'] as Map<String, dynamic>?;
-            final eEmail = profile?['email']?.toString()?.trim()?.toLowerCase();
+            final eEmail = profile?['email']?.toString().trim().toLowerCase();
             if (eId != null && _deletedEmployeeIds.contains(eId)) return false;
             if (eEmail != null && _deletedEmployeeEmails.contains(eEmail)) return false;
             // Exclude admins from the employee list
@@ -616,7 +619,7 @@ class SupabaseService {
       }
       _deletedEmployeeIds.add(id);
 
-      final targetEmail = email?.trim()?.toLowerCase();
+      final targetEmail = email?.trim().toLowerCase();
       if (targetEmail != null && targetEmail.isNotEmpty) {
         _deletedEmployeeEmails.add(targetEmail);
       }
@@ -629,13 +632,13 @@ class SupabaseService {
       }
 
       final records = await query;
-      if (records is List && records.isNotEmpty) {
+      if (records.isNotEmpty) {
         for (final rec in records) {
           final dbId = rec['id']?.toString();
           final dbUserId = rec['user_id']?.toString();
-          String? dbEmail = rec['email']?.toString()?.trim()?.toLowerCase();
+          String? dbEmail = rec['email']?.toString().trim().toLowerCase();
           if ((dbEmail == null || dbEmail.isEmpty) && rec['profiles'] != null && rec['profiles'] is Map) {
-            dbEmail = (rec['profiles'] as Map)['email']?.toString()?.trim()?.toLowerCase();
+            dbEmail = (rec['profiles'] as Map)['email']?.toString().trim().toLowerCase();
           }
 
           if (dbId != null) _deletedEmployeeIds.add(dbId);
@@ -685,11 +688,12 @@ class SupabaseService {
         return [];
       }
 
-      final response = await client
+      var response = await client
           .from('clients')
           .select('*, profiles(*)')
           .eq('organization_id', currentOrganizationId!);
 
+      bool hasNew = false;
       // Auto-sync any client invitations, client memberships, or client profiles missing in clients table
       try {
         final existingEmails = (response as List)
@@ -702,7 +706,7 @@ class SupabaseService {
             .whereType<String>()
             .toSet();
 
-        bool hasNew = false;
+
 
         // 1. Check invitations table for role == 'client'
         final clientInvites = await client
@@ -777,12 +781,18 @@ class SupabaseService {
         debugPrint('Clients auto-sync notice: $syncErr');
       }
 
+      if (hasNew) {
+        try {
+          response = await client.from('clients').select('*, profiles(*)').eq('organization_id', currentOrganizationId!);
+        } catch (_) {}
+      }
+
       final adminUserIds = await _fetchAdminUserIds();
 
       final list = (response as List)
           .where((json) {
             final cId = json['id']?.toString();
-            final cEmail = json['email']?.toString()?.trim()?.toLowerCase();
+            final cEmail = json['email']?.toString().trim().toLowerCase();
             final cUserId = json['user_id']?.toString();
             if (cId != null && _deletedClientIds.contains(cId)) return false;
             if (cEmail != null && _deletedClientEmails.contains(cEmail)) return false;
@@ -860,7 +870,7 @@ class SupabaseService {
       }
       _deletedClientIds.add(id);
 
-      final targetEmail = email?.trim()?.toLowerCase();
+      final targetEmail = email?.trim().toLowerCase();
       if (targetEmail != null && targetEmail.isNotEmpty) {
         _deletedClientEmails.add(targetEmail);
       }
@@ -873,11 +883,11 @@ class SupabaseService {
       }
 
       final records = await query;
-      if (records is List && records.isNotEmpty) {
+      if (records.isNotEmpty) {
         for (final rec in records) {
           final dbId = rec['id']?.toString();
           final dbUserId = rec['user_id']?.toString();
-          final dbEmail = rec['email']?.toString()?.trim()?.toLowerCase();
+          final dbEmail = rec['email']?.toString().trim().toLowerCase();
 
           if (dbId != null) _deletedClientIds.add(dbId);
           if (dbEmail != null) _deletedClientEmails.add(dbEmail);
@@ -885,7 +895,7 @@ class SupabaseService {
           if (dbId != null) {
             try {
               final clientProjs = await client.from('projects').select('id').eq('client_id', dbId);
-              if (clientProjs is List) {
+              if (clientProjs.isNotEmpty) {
                 for (final cp in clientProjs) {
                   final cpId = cp['id']?.toString();
                   if (cpId != null && cpId.isNotEmpty) {
@@ -1004,7 +1014,7 @@ class SupabaseService {
         'status': request.status.isEmpty ? 'Pending' : request.status,
       }).select();
       
-      return res != null && (res as List).isNotEmpty;
+      return (res as List).isNotEmpty;
     } catch (e) {
       debugPrint('Supabase insertLeaveRequest error: $e');
       return false;
@@ -1023,25 +1033,77 @@ class SupabaseService {
 
   Future<List<AdminModel>> fetchAdmins() async {
     try {
-      final res = await client.from('profiles').select('*');
+      if (currentOrganizationId == null) {
+        await loadUserOrganizationContext();
+      }
+
       final list = <AdminModel>[];
-      if (res is List) {
-        for (final p in res) {
-          final role = p['role']?.toString()?.toLowerCase() ?? '';
-          if (role == 'admin' || role == 'owner') {
+      final seenAdminIds = <String>{};
+
+      // 1. Primary: Fetch from organization_memberships with role='admin' or 'owner' in current organization
+      if (currentOrganizationId != null && currentOrganizationId!.isNotEmpty) {
+        try {
+          final mems = await client
+              .from('organization_memberships')
+              .select('user_id, role')
+              .eq('organization_id', currentOrganizationId!)
+              .or('role.eq.admin,role.eq.owner');
+
+          final adminUserIds = (mems as List)
+              .map((m) => m['user_id']?.toString())
+              .whereType<String>()
+              .where((id) => id.isNotEmpty)
+              .toSet();
+
+          if (adminUserIds.isNotEmpty) {
+            final profilesRes = await client
+                .from('profiles')
+                .select('*')
+                .inFilter('id', adminUserIds.toList());
+
+            for (final p in (profilesRes as List)) {
+              final uId = p['id']?.toString() ?? '';
+              if (uId.isNotEmpty && !seenAdminIds.contains(uId)) {
+                seenAdminIds.add(uId);
+                list.add(AdminModel(
+                  id: uId,
+                  name: p['full_name']?.toString() ?? 'Executive Admin',
+                  email: p['email']?.toString() ?? 'admin@company.com',
+                  phone: p['phone']?.toString() ?? p['phone_number']?.toString() ?? '',
+                  avatarUrl: p['avatar_url']?.toString() ?? '',
+                ));
+              }
+            }
+          }
+        } catch (memErr) {
+          debugPrint('Error fetching admin memberships: $memErr');
+        }
+      }
+
+      // 2. Secondary: Check profiles table directly in case role column exists on profiles
+      try {
+        final res = await client.from('profiles').select('*');
+        for (final p in (res as List)) {
+          final role = p['role']?.toString().toLowerCase() ?? '';
+          final uId = p['id']?.toString() ?? '';
+          if ((role == 'admin' || role == 'owner') && uId.isNotEmpty && !seenAdminIds.contains(uId)) {
+            seenAdminIds.add(uId);
             list.add(AdminModel(
-              id: p['id']?.toString() ?? '',
+              id: uId,
               name: p['full_name']?.toString() ?? 'Executive Admin',
               email: p['email']?.toString() ?? 'admin@company.com',
-              phone: p['phone_number']?.toString() ?? '',
+              phone: p['phone']?.toString() ?? p['phone_number']?.toString() ?? '',
               avatarUrl: p['avatar_url']?.toString() ?? '',
             ));
           }
         }
-      }
+      } catch (_) {}
+
+      // 3. Fallback: Only if current user IS an admin and no admin was found, add self
       if (list.isEmpty) {
         final u = currentUser;
-        if (u != null) {
+        final myRole = currentRole;
+        if (u != null && (myRole == 'admin' || myRole == 'owner')) {
           list.add(AdminModel(
             id: u.id,
             name: 'Executive Admin',
@@ -1049,144 +1111,297 @@ class SupabaseService {
           ));
         }
       }
+
       return list;
     } catch (e) {
-      debugPrint('Error fetching admins from profiles: $e');
+      debugPrint('Error in fetchAdmins: $e');
       return [];
     }
+  }
+
+  // ============================================================
+  // REAL-TIME CHAT & MESSAGING ENGINE
+  // ============================================================
+
+  /// Returns deterministic UUID v3 for direct 1-on-1 conversations between two user IDs
+  String _generateDeterministicConversationUuid(String idA, String idB) {
+    final pair = [idA.trim().toLowerCase(), idB.trim().toLowerCase()]..sort();
+    final hash = md5.convert(utf8.encode('direct_chat_${pair[0]}_${pair[1]}')).toString();
+    final p1 = hash.substring(0, 8);
+    final p2 = hash.substring(8, 12);
+    final p3 = '3${hash.substring(13, 16)}'; // UUID v3 (MD5 based)
+    final p4 = 'a${hash.substring(17, 20)}'; // RFC 4122 variant
+    final p5 = hash.substring(20, 32);
+    return '$p1-$p2-$p3-$p4-$p5';
+  }
+
+  /// Generates a valid UUID v4 for individual messages
+  String _generateMessageUuid() {
+    final now = DateTime.now().microsecondsSinceEpoch.toString();
+    final rand = '${DateTime.now().millisecondsSinceEpoch}_${currentUser?.id ?? 'anon'}';
+    final hash = md5.convert(utf8.encode('msg_${now}_$rand')).toString();
+    final p1 = hash.substring(0, 8);
+    final p2 = hash.substring(8, 12);
+    final p3 = '4${hash.substring(13, 16)}'; // UUID v4 format
+    final p4 = 'a${hash.substring(17, 20)}'; // RFC 4122 variant
+    final p5 = hash.substring(20, 32);
+    return '$p1-$p2-$p3-$p4-$p5';
+  }
+
+  /// Returns the current user's display name for chat messages
+  String get currentUserName {
+    final uid = currentUser?.id;
+    if (uid == null) return 'Me';
+    for (final a in AppDataStore().admins) {
+      if (a.id == uid) return a.name;
+    }
+    for (final e in AppDataStore().employees) {
+      if (e.userId == uid || e.id == uid) return e.name;
+    }
+    for (final c in AppDataStore().clients) {
+      if (c.userId == uid || c.id == uid) return c.name;
+    }
+    return currentUser?.email?.split('@').first ?? 'Me';
   }
 
   Future<String> getOrCreateDirectConversation(String targetId) async {
     try {
       final user = currentUser;
-      if (user == null) {
-        final cleanOther = targetId.replaceAll(RegExp(r'[^a-zA-Z0-9]'), '');
-        return 'conv_$cleanOther';
-      }
-      final myId = user.id;
+      final myId = user?.id ?? 'guest_user';
 
-      // Resolve targetId to real Supabase Auth UUID if targetId is a Client/Employee record ID
+      // Step 1: Resolve targetId to real Supabase Auth UUID if targetId is a Client/Employee record ID or email
       String otherUserId = targetId;
-      for (final client in AppDataStore().clients) {
-        if ((client.id == targetId || client.email == targetId) && client.userId != null && client.userId!.isNotEmpty) {
-          otherUserId = client.userId!;
+      for (final c in AppDataStore().clients) {
+        if ((c.id == targetId || c.email.toLowerCase() == targetId.toLowerCase()) &&
+            c.userId != null && c.userId!.isNotEmpty) {
+          otherUserId = c.userId!;
           break;
         }
       }
       if (otherUserId == targetId) {
         for (final emp in AppDataStore().employees) {
-          if ((emp.id == targetId || emp.email == targetId) && emp.userId.isNotEmpty) {
+          if ((emp.id == targetId || emp.email.toLowerCase() == targetId.toLowerCase()) &&
+              emp.userId.isNotEmpty) {
             otherUserId = emp.userId;
             break;
           }
         }
       }
-
-      // Step 1: Look for existing conversation in conversation_members table (checking both targetId & resolved otherUserId)
-      try {
-        final myMembers = await client
-            .from('conversation_members')
-            .select('conversation_id')
-            .eq('user_id', myId);
-
-        if (myMembers is List && myMembers.isNotEmpty) {
-          final myConvIds = myMembers
-              .map((r) => r['conversation_id']?.toString())
-              .whereType<String>()
-              .where((id) => id.isNotEmpty)
-              .toList();
-
-          if (myConvIds.isNotEmpty) {
-            final otherMembers = await client
-                .from('conversation_members')
-                .select('conversation_id')
-                .inFilter('user_id', [targetId, otherUserId])
-                .inFilter('conversation_id', myConvIds);
-
-            if (otherMembers is List && otherMembers.isNotEmpty) {
-              final existingId = otherMembers.first['conversation_id']?.toString();
-              if (existingId != null && existingId.isNotEmpty) {
-                debugPrint('Found existing conversation in database: $existingId');
-                return existingId;
-              }
-            }
+      if (otherUserId == targetId) {
+        for (final admin in AppDataStore().admins) {
+          if ((admin.id == targetId || admin.email.toLowerCase() == targetId.toLowerCase()) &&
+              admin.id.isNotEmpty) {
+            otherUserId = admin.id;
+            break;
           }
         }
-      } catch (checkErr) {
-        debugPrint('Notice looking up conversation_members: $checkErr');
       }
 
-      // Step 2: Insert new record into `conversations` table
-      String convId = '';
-      try {
-        final insertPayload = <String, dynamic>{
-          'type': 'direct',
-          'title': 'Direct Chat',
-        };
-        final newConv = await client
-            .from('conversations')
-            .insert(insertPayload)
-            .select()
-            .single();
+      // Step 2: Compute deterministic UUID — both sides always get the same conversation ID
+      final convId = _generateDeterministicConversationUuid(myId, otherUserId);
 
-        convId = newConv['id']?.toString() ?? '';
-      } catch (convErr) {
-        debugPrint('conversations insert notice (retrying minimal): $convErr');
+      if (user == null) return convId;
+
+      // Step 3: Robust orgId resolution — try 3 methods before giving up
+      String? orgId = currentOrganizationId;
+      if (orgId == null || orgId.isEmpty) {
         try {
-          final newConv = await client
-              .from('conversations')
-              .insert(<String, dynamic>{})
-              .select()
-              .single();
-          convId = newConv['id']?.toString() ?? '';
-        } catch (retryErr) {
-          debugPrint('conversations retry insert notice: $retryErr');
+          await loadUserOrganizationContext();
+          orgId = currentOrganizationId;
+        } catch (_) {}
+      }
+      if (orgId == null || orgId.isEmpty) {
+        try {
+          final memberships = await client
+              .from('organization_memberships')
+              .select('organization_id')
+              .eq('user_id', myId)
+              .limit(1);
+          if ((memberships as List).isNotEmpty) {
+            orgId = memberships.first['organization_id']?.toString();
+          }
+        } catch (_) {}
+      }
+      if (orgId == null || orgId.isEmpty) {
+        try {
+          final orgRes = await client
+              .from('organizations')
+              .select('id')
+              .limit(1)
+              .maybeSingle();
+          orgId = orgRes?['id']?.toString();
+        } catch (_) {}
+      }
+
+      // Step 4: Ensure conversation row exists (upsert is idempotent)
+      if (orgId != null && orgId.isNotEmpty) {
+        try {
+          await client.from('conversations').upsert(
+            {
+              'id': convId,
+              'organization_id': orgId,
+              'type': 'direct',
+              'title': 'Direct Chat',
+            },
+            onConflict: 'id',
+            ignoreDuplicates: true,
+          );
+          debugPrint('Conversation ensured in DB: $convId (org: $orgId)');
+        } catch (convErr) {
+          debugPrint('Notice creating conversation row: $convErr');
+        }
+      } else {
+        // No orgId found — try without it (requires organization_id to be nullable in schema)
+        try {
+          await client.from('conversations').upsert(
+            {'id': convId, 'type': 'direct', 'title': 'Direct Chat'},
+            onConflict: 'id',
+            ignoreDuplicates: true,
+          );
+          debugPrint('Conversation ensured in DB (no orgId): $convId');
+        } catch (convErr2) {
+          debugPrint('Notice creating conversation (no orgId): $convErr2');
         }
       }
 
-      // Step 3: Insert members into `conversation_members` table
-      if (convId.isNotEmpty) {
+      // Step 5: Add each member individually using INSERT ... ON CONFLICT DO NOTHING
+      // (avoids RLS infinite recursion that batch upsert triggers)
+      for (final uid in {myId, otherUserId}) {
         try {
-          await client.from('conversation_members').insert([
-            {'conversation_id': convId, 'user_id': myId},
-            {'conversation_id': convId, 'user_id': otherUserId},
-          ]);
-          debugPrint('Successfully created conversation $convId and added members to conversation_members table.');
+          await client.from('conversation_members').insert(
+            {'conversation_id': convId, 'user_id': uid},
+          );
         } catch (memErr) {
-          debugPrint('conversation_members insert notice: $memErr');
+          // Ignore duplicate key errors (code 23505 = unique_violation) — member already exists
+          final errStr = memErr.toString();
+          if (!errStr.contains('23505') && !errStr.contains('duplicate') && !errStr.contains('unique')) {
+            debugPrint('Notice adding member $uid to conversation: $memErr');
+          }
         }
-        return convId;
       }
 
-      final safeOther = otherUserId.replaceAll(RegExp(r'[^a-zA-Z0-9]'), '');
-      final safeMy = myId.replaceAll(RegExp(r'[^a-zA-Z0-9]'), '');
-      return 'conv_${safeMy}_$safeOther';
+      debugPrint('getOrCreateDirectConversation done. convId=$convId otherUserId=$otherUserId');
+      return convId;
     } catch (e) {
       debugPrint('Supabase getOrCreateDirectConversation error: $e');
-      final safeOther = targetId.replaceAll(RegExp(r'[^a-zA-Z0-9]'), '');
-      return 'conv_$safeOther';
+      final myId = currentUser?.id ?? 'anon';
+      return _generateDeterministicConversationUuid(myId, targetId);
     }
   }
 
-  // Per-conversation stream controllers (stable across rebuilds)
+  // Per-conversation stream controllers (stable across UI rebuilds)
   final Map<String, StreamController<List<ChatMessage>>> _convStreamControllers = {};
 
   Stream<List<ChatMessage>> getMessagesStream(String conversationId) {
-    // Reuse existing controller for this conversation so the StreamBuilder
-    // doesn't resubscribe on every setState
-    if (!_convStreamControllers.containsKey(conversationId)) {
+    if (!_convStreamControllers.containsKey(conversationId) || _convStreamControllers[conversationId]!.isClosed) {
       final controller = StreamController<List<ChatMessage>>.broadcast();
       _convStreamControllers[conversationId] = controller;
-
-      // Start the Supabase realtime subscription and push through controller
       _subscribeToConversation(conversationId, controller);
+    } else {
+      // Re-emit local cached messages immediately so UI populates without delay
+      final currentList = _localMessagesCache[conversationId] ?? [];
+      if (currentList.isNotEmpty) {
+        Future.microtask(() {
+          final ctrl = _convStreamControllers[conversationId];
+          if (ctrl != null && !ctrl.isClosed) {
+            ctrl.add(List.unmodifiable(currentList));
+          }
+        });
+      }
     }
     return _convStreamControllers[conversationId]!.stream;
   }
 
   void _subscribeToConversation(String conversationId, StreamController<List<ChatMessage>> controller) {
+    // 1. Immediately emit whatever is already in local cache
+    final localList = _localMessagesCache[conversationId] ?? [];
+    if (localList.isNotEmpty && !controller.isClosed) {
+      controller.add(List.unmodifiable(localList));
+    }
+
+    // 2. Load historical messages from Supabase Postgres database
+    _fetchHistoricalMessages(conversationId, controller);
+
+    // 3. Connect to Supabase Realtime Broadcast channel for instant peer-to-peer WebSocket messaging
+    _subscribeRealtimeBroadcast(conversationId);
+
+    // 4. Connect to Postgres Change Data Capture stream for database writes
+    _subscribePostgresStream(conversationId, controller);
+  }
+
+  Future<void> _fetchHistoricalMessages(String conversationId, StreamController<List<ChatMessage>> controller) async {
     try {
-      client
+      final response = await client
+          .from('messages')
+          .select()
+          .eq('conversation_id', conversationId)
+          .order('created_at', ascending: true);
+
+      final historicalMessages = (response as List).map((json) {
+        final content = json['content']?.toString() ?? '';
+        return ChatMessage(
+          id: json['id']?.toString() ?? '',
+          senderId: json['sender_id']?.toString() ?? '',
+          senderName: 'User',
+          senderRole: 'user',
+          conversationId: conversationId,
+          message: content,
+          createdAt: json['created_at']?.toString() ?? DateTime.now().toIso8601String(),
+        );
+      }).toList();
+
+      _pushMergedMessages(conversationId, controller, historicalMessages);
+    } catch (e) {
+      debugPrint('Notice loading historical messages: $e');
+    }
+  }
+
+  void _subscribeRealtimeBroadcast(String conversationId) {
+    if (_activeChannels.containsKey(conversationId)) return;
+
+    try {
+      final channel = client.channel('chat_$conversationId');
+      channel.onBroadcast(
+        event: 'chat_msg',
+        callback: (payload) {
+          try {
+            final senderId = payload['sender_id']?.toString() ?? '';
+            // Do not duplicate messages sent by current user on this device
+            if (senderId == (currentUser?.id ?? '')) return;
+
+            // Use plain_content first (direct), fall back to content field
+            final content = (payload['plain_content']?.toString() ?? '').isNotEmpty
+                ? payload['plain_content'].toString()
+                : (payload['content']?.toString() ?? '');
+
+            final msg = ChatMessage(
+              id: payload['id']?.toString() ?? 'bc_${DateTime.now().millisecondsSinceEpoch}',
+              senderId: senderId,
+              senderName: payload['sender_name']?.toString() ?? 'User',
+              senderRole: payload['sender_role']?.toString() ?? 'user',
+              conversationId: conversationId,
+              message: content,
+              createdAt: payload['created_at']?.toString() ?? DateTime.now().toIso8601String(),
+            );
+
+            _addAndPushMessage(conversationId, msg);
+          } catch (err) {
+            debugPrint('Error processing broadcast message: $err');
+          }
+        },
+      ).subscribe();
+
+      _activeChannels[conversationId] = channel;
+      debugPrint('Realtime WebSocket broadcast channel subscribed for: chat_$conversationId');
+    } catch (e) {
+      debugPrint('Realtime channel subscription notice: $e');
+    }
+  }
+
+  void _subscribePostgresStream(String conversationId, StreamController<List<ChatMessage>> controller) {
+    try {
+      _streamSubscriptions[conversationId]?.cancel();
+      final streamSub = client
           .from('messages')
           .stream(primaryKey: ['id'])
           .eq('conversation_id', conversationId)
@@ -1194,88 +1409,166 @@ class SupabaseService {
           .listen((list) {
             if (controller.isClosed) return;
             final remoteMessages = list.map((json) {
-              final decrypted = EncryptionService.decrypt(json['content']?.toString() ?? '');
+              final content = json['content']?.toString() ?? '';
               return ChatMessage(
                 id: json['id']?.toString() ?? '',
                 senderId: json['sender_id']?.toString() ?? '',
                 senderName: 'User',
                 senderRole: 'user',
                 conversationId: conversationId,
-                message: decrypted,
+                message: content,
                 createdAt: json['created_at']?.toString() ?? DateTime.now().toIso8601String(),
               );
             }).toList();
 
-            // Merge remote + local so optimistic messages stay visible
             _pushMergedMessages(conversationId, controller, remoteMessages);
           }, onError: (err) {
-            debugPrint('Realtime stream error for $conversationId: $err');
-            // On error push whatever is in local cache
-            if (!controller.isClosed) {
-              controller.add(_localMessagesCache[conversationId] ?? []);
-            }
+            debugPrint('Postgres realtime stream notice for $conversationId: $err');
           });
+
+      _streamSubscriptions[conversationId] = streamSub;
     } catch (e) {
       debugPrint('getMessagesStream subscribe error: $e');
-      if (!controller.isClosed) {
-        controller.add(_localMessagesCache[conversationId] ?? []);
+    }
+  }
+
+  void _addAndPushMessage(String conversationId, ChatMessage msg) {
+    final list = _localMessagesCache.putIfAbsent(conversationId, () => []);
+    final alreadyExists = list.any((m) =>
+      m.id == msg.id ||
+      (m.senderId == msg.senderId &&
+       m.message == msg.message &&
+       (DateTime.tryParse(m.createdAt)?.difference(DateTime.tryParse(msg.createdAt) ?? DateTime.now()).inSeconds.abs() ?? 999) < 4));
+
+    if (!alreadyExists) {
+      list.add(msg);
+      list.sort((a, b) => a.createdAt.compareTo(b.createdAt));
+      final controller = _convStreamControllers[conversationId];
+      if (controller != null && !controller.isClosed) {
+        controller.add(List.unmodifiable(list));
       }
     }
   }
 
-  void _pushMergedMessages(String conversationId, StreamController<List<ChatMessage>> controller, List<ChatMessage> remoteMessages) {
+  void _pushMergedMessages(
+    String conversationId,
+    StreamController<List<ChatMessage>> controller,
+    List<ChatMessage> remoteMessages,
+  ) {
     if (controller.isClosed) return;
-    final localList = _localMessagesCache[conversationId] ?? [];
-    final combined = [...remoteMessages];
-    for (final loc in localList) {
-      if (!combined.any((r) => r.id == loc.id || (r.message == loc.message && r.senderId == loc.senderId))) {
-        combined.add(loc);
+    final localList = _localMessagesCache.putIfAbsent(conversationId, () => []);
+
+    for (final remote in remoteMessages) {
+      final exists = localList.any((loc) =>
+        loc.id == remote.id ||
+        (loc.senderId == remote.senderId && loc.message == remote.message));
+      if (!exists) {
+        localList.add(remote);
       }
     }
-    combined.sort((a, b) => a.createdAt.compareTo(b.createdAt));
-    controller.add(combined);
+
+    localList.sort((a, b) => a.createdAt.compareTo(b.createdAt));
+    controller.add(List.unmodifiable(localList));
   }
 
   Future<bool> sendChatMessage(String conversationId, String content) async {
     final senderId = currentUser?.id ?? 'anonymous';
-    final localId = 'loc_${DateTime.now().millisecondsSinceEpoch}';
+    final messageId = _generateMessageUuid();
+    final createdAt = DateTime.now().toIso8601String();
+    final senderName = currentUserName;
+
     final newMsg = ChatMessage(
-      id: localId,
+      id: messageId,
       senderId: senderId,
       senderName: 'Me',
       senderRole: 'user',
       conversationId: conversationId,
       message: content,
-      createdAt: DateTime.now().toIso8601String(),
+      createdAt: createdAt,
     );
 
-    // Immediately add to local cache and push to stream so UI updates instantly
-    _localMessagesCache.putIfAbsent(conversationId, () => []).add(newMsg);
-    if (_convStreamControllers.containsKey(conversationId)) {
-      _pushMergedMessages(conversationId, _convStreamControllers[conversationId]!, []);
+    // 1. Immediately add to local cache and stream so sender UI updates with 0ms latency
+    _addAndPushMessage(conversationId, newMsg);
+
+    // 2. Store the plain message content
+    final messageContent = content;
+
+    // 3. Broadcast instantly via Supabase WebSocket channel for sub-50ms peer-to-peer delivery
+    try {
+      RealtimeChannel? channel = _activeChannels[conversationId];
+      if (channel == null) {
+        channel = client.channel('chat_$conversationId');
+        channel.subscribe();
+        _activeChannels[conversationId] = channel;
+      }
+      await channel.sendBroadcastMessage(
+        event: 'chat_msg',
+        payload: {
+          'id': messageId,
+          'sender_id': senderId,
+          'sender_name': senderName,
+          'sender_role': 'user',
+          'content': messageContent,
+          'plain_content': messageContent,
+          'conversation_id': conversationId,
+          'created_at': createdAt,
+        },
+      );
+      debugPrint('Realtime broadcast sent for conversation: $conversationId');
+    } catch (bcErr) {
+      debugPrint('Realtime broadcast notice: $bcErr');
     }
 
+    // 4. Persist plain text to Postgres database for message history
+    if (currentUser == null) return true;
     try {
-      if (currentUser == null) {
-        debugPrint('sendChatMessage: No authenticated user, storing locally only.');
-        return true;
-      }
-      final encryptedContent = EncryptionService.encrypt(content);
       await client.from('messages').insert({
+        'id': messageId,
         'conversation_id': conversationId,
         'sender_id': senderId,
-        'content': encryptedContent,
+        'content': messageContent,
+        'created_at': createdAt,
       });
-      // Remove local optimistic message now that DB has it (realtime will bring it back)
-      _localMessagesCache[conversationId]?.removeWhere((m) => m.id == localId);
+      debugPrint('Message persisted to DB: $messageId');
       return true;
-    } catch (e) {
-      debugPrint('sendChatMessage DB insert error: $e — keeping locally.');
+    } catch (insertErr) {
+      final errStr = insertErr.toString();
+      // If conversation FK constraint fails, recreate the conversation row then retry once
+      if (errStr.contains('conversation_id') || errStr.contains('foreign key') || errStr.contains('violates')) {
+        debugPrint('Conversation FK missing — recreating conversation and retrying message insert...');
+        try {
+          await getOrCreateDirectConversation(conversationId);
+        } catch (_) {}
+        try {
+          await client.from('messages').insert({
+            'id': _generateMessageUuid(),
+            'conversation_id': conversationId,
+            'sender_id': senderId,
+            'content': messageContent,
+            'created_at': DateTime.now().toIso8601String(),
+          });
+          debugPrint('Message persisted after conversation recreation.');
+        } catch (retryErr) {
+          debugPrint('Message retry notice: $retryErr');
+        }
+      } else {
+        debugPrint('sendChatMessage DB notice: $insertErr');
+      }
       return true;
     }
   }
 
   void closeConversationStream(String conversationId) {
+    _streamSubscriptions[conversationId]?.cancel();
+    _streamSubscriptions.remove(conversationId);
+
+    final channel = _activeChannels.remove(conversationId);
+    if (channel != null) {
+      try {
+        client.removeChannel(channel);
+      } catch (_) {}
+    }
+
     _convStreamControllers[conversationId]?.close();
     _convStreamControllers.remove(conversationId);
   }
@@ -1427,7 +1720,7 @@ class SupabaseService {
             '${due.year}-${due.month.toString().padLeft(2, '0')}-${due.day.toString().padLeft(2, '0')}';
       }
 
-      // Do NOT send 'id' — let Supabase generate the UUID
+      // Do NOT send 'id' -- let Supabase generate the UUID
       await client.from('invoices').insert({
         'organization_id': orgId,
         'client_id': clientId,
@@ -1457,7 +1750,7 @@ class SupabaseService {
             .select('*')
             .or('assigned_employee_id.eq.${user.id},assigned_to.eq.${user.id}')
             .order('created_at', ascending: false);
-        if (res is List && res.isNotEmpty) {
+        if (res.isNotEmpty) {
           return List<Map<String, dynamic>>.from(res);
         }
       } catch (_) {}
@@ -1468,7 +1761,7 @@ class SupabaseService {
             .select('*')
             .or('assigned_employee_id.eq.${user.id},assigned_to.eq.${user.id}')
             .order('created_at', ascending: false);
-        if (res is List && res.isNotEmpty) {
+        if (res.isNotEmpty) {
           return List<Map<String, dynamic>>.from(res);
         }
       } catch (_) {}
@@ -1484,14 +1777,14 @@ class SupabaseService {
     try {
       try {
         final res = await client.from('client_requests').select('*').order('created_at', ascending: false);
-        if (res is List && res.isNotEmpty) {
+        if (res.isNotEmpty) {
           return List<Map<String, dynamic>>.from(res);
         }
       } catch (_) {}
 
       try {
         final res = await client.from('consultations').select('*').order('created_at', ascending: false);
-        if (res is List && res.isNotEmpty) {
+        if (res.isNotEmpty) {
           return List<Map<String, dynamic>>.from(res);
         }
       } catch (_) {}

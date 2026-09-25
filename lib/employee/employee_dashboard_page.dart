@@ -3,6 +3,10 @@ import 'package:business_managment_app/services/supabase_service.dart';
 import 'package:business_managment_app/services/app_data_store.dart';
 import 'package:business_managment_app/core/premium_theme.dart';
 import 'package:business_managment_app/employee/assigned_consultations_page.dart';
+import 'package:business_managment_app/shared/chat_page.dart';
+import 'package:business_managment_app/shared/task_board_page.dart';
+import 'package:business_managment_app/shared/project_page.dart';
+import 'package:business_managment_app/shared/invoice_page.dart';
 
 class EmployeeDashboardPage extends StatefulWidget {
   const EmployeeDashboardPage({super.key});
@@ -28,6 +32,7 @@ class _EmployeeDashboardPageState extends State<EmployeeDashboardPage> {
   List<Map<String, dynamic>> _myTasks = [];
   List<Map<String, dynamic>> _myProjects = [];
   List<Map<String, dynamic>> _myLeaves = [];
+  List<ClientModel> _myAllocatedClients = [];
 
   @override
   void initState() {
@@ -50,9 +55,11 @@ class _EmployeeDashboardPageState extends State<EmployeeDashboardPage> {
       _userRole = user?.userMetadata?['role']?.toString().toUpperCase() ?? 'STAFF MEMBER';
 
       // Match with employee store if present
+      String? myEmployeeId;
       for (final e in _store.employees) {
-        if (e.id == userId || e.email.toLowerCase() == _userEmail.toLowerCase()) {
+        if (e.id == userId || e.userId == userId || e.email.toLowerCase() == _userEmail.toLowerCase()) {
           _userDept = e.department;
+          myEmployeeId = e.id;
           break;
         }
       }
@@ -60,14 +67,38 @@ class _EmployeeDashboardPageState extends State<EmployeeDashboardPage> {
       // 1. Fetch My Live Assigned Tasks
       List<Map<String, dynamic>> tasksData = [];
       try {
-        final res = await SupabaseService().client
-            .from('tasks')
-            .select()
-            .eq('assigned_to', userId)
-            .order('due_date', ascending: true);
+        var query = SupabaseService().client.from('tasks').select();
+        if (myEmployeeId != null && myEmployeeId.isNotEmpty && myEmployeeId != userId) {
+          query = query.or('assigned_to.eq.$userId,assigned_to.eq.$myEmployeeId');
+        } else {
+          query = query.eq('assigned_to', userId);
+        }
+        final res = await query.order('due_date', ascending: true);
         tasksData = List<Map<String, dynamic>>.from(res as List);
       } catch (e) {
         debugPrint('Error fetching tasks for employee: $e');
+      }
+
+      if (tasksData.isEmpty && _store.tasks.isNotEmpty) {
+        final myTasks = _store.tasks.where((t) {
+          final aid = t.assignedToId.trim();
+          final aname = t.assignedToName.toLowerCase().trim();
+          final myName = _userName.toLowerCase().trim();
+          return (aid.isNotEmpty && (aid == userId || (myEmployeeId != null && aid == myEmployeeId))) ||
+              (aname.isNotEmpty && (aname == myName || (_userName.isNotEmpty && aname.contains(myName))));
+        }).toList();
+
+        tasksData = myTasks.map((t) => {
+          'id': t.id,
+          'title': t.title,
+          'project_id': t.projectId,
+          'project_name': t.projectName,
+          'assigned_to': t.assignedToId,
+          'assigned_to_name': t.assignedToName,
+          'status': t.status,
+          'priority': t.priority,
+          'due_date': t.dueDate,
+        }).toList();
       }
 
       // 2. Fetch My Assigned Projects
@@ -93,6 +124,20 @@ class _EmployeeDashboardPageState extends State<EmployeeDashboardPage> {
         leavesData = List<Map<String, dynamic>>.from(res as List);
       } catch (e) {
         debugPrint('Error fetching leave requests for employee: $e');
+      }
+
+      // 4. Fetch My Allocated Clients & Accounts
+      List<ClientModel> allocatedClients = [];
+      try {
+        await _store.refreshFromSupabase();
+        allocatedClients = _store.clients.where((c) {
+          final aid = c.assignedEmployeeId;
+          return aid != null &&
+              aid.isNotEmpty &&
+              (aid == userId || (myEmployeeId != null && aid == myEmployeeId));
+        }).toList();
+      } catch (e) {
+        debugPrint('Error fetching allocated clients for employee: $e');
       }
 
       // Calculate Stat Metrics
@@ -122,6 +167,7 @@ class _EmployeeDashboardPageState extends State<EmployeeDashboardPage> {
           _myTasks = tasksData;
           _myProjects = projectsData;
           _myLeaves = leavesData;
+          _myAllocatedClients = allocatedClients;
           _activeTasksCount = activeTasks;
           _tasksDueTodayCount = dueToday;
           _activeProjectsCount = projectsData.length;
@@ -276,7 +322,6 @@ class _EmployeeDashboardPageState extends State<EmployeeDashboardPage> {
                       ? null
                       : () async {
                           final user = SupabaseService().currentUser;
-                          final orgId = SupabaseService().currentOrganizationId;
                           if (user == null) return;
                           setModalState(() => isSaving = true);
                           try {
@@ -368,16 +413,16 @@ class _EmployeeDashboardPageState extends State<EmployeeDashboardPage> {
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          // ── HERO BANNER (SAME AS ADMIN) ──────────────────────────────
+                          // -- HERO BANNER (SAME AS ADMIN) ------------------------------
                           HeroBanner(
                             title: '$_userDept Operations',
-                            subtitle: 'Welcome back 👋, $_userName',
+                            subtitle: 'Welcome back \u{1F44B}, $_userName',
                             badge: 'Employee Portal',
                           ),
 
                           const SizedBox(height: 20),
 
-                          // ── OVERVIEW BANNER CARD (SAME AS ADMIN) ─────────────────────
+                          // -- OVERVIEW BANNER CARD (SAME AS ADMIN) ---------------------
                           GlassCard(
                             padding: const EdgeInsets.all(22),
                             child: Column(
@@ -426,7 +471,7 @@ class _EmployeeDashboardPageState extends State<EmployeeDashboardPage> {
                                 // Responsive Overview Stats Layout
                                 LayoutBuilder(
                                   builder: (context, overviewConstraints) {
-                                    final bool isCompact = overviewConstraints.maxWidth < 450;
+                                    final bool isCompact = overviewConstraints.maxWidth < 520;
                                     if (isCompact) {
                                       return Column(
                                         children: [
@@ -434,12 +479,13 @@ class _EmployeeDashboardPageState extends State<EmployeeDashboardPage> {
                                             children: [
                                               Expanded(child: _overviewItem('Active Tasks', '$_activeTasksCount')),
                                               Expanded(child: _overviewItem('Due Today', '$_tasksDueTodayCount')),
+                                              Expanded(child: _overviewItem('My Projects', '$_activeProjectsCount')),
                                             ],
                                           ),
                                           const SizedBox(height: 14),
                                           Row(
                                             children: [
-                                              Expanded(child: _overviewItem('My Projects', '$_activeProjectsCount')),
+                                              Expanded(child: _overviewItem('Allocated Clients', '${_myAllocatedClients.length}')),
                                               Expanded(child: _overviewItem('Pending Leave', '$_pendingLeavesCount')),
                                             ],
                                           ),
@@ -452,6 +498,7 @@ class _EmployeeDashboardPageState extends State<EmployeeDashboardPage> {
                                         Expanded(child: FittedBox(fit: BoxFit.scaleDown, child: _overviewItem('Active Tasks', '$_activeTasksCount'))),
                                         Expanded(child: FittedBox(fit: BoxFit.scaleDown, child: _overviewItem('Due Today', '$_tasksDueTodayCount'))),
                                         Expanded(child: FittedBox(fit: BoxFit.scaleDown, child: _overviewItem('My Projects', '$_activeProjectsCount'))),
+                                        Expanded(child: FittedBox(fit: BoxFit.scaleDown, child: _overviewItem('Allocated Clients', '${_myAllocatedClients.length}'))),
                                         Expanded(child: FittedBox(fit: BoxFit.scaleDown, child: _overviewItem('Pending Leave', '$_pendingLeavesCount'))),
                                       ],
                                     );
@@ -463,7 +510,7 @@ class _EmployeeDashboardPageState extends State<EmployeeDashboardPage> {
 
                           const SizedBox(height: 24),
 
-                          // ── OPERATIONS MODULES (SAME AS ADMIN ACTION CARDS) ──────────
+                          // -- OPERATIONS MODULES (SAME AS ADMIN ACTION CARDS) ----------
                           const Text(
                             'Staff Operations Modules',
                             style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
@@ -473,24 +520,61 @@ class _EmployeeDashboardPageState extends State<EmployeeDashboardPage> {
                           GridView.count(
                             shrinkWrap: true,
                             physics: const NeverScrollableScrollPhysics(),
-                            crossAxisCount: isDesktop ? 3 : (isTablet ? 3 : (width < 360 ? 1 : 2)),
+                            crossAxisCount: isDesktop ? 4 : (isTablet ? 3 : (width < 360 ? 1 : 2)),
                             crossAxisSpacing: 14,
                             mainAxisSpacing: 14,
-                            childAspectRatio: isDesktop ? 1.6 : (isTablet ? 1.4 : 1.15),
+                            childAspectRatio: isDesktop ? 1.4 : (isTablet ? 1.3 : 1.15),
                             children: [
                               _actionCard(
                                 icon: Icons.assignment_outlined,
                                 title: 'My Tasks',
                                 subtitle: '$_activeTasksCount Active Tasks',
                                 color: kPremiumGold,
-                                onTap: () {},
+                                onTap: () {
+                                  Navigator.push(
+                                    context,
+                                    MaterialPageRoute(builder: (context) => const TaskBoardPage()),
+                                  );
+                                },
+                              ),
+                              _actionCard(
+                                icon: Icons.view_kanban_outlined,
+                                title: 'Task Kanban',
+                                subtitle: 'Agile Task Board',
+                                color: Colors.deepOrangeAccent,
+                                onTap: () {
+                                  Navigator.push(
+                                    context,
+                                    MaterialPageRoute(builder: (context) => const TaskBoardPage()),
+                                  );
+                                },
                               ),
                               _actionCard(
                                 icon: Icons.folder_open_outlined,
                                 title: 'My Projects',
                                 subtitle: '$_activeProjectsCount Projects',
                                 color: kPremiumBlue,
-                                onTap: () {},
+                                onTap: () {
+                                  Navigator.push(
+                                    context,
+                                    MaterialPageRoute(builder: (context) => const ProjectPage()),
+                                  );
+                                },
+                              ),
+                              _actionCard(
+                                icon: Icons.business_center_outlined,
+                                title: 'My Clients',
+                                subtitle: '${_myAllocatedClients.length} Allocated Accounts',
+                                color: Colors.tealAccent,
+                                onTap: () {
+                                  if (_myAllocatedClients.isNotEmpty) {
+                                    _showClientDetails(_myAllocatedClients.first);
+                                  } else {
+                                    ScaffoldMessenger.of(context).showSnackBar(
+                                      const SnackBar(content: Text('No allocated client accounts currently assigned to you.')),
+                                    );
+                                  }
+                                },
                               ),
                               _actionCard(
                                 icon: Icons.event_note_outlined,
@@ -507,7 +591,31 @@ class _EmployeeDashboardPageState extends State<EmployeeDashboardPage> {
                                 onTap: () {
                                   Navigator.push(
                                     context,
-                                    MaterialPageRoute(builder: (context) => AssignedConsultationsPage()),
+                                    MaterialPageRoute(builder: (context) => const AssignedConsultationsPage()),
+                                  );
+                                },
+                              ),
+                              _actionCard(
+                                icon: Icons.chat_bubble_outline,
+                                title: 'Live Chat',
+                                subtitle: 'Team & Client Channels',
+                                color: Colors.cyanAccent,
+                                onTap: () {
+                                  Navigator.push(
+                                    context,
+                                    MaterialPageRoute(builder: (context) => const ChatPage()),
+                                  );
+                                },
+                              ),
+                              _actionCard(
+                                icon: Icons.receipt_long_outlined,
+                                title: 'Invoices & Billing',
+                                subtitle: 'Client Invoices & Slips',
+                                color: Colors.purple,
+                                onTap: () {
+                                  Navigator.push(
+                                    context,
+                                    MaterialPageRoute(builder: (context) => const InvoicePage()),
                                   );
                                 },
                               ),
@@ -695,7 +803,186 @@ class _EmployeeDashboardPageState extends State<EmployeeDashboardPage> {
                             ),
                           const SizedBox(height: 32),
 
-                          // SECTION 3: MY ATTENDANCE & LEAVE REQUESTS
+                          // SECTION 3: MY ALLOCATED CLIENTS & ACCOUNTS
+                          Row(
+                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                            crossAxisAlignment: CrossAxisAlignment.center,
+                            children: [
+                              Row(
+                                children: [
+                                  const Text('My Allocated Clients', style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: kPremiumGold)),
+                                  const SizedBox(width: 8),
+                                  Container(
+                                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                                    decoration: BoxDecoration(
+                                      color: Colors.teal.withOpacity(0.2),
+                                      borderRadius: BorderRadius.circular(10),
+                                      border: Border.all(color: Colors.teal.withOpacity(0.5)),
+                                    ),
+                                    child: Text(
+                                      '${_myAllocatedClients.length}',
+                                      style: const TextStyle(color: Colors.tealAccent, fontSize: 12, fontWeight: FontWeight.bold),
+                                    ),
+                                  ),
+                                ],
+                              ),
+                              Text('${_myAllocatedClients.length} Accounts', style: const TextStyle(color: kPremiumMuted, fontSize: 13)),
+                            ],
+                          ),
+                          const SizedBox(height: 14),
+
+                          if (_myAllocatedClients.isEmpty)
+                            GlassCard(
+                              padding: const EdgeInsets.all(24),
+                              child: const Center(
+                                child: Column(
+                                  children: [
+                                    Icon(Icons.business_center_outlined, size: 36, color: Colors.teal),
+                                    SizedBox(height: 8),
+                                    Text('No client accounts currently allocated to you.', style: TextStyle(color: kPremiumMuted, fontSize: 14)),
+                                    SizedBox(height: 4),
+                                    Text('When an administrator assigns client leads to you, they will appear here.', style: TextStyle(color: Colors.white38, fontSize: 12)),
+                                  ],
+                                ),
+                              ),
+                            )
+                          else
+                            ListView.builder(
+                              shrinkWrap: true,
+                              physics: const NeverScrollableScrollPhysics(),
+                              itemCount: _myAllocatedClients.length,
+                              itemBuilder: (context, index) {
+                                final client = _myAllocatedClients[index];
+                                return Container(
+                                  margin: const EdgeInsets.only(bottom: 12),
+                                  child: GlassCard(
+                                    padding: const EdgeInsets.all(16),
+                                    child: Column(
+                                      crossAxisAlignment: CrossAxisAlignment.start,
+                                      children: [
+                                        Row(
+                                          children: [
+                                            CircleAvatar(
+                                              radius: 20,
+                                              backgroundColor: Colors.teal.withOpacity(0.2),
+                                              child: Text(
+                                                client.name.isNotEmpty ? client.name[0].toUpperCase() : 'C',
+                                                style: const TextStyle(color: Colors.tealAccent, fontWeight: FontWeight.bold, fontSize: 16),
+                                              ),
+                                            ),
+                                            const SizedBox(width: 12),
+                                            Expanded(
+                                              child: Column(
+                                                crossAxisAlignment: CrossAxisAlignment.start,
+                                                children: [
+                                                  Text(
+                                                    client.name,
+                                                    style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: kPremiumText),
+                                                    maxLines: 1,
+                                                    overflow: TextOverflow.ellipsis,
+                                                  ),
+                                                  Text(
+                                                    client.company,
+                                                    style: const TextStyle(color: kPremiumMuted, fontSize: 13),
+                                                    maxLines: 1,
+                                                    overflow: TextOverflow.ellipsis,
+                                                  ),
+                                                ],
+                                              ),
+                                            ),
+                                            Container(
+                                              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                                              decoration: BoxDecoration(
+                                                color: (client.status == 'Active' ? Colors.green : Colors.orange).withOpacity(0.15),
+                                                borderRadius: BorderRadius.circular(12),
+                                                border: Border.all(color: (client.status == 'Active' ? Colors.green : Colors.orange).withOpacity(0.4)),
+                                              ),
+                                              child: Text(
+                                                client.status,
+                                                style: TextStyle(
+                                                  color: client.status == 'Active' ? Colors.greenAccent : Colors.orangeAccent,
+                                                  fontSize: 11,
+                                                  fontWeight: FontWeight.bold,
+                                                ),
+                                              ),
+                                            ),
+                                          ],
+                                        ),
+                                        const Divider(height: 20, color: Colors.white10),
+                                        Row(
+                                          children: [
+                                            if (client.email.isNotEmpty) ...[
+                                              const Icon(Icons.email_outlined, size: 14, color: kPremiumMuted),
+                                              const SizedBox(width: 4),
+                                              Expanded(
+                                                child: Text(
+                                                  client.email,
+                                                  style: const TextStyle(color: kPremiumMuted, fontSize: 12),
+                                                  maxLines: 1,
+                                                  overflow: TextOverflow.ellipsis,
+                                                ),
+                                              ),
+                                            ],
+                                            if (client.phone.isNotEmpty) ...[
+                                              const SizedBox(width: 8),
+                                              const Icon(Icons.phone_outlined, size: 14, color: kPremiumMuted),
+                                              const SizedBox(width: 4),
+                                              Text(
+                                                client.phone,
+                                                style: const TextStyle(color: kPremiumMuted, fontSize: 12),
+                                              ),
+                                            ],
+                                          ],
+                                        ),
+                                        const SizedBox(height: 12),
+                                        Row(
+                                          mainAxisAlignment: MainAxisAlignment.end,
+                                          children: [
+                                            OutlinedButton.icon(
+                                              style: OutlinedButton.styleFrom(
+                                                side: const BorderSide(color: Colors.teal),
+                                                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                                                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                                              ),
+                                              icon: const Icon(Icons.chat_bubble_outline, size: 16, color: Colors.tealAccent),
+                                              label: const Text('Message Client', style: TextStyle(color: Colors.tealAccent, fontSize: 12)),
+                                              onPressed: () {
+                                                Navigator.push(
+                                                  context,
+                                                  MaterialPageRoute(
+                                                    builder: (context) => ChatPage(
+                                                      initialTargetId: client.id,
+                                                      initialTargetName: client.name,
+                                                      initialTargetSubtitle: client.company,
+                                                      initialTargetType: 'client',
+                                                      initialTargetEmail: client.email,
+                                                      initialTargetPhone: client.phone,
+                                                    ),
+                                                  ),
+                                                );
+                                              },
+                                            ),
+                                            const SizedBox(width: 8),
+                                            TextButton.icon(
+                                              style: TextButton.styleFrom(
+                                                foregroundColor: kPremiumGold,
+                                                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                                              ),
+                                              icon: const Icon(Icons.info_outline, size: 16),
+                                              label: const Text('Account Details', style: TextStyle(fontSize: 12)),
+                                              onPressed: () => _showClientDetails(client),
+                                            ),
+                                          ],
+                                        ),
+                                      ],
+                                    ),
+                                  ),
+                                );
+                              },
+                            ),
+                          const SizedBox(height: 32),
+
+                          // SECTION 4: MY ATTENDANCE & LEAVE REQUESTS
                           Row(
                             mainAxisAlignment: MainAxisAlignment.spaceBetween,
                             crossAxisAlignment: CrossAxisAlignment.center,
@@ -763,7 +1050,7 @@ class _EmployeeDashboardPageState extends State<EmployeeDashboardPage> {
                                               Text(lType, style: const TextStyle(fontWeight: FontWeight.bold, color: kPremiumText, fontSize: 15)),
                                               const SizedBox(height: 2),
                                               Text(
-                                                '$sDate  →  $eDate ${reason.isNotEmpty ? "($reason)" : ""}',
+                                                '$sDate  \u2192  $eDate ${reason.isNotEmpty ? "($reason)" : ""}',
                                                 style: const TextStyle(color: kPremiumMuted, fontSize: 12),
                                                 maxLines: 2,
                                                 overflow: TextOverflow.ellipsis,
@@ -870,6 +1157,96 @@ class _EmployeeDashboardPageState extends State<EmployeeDashboardPage> {
                 overflow: TextOverflow.ellipsis,
               ),
             ],
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _showClientDetails(ClientModel client) {
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        backgroundColor: kPremiumSurface,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(20),
+          side: const BorderSide(color: kPremiumBorder),
+        ),
+        title: Row(
+          children: [
+            const Icon(Icons.business_center_outlined, color: Colors.tealAccent),
+            const SizedBox(width: 10),
+            Expanded(
+              child: Text(
+                client.name,
+                style: const TextStyle(fontWeight: FontWeight.bold, color: kPremiumGold, fontSize: 18),
+                overflow: TextOverflow.ellipsis,
+              ),
+            ),
+          ],
+        ),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            _clientDetailRow('Company', client.company),
+            _clientDetailRow('Status', client.status),
+            _clientDetailRow('Email', client.email),
+            _clientDetailRow('Phone', client.phone.isNotEmpty ? client.phone : 'Not provided'),
+            _clientDetailRow('Project Type', client.projectType),
+            if (client.budget > 0)
+              _clientDetailRow('Allocated Budget', '₹${client.budget.toStringAsFixed(0)}'),
+            if (client.adminNote.isNotEmpty)
+              _clientDetailRow('Admin Note', client.adminNote),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Close', style: TextStyle(color: kPremiumMuted)),
+          ),
+          ElevatedButton.icon(
+            style: ElevatedButton.styleFrom(
+              backgroundColor: Colors.teal,
+              foregroundColor: Colors.white,
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+            ),
+            icon: const Icon(Icons.chat, size: 16),
+            label: const Text('Open Chat'),
+            onPressed: () {
+              Navigator.pop(context);
+              Navigator.push(
+                context,
+                MaterialPageRoute(
+                  builder: (context) => ChatPage(
+                    initialTargetId: client.id,
+                    initialTargetName: client.name,
+                    initialTargetSubtitle: client.company,
+                    initialTargetType: 'client',
+                    initialTargetEmail: client.email,
+                    initialTargetPhone: client.phone,
+                  ),
+                ),
+              );
+            },
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _clientDetailRow(String label, String value) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 5),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          SizedBox(
+            width: 110,
+            child: Text(label, style: const TextStyle(color: kPremiumMuted, fontSize: 13)),
+          ),
+          Expanded(
+            child: Text(value, style: const TextStyle(color: kPremiumText, fontWeight: FontWeight.w600, fontSize: 13)),
           ),
         ],
       ),

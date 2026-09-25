@@ -1,4 +1,4 @@
-import 'package:flutter/material.dart';
+﻿import 'package:flutter/material.dart';
 import 'package:business_managment_app/services/app_data_store.dart';
 import 'package:business_managment_app/services/supabase_service.dart';
 import 'package:business_managment_app/core/premium_theme.dart';
@@ -98,15 +98,6 @@ class _AddTaskPageState extends State<AddTaskPage> {
     final minStr = time.minute.toString().padLeft(2, '0');
     final period = time.period == DayPeriod.am ? 'AM' : 'PM';
     return '$y-$m-$d  $hourStr:$minStr $period';
-  }
-
-  String _formatDateTimeIso(DateTime date, TimeOfDay time) {
-    final y = date.year.toString().padLeft(4, '0');
-    final m = date.month.toString().padLeft(2, '0');
-    final d = date.day.toString().padLeft(2, '0');
-    final h = time.hour.toString().padLeft(2, '0');
-    final min = time.minute.toString().padLeft(2, '0');
-    return '$y-$m-$d $h:$min:00';
   }
 
   Future<void> _saveTask() async {

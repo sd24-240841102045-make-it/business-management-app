@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:business_managment_app/admin/home_page.dart';
 import 'package:business_managment_app/employee/employee_dashboard_page.dart';
 import 'package:business_managment_app/admin/employees_page.dart';
@@ -19,6 +18,7 @@ import 'package:business_managment_app/client/client_dashboard_page.dart';
 import 'package:business_managment_app/employee/assigned_consultations_page.dart';
 import 'package:business_managment_app/services/supabase_service.dart';
 import 'package:business_managment_app/core/premium_theme.dart';
+import 'package:business_managment_app/shared/notification_widgets.dart';
 
 class MainShell extends StatefulWidget {
   const MainShell({super.key});
@@ -43,36 +43,46 @@ class _MainShellState extends State<MainShell> {
   @override
   Widget build(BuildContext context) {
     final role = SupabaseService().currentRole;
-    final isAdmin = role == 'admin';
-    final isEmployee = role == 'employee';
-    final isClient = role == 'client';
+    final bool isAdmin = role == 'admin' || role == 'owner';
+    final bool isEmployee = role == 'employee';
+    final bool isClient = role == 'client';
 
-    // 1. Dynamic Main Navigation
+    // Route clients directly to their dashboard
+    if (isClient) {
+      return const ClientDashboardPage();
+    }
+
     final List<Widget> pages = [];
     final List<String> titles = [];
     final List<NavigationRailDestination> railDestinations = [];
     final List<NavigationDestination> bottomDestinations = [];
 
-    // Dashboard
-    if (isAdmin) {
-      pages.add(HomeBody(onNavigate: _onItemTapped));
-      titles.add('Dashboard');
-    } else if (isEmployee) {
-      pages.add(const EmployeeDashboardPage());
-      titles.add('My Dashboard');
-    } else {
-      pages.add(const ClientDashboardPage());
-      titles.add('Client Portal');
-    }
-    
+    // All Roles: Home
+    pages.add(isAdmin
+        ? HomeBody(
+            onNavigate: (index) {
+              _onItemTapped(index);
+              if (index == 1) {
+                WidgetsBinding.instance.addPostFrameCallback((_) {
+                  _employeesKey.currentState?.showAddEmployeeDialog();
+                });
+              } else if (index == 2) {
+                WidgetsBinding.instance.addPostFrameCallback((_) {
+                  _clientsKey.currentState?.showAddClientDialog();
+                });
+              }
+            },
+          )
+        : const EmployeeDashboardPage());
+    titles.add(isAdmin ? 'Enterprise Portal' : 'Employee Workspace');
     railDestinations.add(const NavigationRailDestination(
-      icon: Icon(Icons.dashboard_outlined),
-      selectedIcon: Icon(Icons.dashboard),
+      icon: Icon(Icons.home_outlined),
+      selectedIcon: Icon(Icons.home),
       label: Text('Home'),
     ));
     bottomDestinations.add(const NavigationDestination(
-      icon: Icon(Icons.dashboard_outlined),
-      selectedIcon: Icon(Icons.dashboard),
+      icon: Icon(Icons.home_outlined),
+      selectedIcon: Icon(Icons.home),
       label: 'Home',
     ));
 
@@ -107,7 +117,6 @@ class _MainShellState extends State<MainShell> {
         label: 'Clients',
       ));
     }
-
 
     // Employee & Admin: Attendance
     if (isAdmin || isEmployee) {
@@ -150,21 +159,22 @@ class _MainShellState extends State<MainShell> {
 
         return Scaffold(
           appBar: AppBar(
+            leading: Builder(
+              builder: (drawerContext) => IconButton(
+                icon: const Icon(Icons.menu_rounded),
+                tooltip: 'All Enterprise Modules',
+                onPressed: () {
+                  Scaffold.of(drawerContext).openDrawer();
+                },
+              ),
+            ),
             title: Text(
               titles[_selectedIndex],
               style: const TextStyle(fontWeight: FontWeight.bold),
             ),
             backgroundColor: Colors.transparent,
             actions: [
-              Builder(
-                builder: (drawerContext) => IconButton(
-                  icon: const Icon(Icons.apps),
-                  tooltip: 'Enterprise Drawer & Modules',
-                  onPressed: () {
-                    Scaffold.of(drawerContext).openEndDrawer();
-                  },
-                ),
-              ),
+              const NotificationBell(),
               if (isAdmin)
                 IconButton(
                   icon: const Icon(Icons.person_add_alt_1),
@@ -186,10 +196,19 @@ class _MainShellState extends State<MainShell> {
                   );
                 },
               ),
+              IconButton(
+                icon: const Icon(Icons.settings_outlined),
+                tooltip: 'Settings & Security',
+                onPressed: () {
+                  Navigator.push(
+                    context,
+                    MaterialPageRoute(builder: (context) => const SettingsPage()),
+                  );
+                },
+              ),
             ],
           ),
-          drawer: _buildEnterpriseDrawer(context, isAdmin, isEmployee, isClient),
-          endDrawer: _buildEnterpriseDrawer(context, isAdmin, isEmployee, isClient),
+          drawer: _buildNavigationDrawer(context, isAdmin, isEmployee, isClient),
           body: isWideScreen
               ? Row(
                   children: [
@@ -254,14 +273,14 @@ class _MainShellState extends State<MainShell> {
                     },
                     child: KeyedSubtree(
                       key: ValueKey<int>(_selectedIndex),
-                      child: pages[_selectedIndex],
+                      child: pages[(_selectedIndex < pages.length && _selectedIndex >= 0) ? _selectedIndex : 0],
                     ),
                   ),
                 ),
           bottomNavigationBar: isWideScreen
               ? null
               : NavigationBar(
-                  selectedIndex: _selectedIndex,
+                  selectedIndex: (_selectedIndex < bottomDestinations.length && _selectedIndex >= 0) ? _selectedIndex : 0,
                   onDestinationSelected: _onItemTapped,
                   destinations: bottomDestinations,
                 ),
@@ -270,9 +289,9 @@ class _MainShellState extends State<MainShell> {
     );
   }
 
-  Widget _buildEnterpriseDrawer(BuildContext context, bool isAdmin, bool isEmployee, bool isClient) {
+  Widget _buildNavigationDrawer(BuildContext context, bool isAdmin, bool isEmployee, bool isClient) {
     final user = SupabaseService().currentUser;
-    final role = SupabaseService().currentRole ?? 'User';
+    final role = SupabaseService().currentRole;
     final orgName = SupabaseService().currentOrganization?['name'] ?? 'Enterprise Workspace';
 
     return Drawer(
@@ -320,7 +339,7 @@ class _MainShellState extends State<MainShell> {
             ),
           ),
 
-          // Drawer Navigation Items List
+          // Drawer Navigation Items List - All Modules Fully Workable
           Expanded(
             child: ListView(
               padding: EdgeInsets.zero,
@@ -356,6 +375,15 @@ class _MainShellState extends State<MainShell> {
                     onTap: () {
                       Navigator.pop(context);
                       _onItemTapped(2);
+                    },
+                  ),
+                if (isEmployee)
+                  ListTile(
+                    leading: const Icon(Icons.business_center_outlined, color: Colors.teal),
+                    title: const Text('My Allocated Clients'),
+                    onTap: () {
+                      Navigator.pop(context);
+                      _onItemTapped(0);
                     },
                   ),
                 if (isAdmin || isEmployee)
@@ -403,7 +431,7 @@ class _MainShellState extends State<MainShell> {
                   title: const Text('Assigned Consultations'),
                   onTap: () {
                     Navigator.pop(context);
-                    Navigator.push(context, MaterialPageRoute(builder: (context) => AssignedConsultationsPage()));
+                    Navigator.push(context, MaterialPageRoute(builder: (context) => const AssignedConsultationsPage()));
                   },
                 ),
                 if (isAdmin)
@@ -415,7 +443,7 @@ class _MainShellState extends State<MainShell> {
                       Navigator.push(context, MaterialPageRoute(builder: (context) => const FinancePage()));
                     },
                   ),
-                if (isAdmin)
+                if (isAdmin || isEmployee)
                   ListTile(
                     leading: const Icon(Icons.receipt_long_outlined, color: Colors.purple),
                     title: const Text('Invoices & Billing'),

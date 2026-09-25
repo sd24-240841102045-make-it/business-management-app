@@ -5,6 +5,8 @@ import 'package:business_managment_app/core/premium_theme.dart';
 import 'package:business_managment_app/shared/chat_page.dart';
 import 'package:business_managment_app/shared/project_details_page.dart';
 import 'package:business_managment_app/employee/assigned_consultations_page.dart';
+import 'package:business_managment_app/shared/project_page.dart';
+import 'package:business_managment_app/shared/invoice_page.dart';
 
 class ClientDashboardPage extends StatefulWidget {
   const ClientDashboardPage({super.key});
@@ -18,8 +20,6 @@ class _ClientDashboardPageState extends State<ClientDashboardPage> {
   bool _isLoading = true;
   String _clientName = '';
   String _clientCompany = '';
-  String _clientEmail = '';
-  String _projectType = 'General Consulting';
   double _budget = 0.0;
   String _status = 'Active';
   String _assignedManager = 'Unassigned';
@@ -48,7 +48,6 @@ class _ClientDashboardPageState extends State<ClientDashboardPage> {
   Future<void> _fetchClientData() async {
     final user = SupabaseService().currentUser;
     final userEmail = user?.email ?? '';
-    _clientEmail = userEmail;
 
     final metaName = user?.userMetadata?['full_name']?.toString() ?? '';
     final metaCompany = user?.userMetadata?['company']?.toString() ?? '';
@@ -109,7 +108,6 @@ class _ClientDashboardPageState extends State<ClientDashboardPage> {
     if (matchedClient != null) {
       _clientName = matchedClient.name;
       _clientCompany = matchedClient.company;
-      _projectType = matchedClient.projectType;
       _budget = matchedClient.budget;
       _status = matchedClient.status;
       _assignedManager = matchedClient.assignedEmployeeName ?? 'Unassigned';
@@ -117,7 +115,6 @@ class _ClientDashboardPageState extends State<ClientDashboardPage> {
     } else {
       _clientName = metaName.isNotEmpty ? metaName : (userEmail.contains('@') ? userEmail.split('@')[0] : 'Client User');
       _clientCompany = metaCompany.isNotEmpty ? metaCompany : 'Client Account';
-      _projectType = 'General Consulting';
       _budget = 0.0;
       _status = 'Active';
       _assignedManager = 'Unassigned';
@@ -133,9 +130,7 @@ class _ClientDashboardPageState extends State<ClientDashboardPage> {
             .select('*, clients(*)')
             .eq('client_id', matchedClient.id)
             .order('created_at', ascending: false);
-        if (res is List) {
-          projectsData = List<Map<String, dynamic>>.from(res);
-        }
+        projectsData = List<Map<String, dynamic>>.from(res);
       }
     } catch (e) {
       debugPrint('Error fetching client projects: $e');
@@ -192,16 +187,16 @@ class _ClientDashboardPageState extends State<ClientDashboardPage> {
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          // ── HERO BANNER ──────────────────────────────
+                          // -- HERO BANNER ------------------------------
                           HeroBanner(
                             title: _clientCompany,
-                            subtitle: 'Welcome back 👋, $_clientName',
+                            subtitle: 'Welcome back \u{1F44B}, $_clientName',
                             badge: 'Client Portal',
                           ),
 
                           const SizedBox(height: 18),
 
-                          // ── OVERVIEW BANNER CARD ─────────────────────
+                          // -- OVERVIEW BANNER CARD ---------------------
                           GlassCard(
                             padding: const EdgeInsets.all(18),
                             child: Column(
@@ -257,7 +252,7 @@ class _ClientDashboardPageState extends State<ClientDashboardPage> {
                                           Row(
                                             children: [
                                               Expanded(child: _overviewItem('Active Projects', '${_clientProjects.length}')),
-                                              Expanded(child: _overviewItem('Allocated Budget', '₹${_budget.toStringAsFixed(0)}')),
+                                              Expanded(child: _overviewItem('Allocated Budget', '\u{20B9}${_budget.toStringAsFixed(0)}')),
                                             ],
                                           ),
                                           const SizedBox(height: 14),
@@ -274,7 +269,7 @@ class _ClientDashboardPageState extends State<ClientDashboardPage> {
                                       mainAxisAlignment: MainAxisAlignment.spaceBetween,
                                       children: [
                                         Expanded(child: _overviewItem('Active Projects', '${_clientProjects.length}')),
-                                        Expanded(child: _overviewItem('Allocated Budget', '₹${_budget.toStringAsFixed(0)}')),
+                                        Expanded(child: _overviewItem('Allocated Budget', '\u{20B9}${_budget.toStringAsFixed(0)}')),
                                         Expanded(child: _overviewItem('Account Lead', _assignedManager.isNotEmpty ? _assignedManager.split(' ').first : 'Unassigned')),
                                         Expanded(child: _overviewItem('Support Tier', 'Priority')),
                                       ],
@@ -316,7 +311,7 @@ class _ClientDashboardPageState extends State<ClientDashboardPage> {
                             const SizedBox(height: 20),
                           ],
 
-                          // ── PORTAL MODULES ──────────────
+                          // -- PORTAL MODULES --------------
                           const Text(
                             'Client Portal Modules',
                             style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
@@ -336,7 +331,19 @@ class _ClientDashboardPageState extends State<ClientDashboardPage> {
                                       title: 'My Projects',
                                       subtitle: '${_clientProjects.length} Active Workflows',
                                       color: kPremiumGold,
-                                      onTap: () {},
+                                      onTap: () {
+                                        Navigator.push(context, MaterialPageRoute(builder: (context) => const ProjectPage()));
+                                      },
+                                    ),
+                                    const SizedBox(height: 10),
+                                    _actionCard(
+                                      icon: Icons.receipt_long_outlined,
+                                      title: 'Invoices & Billing',
+                                      subtitle: 'Account Billing & Slips',
+                                      color: Colors.purpleAccent,
+                                      onTap: () {
+                                        Navigator.push(context, MaterialPageRoute(builder: (context) => const InvoicePage()));
+                                      },
                                     ),
                                     const SizedBox(height: 10),
                                     _actionCard(
@@ -345,7 +352,7 @@ class _ClientDashboardPageState extends State<ClientDashboardPage> {
                                       subtitle: _assignedManager,
                                       color: kPremiumBlue,
                                       onTap: () {
-                                        Navigator.push(context, MaterialPageRoute(builder: (context) => AssignedConsultationsPage()));
+                                        Navigator.push(context, MaterialPageRoute(builder: (context) => const AssignedConsultationsPage()));
                                       },
                                     ),
                                     const SizedBox(height: 10),
@@ -365,17 +372,28 @@ class _ClientDashboardPageState extends State<ClientDashboardPage> {
                               return GridView.count(
                                 shrinkWrap: true,
                                 physics: const NeverScrollableScrollPhysics(),
-                                crossAxisCount: 3,
+                                crossAxisCount: 4,
                                 crossAxisSpacing: 12,
                                 mainAxisSpacing: 12,
-                                childAspectRatio: 1.5,
+                                childAspectRatio: 1.3,
                                 children: [
                                   _actionCard(
                                     icon: Icons.folder_open_outlined,
                                     title: 'My Projects',
                                     subtitle: '${_clientProjects.length} Active Workflows',
                                     color: kPremiumGold,
-                                    onTap: () {},
+                                    onTap: () {
+                                      Navigator.push(context, MaterialPageRoute(builder: (context) => const ProjectPage()));
+                                    },
+                                  ),
+                                  _actionCard(
+                                    icon: Icons.receipt_long_outlined,
+                                    title: 'Invoices & Billing',
+                                    subtitle: 'Account Invoices',
+                                    color: Colors.purpleAccent,
+                                    onTap: () {
+                                      Navigator.push(context, MaterialPageRoute(builder: (context) => const InvoicePage()));
+                                    },
                                   ),
                                   _actionCard(
                                     icon: Icons.person_pin_outlined,
@@ -383,13 +401,13 @@ class _ClientDashboardPageState extends State<ClientDashboardPage> {
                                     subtitle: _assignedManager,
                                     color: kPremiumBlue,
                                     onTap: () {
-                                      Navigator.push(context, MaterialPageRoute(builder: (context) => AssignedConsultationsPage()));
+                                      Navigator.push(context, MaterialPageRoute(builder: (context) => const AssignedConsultationsPage()));
                                     },
                                   ),
                                   _actionCard(
                                     icon: Icons.chat_bubble_outline,
                                     title: 'Live Support Chat',
-                                    subtitle: 'Instant HR / Executive Lead',
+                                    subtitle: 'Instant HR / Exec Lead',
                                     color: kPremiumTeal,
                                     onTap: () {
                                       Navigator.push(context, MaterialPageRoute(builder: (context) => const ChatPage()));
@@ -402,7 +420,7 @@ class _ClientDashboardPageState extends State<ClientDashboardPage> {
 
                           const SizedBox(height: 24),
 
-                          // ── MY LIVE ENTERPRISE PROJECTS ──────────────────────────────
+                          // -- MY LIVE ENTERPRISE PROJECTS ------------------------------
                           Row(
                             mainAxisAlignment: MainAxisAlignment.spaceBetween,
                             children: [
@@ -436,7 +454,7 @@ class _ClientDashboardPageState extends State<ClientDashboardPage> {
                                 final p = _clientProjects[index];
                                 final pName = p['name']?.toString() ?? 'Enterprise Project';
                                 final pStatus = p['status']?.toString() ?? 'In Progress';
-                                final pDeadline = p['deadline']?.toString()?.split(' ')?.first ?? 'No deadline set';
+                                final pDeadline = p['deadline']?.toString().split(' ').first ?? 'No deadline set';
                                 final double budgetVal = (p['budget'] as num?)?.toDouble() ?? 0.0;
                                 final double progress = pStatus == 'Completed' ? 1.0 : 0.65;
 
@@ -484,7 +502,7 @@ class _ClientDashboardPageState extends State<ClientDashboardPage> {
                                                 ),
                                                 const SizedBox(height: 2),
                                                 Text(
-                                                  'Target Deadline: $pDeadline • Budget: ₹${budgetVal.toStringAsFixed(0)}',
+                                                  'Target Deadline: $pDeadline \u2022 Budget: \u{20B9}${budgetVal.toStringAsFixed(0)}',
                                                   style: const TextStyle(fontSize: 12, color: kPremiumMuted),
                                                   maxLines: 1,
                                                   overflow: TextOverflow.ellipsis,
