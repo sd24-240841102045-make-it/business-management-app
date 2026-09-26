@@ -1,4 +1,7 @@
+import 'dart:async';
+import 'dart:math' as math;
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:business_managment_app/services/notification_service.dart';
 import 'package:business_managment_app/core/premium_theme.dart';
 
@@ -19,6 +22,7 @@ class _NotificationBellState extends State<NotificationBell>
   late Animation<double> _shakeAnimation;
   int _lastCount = 0;
   OverlayEntry? _overlayEntry;
+  StreamSubscription<List<AppNotification>>? _sub;
 
   @override
   void initState() {
@@ -31,10 +35,15 @@ class _NotificationBellState extends State<NotificationBell>
       CurvedAnimation(parent: _shakeController, curve: Curves.elasticIn),
     );
 
-    _service.notificationsStream.listen((_) {
+    _sub = _service.notificationsStream.listen((_) {
+      if (!mounted) return;
       final newCount = _service.unreadCount;
       if (newCount > _lastCount) {
-        _shakeController.forward(from: 0).then((_) => _shakeController.reverse());
+        if (mounted && !_shakeController.isAnimating) {
+          _shakeController.forward(from: 0).then((_) {
+            if (mounted) _shakeController.reverse();
+          });
+        }
       }
       _lastCount = newCount;
       if (mounted) setState(() {});
@@ -43,12 +52,32 @@ class _NotificationBellState extends State<NotificationBell>
 
   @override
   void dispose() {
+    _sub?.cancel();
+    _sub = null;
     _shakeController.dispose();
     _overlayEntry?.remove();
+    _overlayEntry = null;
     super.dispose();
   }
 
-  void _togglePanel() {
+  void _openNotifications() {
+    final width = MediaQuery.of(context).size.width;
+
+    if (width < 600) {
+      // Mobile phone: Show modal bottom sheet
+      showModalBottomSheet(
+        context: context,
+        isScrollControlled: true,
+        backgroundColor: Colors.transparent,
+        builder: (ctx) => const _MobileNotificationSheet(),
+      );
+    } else {
+      // Desktop / Tablet: Show anchored overlay panel
+      _toggleOverlayPanel();
+    }
+  }
+
+  void _toggleOverlayPanel() {
     if (_overlayEntry != null) {
       _overlayEntry!.remove();
       _overlayEntry = null;
@@ -70,9 +99,10 @@ class _NotificationBellState extends State<NotificationBell>
       ),
     );
 
-    Overlay.of(context).insert(_overlayEntry!);
-    _service.markAllRead();
-    setState(() {});
+    final overlay = Overlay.maybeOf(context);
+    if (overlay != null) {
+      overlay.insert(_overlayEntry!);
+    }
   }
 
   @override
@@ -90,7 +120,7 @@ class _NotificationBellState extends State<NotificationBell>
           IconButton(
             icon: const Icon(Icons.notifications_outlined),
             tooltip: 'Notifications',
-            onPressed: _togglePanel,
+            onPressed: _openNotifications,
           ),
           if (unread > 0)
             Positioned(
@@ -98,28 +128,31 @@ class _NotificationBellState extends State<NotificationBell>
               top: 6,
               child: AnimatedContainer(
                 duration: const Duration(milliseconds: 300),
-                constraints: const BoxConstraints(minWidth: 16, minHeight: 16),
+                constraints: const BoxConstraints(minWidth: 17, minHeight: 17),
                 padding: const EdgeInsets.symmetric(horizontal: 4),
                 decoration: BoxDecoration(
                   gradient: const LinearGradient(
-                    colors: [Color(0xFFFF6B6B), Color(0xFFEE0979)],
+                    colors: [Color(0xFFFF5252), Color(0xFFFF1744)],
                   ),
-                  borderRadius: BorderRadius.circular(8),
+                  borderRadius: BorderRadius.circular(9),
                   boxShadow: [
                     BoxShadow(
-                      color: Colors.red.withValues(alpha: 0.5),
-                      blurRadius: 6,
+                      color: Colors.red.withOpacity(0.55),
+                      blurRadius: 7,
+                      spreadRadius: 1,
                     ),
                   ],
                 ),
-                child: Text(
-                  unread > 99 ? '99+' : unread.toString(),
-                  style: const TextStyle(
-                    color: Colors.white,
-                    fontSize: 10,
-                    fontWeight: FontWeight.w800,
+                child: Center(
+                  child: Text(
+                    unread > 99 ? '99+' : unread.toString(),
+                    style: const TextStyle(
+                      color: Colors.white,
+                      fontSize: 10,
+                      fontWeight: FontWeight.w900,
+                    ),
+                    textAlign: TextAlign.center,
                   ),
-                  textAlign: TextAlign.center,
                 ),
               ),
             ),
@@ -130,7 +163,56 @@ class _NotificationBellState extends State<NotificationBell>
 }
 
 // ─────────────────────────────────────────────
-// Notification Panel Overlay
+// Mobile Notification Sheet
+// ─────────────────────────────────────────────
+class _MobileNotificationSheet extends StatelessWidget {
+  const _MobileNotificationSheet();
+
+  @override
+  Widget build(BuildContext context) {
+    final height = MediaQuery.of(context).size.height;
+    return Container(
+      height: height * 0.82,
+      decoration: BoxDecoration(
+        color: const Color(0xFF131325),
+        borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
+        border: Border.all(color: kPremiumBorder.withOpacity(0.5)),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.65),
+            blurRadius: 30,
+            offset: const Offset(0, -6),
+          ),
+        ],
+      ),
+      child: Column(
+        children: [
+          const SizedBox(height: 10),
+          // Drag handle bar
+          Center(
+            child: Container(
+              width: 44,
+              height: 4.5,
+              decoration: BoxDecoration(
+                color: Colors.white.withOpacity(0.2),
+                borderRadius: BorderRadius.circular(2.5),
+              ),
+            ),
+          ),
+          const SizedBox(height: 6),
+          Expanded(
+            child: NotificationCenterView(
+              onClose: () => Navigator.pop(context),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+// ─────────────────────────────────────────────
+// Desktop Notification Panel Overlay
 // ─────────────────────────────────────────────
 class _NotificationPanel extends StatefulWidget {
   final Offset anchorOffset;
@@ -152,7 +234,6 @@ class __NotificationPanelState extends State<_NotificationPanel>
   late AnimationController _animController;
   late Animation<double> _fadeAnim;
   late Animation<Offset> _slideAnim;
-  final _service = NotificationService();
 
   @override
   void initState() {
@@ -163,14 +244,10 @@ class __NotificationPanelState extends State<_NotificationPanel>
     );
     _fadeAnim = CurvedAnimation(parent: _animController, curve: Curves.easeOut);
     _slideAnim = Tween<Offset>(
-      begin: const Offset(0, -0.05),
+      begin: const Offset(0, -0.04),
       end: Offset.zero,
     ).animate(CurvedAnimation(parent: _animController, curve: Curves.easeOut));
     _animController.forward();
-
-    _service.notificationsStream.listen((_) {
-      if (mounted) setState(() {});
-    });
   }
 
   @override
@@ -182,15 +259,13 @@ class __NotificationPanelState extends State<_NotificationPanel>
   @override
   Widget build(BuildContext context) {
     final screenWidth = MediaQuery.of(context).size.width;
-    final panelWidth = 360.0;
+    final panelWidth = 380.0;
     double left = widget.anchorOffset.dx + widget.anchorSize.width / 2 - panelWidth / 2;
-    left = left.clamp(8.0, screenWidth - panelWidth - 8);
-
-    final notifications = _service.notifications;
+    left = left.clamp(12.0, screenWidth - panelWidth - 12);
 
     return Stack(
       children: [
-        // Dimmed background tap to close
+        // Transparent tap dismiss background
         Positioned.fill(
           child: GestureDetector(
             onTap: widget.onClose,
@@ -199,7 +274,7 @@ class __NotificationPanelState extends State<_NotificationPanel>
           ),
         ),
         Positioned(
-          top: widget.anchorOffset.dy + widget.anchorSize.height + 4,
+          top: widget.anchorOffset.dy + widget.anchorSize.height + 6,
           left: left,
           child: FadeTransition(
             opacity: _fadeAnim,
@@ -209,118 +284,22 @@ class __NotificationPanelState extends State<_NotificationPanel>
                 color: Colors.transparent,
                 child: Container(
                   width: panelWidth,
-                  constraints: const BoxConstraints(maxHeight: 520),
+                  height: 560,
                   decoration: BoxDecoration(
-                    color: const Color(0xFF1A1A2E),
-                    borderRadius: BorderRadius.circular(16),
+                    color: const Color(0xFF131325),
+                    borderRadius: BorderRadius.circular(20),
                     border: Border.all(color: kPremiumBorder),
                     boxShadow: [
                       BoxShadow(
-                        color: Colors.black.withValues(alpha: 0.5),
-                        blurRadius: 24,
-                        offset: const Offset(0, 8),
+                        color: Colors.black.withOpacity(0.6),
+                        blurRadius: 30,
+                        offset: const Offset(0, 12),
                       ),
                     ],
                   ),
-                  child: Column(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      // Header
-                      Padding(
-                        padding: const EdgeInsets.fromLTRB(16, 14, 8, 10),
-                        child: Row(
-                          children: [
-                            const Icon(
-                              Icons.notifications_active_rounded,
-                              color: kPremiumGold,
-                              size: 20,
-                            ),
-                            const SizedBox(width: 8),
-                            const Expanded(
-                              child: Text(
-                                'Notifications',
-                                style: TextStyle(
-                                  fontSize: 15,
-                                  fontWeight: FontWeight.w700,
-                                  color: Colors.white,
-                                ),
-                              ),
-                            ),
-                            if (notifications.isNotEmpty)
-                              TextButton(
-                                onPressed: () {
-                                  _service.clearAll();
-                                  setState(() {});
-                                },
-                                style: TextButton.styleFrom(
-                                  padding: const EdgeInsets.symmetric(horizontal: 8),
-                                ),
-                                child: Text(
-                                  'Clear all',
-                                  style: TextStyle(
-                                    fontSize: 11,
-                                    color: kPremiumMuted,
-                                  ),
-                                ),
-                              ),
-                            IconButton(
-                              icon: const Icon(Icons.close_rounded, size: 18),
-                              color: kPremiumMuted,
-                              padding: EdgeInsets.zero,
-                              constraints: const BoxConstraints(),
-                              onPressed: widget.onClose,
-                            ),
-                          ],
-                        ),
-                      ),
-                      const Divider(height: 1, color: Color(0xFF2A2A4A)),
-                      // Body
-                      if (notifications.isEmpty)
-                        Padding(
-                          padding: const EdgeInsets.symmetric(vertical: 40),
-                          child: Column(
-                            children: [
-                              Icon(
-                                Icons.notifications_off_outlined,
-                                size: 42,
-                                color: kPremiumMuted.withValues(alpha: 0.4),
-                              ),
-                              const SizedBox(height: 12),
-                              Text(
-                                'No notifications yet',
-                                style: TextStyle(
-                                  color: kPremiumMuted,
-                                  fontSize: 13,
-                                ),
-                              ),
-                            ],
-                          ),
-                        )
-                      else
-                        Flexible(
-                          child: ListView.separated(
-                            shrinkWrap: true,
-                            padding: const EdgeInsets.symmetric(vertical: 6),
-                            itemCount: notifications.length,
-                            separatorBuilder: (_, __) => const Divider(
-                              height: 1,
-                              indent: 16,
-                              endIndent: 16,
-                              color: Color(0xFF2A2A4A),
-                            ),
-                            itemBuilder: (ctx, i) {
-                              final n = notifications[i];
-                              return _NotificationTile(
-                                notification: n,
-                                onDismiss: () {
-                                  _service.notifications; // refresh
-                                  setState(() {});
-                                },
-                              );
-                            },
-                          ),
-                        ),
-                    ],
+                  child: ClipRRect(
+                    borderRadius: BorderRadius.circular(20),
+                    child: NotificationCenterView(onClose: widget.onClose),
                   ),
                 ),
               ),
@@ -333,89 +312,448 @@ class __NotificationPanelState extends State<_NotificationPanel>
 }
 
 // ─────────────────────────────────────────────
-// Single Notification Tile
+// Reusable Notification Center View
 // ─────────────────────────────────────────────
-class _NotificationTile extends StatelessWidget {
-  final AppNotification notification;
-  final VoidCallback onDismiss;
+class NotificationCenterView extends StatefulWidget {
+  final VoidCallback? onClose;
 
-  const _NotificationTile({
+  const NotificationCenterView({super.key, this.onClose});
+
+  @override
+  State<NotificationCenterView> createState() => _NotificationCenterViewState();
+}
+
+class _NotificationCenterViewState extends State<NotificationCenterView> {
+  final _service = NotificationService();
+  String _selectedFilter = 'all'; // all, unread, invitations, tasks, messages
+
+  @override
+  Widget build(BuildContext context) {
+    return StreamBuilder<List<AppNotification>>(
+      stream: _service.notificationsStream,
+      initialData: _service.notifications,
+      builder: (context, snapshot) {
+        final allNotifs = snapshot.data ?? [];
+        final showInvitations = allNotifs.any((n) => n.category == 'invitations');
+        final showTasks = allNotifs.any((n) => n.category == 'tasks' || n.category == 'general');
+        final showBilling = allNotifs.any((n) => n.category == 'billing');
+        final showMessages = allNotifs.any((n) => n.category == 'messages');
+        final showTeam = allNotifs.any((n) => n.category == 'team');
+
+        final filtered = allNotifs.where((n) {
+          if (_selectedFilter == 'unread') return !n.isRead;
+          if (_selectedFilter == 'invitations') return n.category == 'invitations';
+          if (_selectedFilter == 'tasks') return n.category == 'tasks' || n.category == 'general';
+          if (_selectedFilter == 'billing') return n.category == 'billing';
+          if (_selectedFilter == 'messages') return n.category == 'messages';
+          if (_selectedFilter == 'team') return n.category == 'team';
+          return true;
+        }).toList();
+
+        final unreadCount = _service.unreadCount;
+
+        return Column(
+          children: [
+            // ── Header ──
+            Padding(
+              padding: const EdgeInsets.fromLTRB(18, 12, 12, 10),
+              child: Row(
+                children: [
+                  Container(
+                    padding: const EdgeInsets.all(7),
+                    decoration: BoxDecoration(
+                      color: kPremiumGold.withOpacity(0.15),
+                      borderRadius: BorderRadius.circular(10),
+                    ),
+                    child: const Icon(
+                      Icons.notifications_active_rounded,
+                      color: kPremiumGold,
+                      size: 20,
+                    ),
+                  ),
+                  const SizedBox(width: 10),
+                  const Expanded(
+                    child: Text(
+                      'Notifications',
+                      style: TextStyle(
+                        fontSize: 16,
+                        fontWeight: FontWeight.w800,
+                        color: Colors.white,
+                      ),
+                    ),
+                  ),
+                  if (unreadCount > 0)
+                    TextButton.icon(
+                      icon: const Icon(Icons.done_all_rounded, size: 15, color: kPremiumGold),
+                      label: const Text(
+                        'Mark all read',
+                        style: TextStyle(fontSize: 12, color: kPremiumGold, fontWeight: FontWeight.w600),
+                      ),
+                      onPressed: () => _service.markAllRead(),
+                      style: TextButton.styleFrom(
+                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                        minimumSize: Size.zero,
+                        tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                      ),
+                    ),
+                  if (allNotifs.isNotEmpty)
+                    IconButton(
+                      icon: const Icon(Icons.delete_sweep_outlined, size: 20),
+                      color: kPremiumMuted,
+                      tooltip: 'Clear all',
+                      onPressed: () {
+                        _service.clearAll();
+                      },
+                    ),
+                  if (widget.onClose != null)
+                    IconButton(
+                      icon: const Icon(Icons.close_rounded, size: 20),
+                      color: kPremiumMuted,
+                      onPressed: widget.onClose,
+                    ),
+                ],
+              ),
+            ),
+
+            // ── Filter Chips ──
+            SingleChildScrollView(
+              scrollDirection: Axis.horizontal,
+              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 4),
+              child: Row(
+                children: [
+                  _buildFilterChip('all', 'All (${allNotifs.length})'),
+                  _buildFilterChip('unread', 'Unread ($unreadCount)'),
+                  if (showTasks) _buildFilterChip('tasks', 'Work & Tasks 📋'),
+                  if (showBilling) _buildFilterChip('billing', 'Billing 🧾'),
+                  if (showMessages) _buildFilterChip('messages', 'Messages 💬'),
+                  if (showInvitations) _buildFilterChip('invitations', 'Invitations 📩'),
+                  if (showTeam) _buildFilterChip('team', 'Team 👥'),
+                ],
+              ),
+            ),
+
+            const SizedBox(height: 6),
+            const Divider(height: 1, color: Color(0xFF22223B)),
+
+            // ── Notifications List or Empty State ──
+            Expanded(
+              child: filtered.isEmpty
+                  ? _buildEmptyState()
+                  : ListView.separated(
+                      padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 12),
+                      itemCount: filtered.length,
+                      separatorBuilder: (context, index) => const SizedBox(height: 8),
+                      itemBuilder: (ctx, i) {
+                        final notif = filtered[i];
+                        return _NotificationCard(
+                          notification: notif,
+                          onMarkRead: () => _service.markRead(notif.id),
+                          onDelete: () => _service.deleteNotification(notif.id),
+                        );
+                      },
+                    ),
+            ),
+          ],
+        );
+      },
+    );
+  }
+
+  Widget _buildFilterChip(String key, String label) {
+    final isSelected = _selectedFilter == key;
+    return Padding(
+      padding: const EdgeInsets.only(right: 6),
+      child: InkWell(
+        onTap: () => setState(() => _selectedFilter = key),
+        borderRadius: BorderRadius.circular(16),
+        child: AnimatedContainer(
+          duration: const Duration(milliseconds: 200),
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+          decoration: BoxDecoration(
+            color: isSelected ? kPremiumGold : const Color(0xFF1E1E34),
+            borderRadius: BorderRadius.circular(16),
+            border: Border.all(
+              color: isSelected ? kPremiumGold : Colors.white.withOpacity(0.08),
+            ),
+          ),
+          child: Text(
+            label,
+            style: TextStyle(
+              fontSize: 11.5,
+              fontWeight: isSelected ? FontWeight.w800 : FontWeight.w500,
+              color: isSelected ? Colors.black : Colors.white70,
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildEmptyState() {
+    return Center(
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 24),
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Container(
+              padding: const EdgeInsets.all(18),
+              decoration: BoxDecoration(
+                color: Colors.white.withOpacity(0.04),
+                shape: BoxShape.circle,
+              ),
+              child: Icon(
+                _selectedFilter == 'unread'
+                    ? Icons.mark_email_read_outlined
+                    : Icons.notifications_off_outlined,
+                size: 40,
+                color: kPremiumMuted.withOpacity(0.4),
+              ),
+            ),
+            const SizedBox(height: 12),
+            Text(
+              _selectedFilter == 'unread'
+                  ? 'All caught up! No unread notifications'
+                  : 'No notifications in this filter',
+              style: const TextStyle(
+                color: Colors.white70,
+                fontSize: 13.5,
+                fontWeight: FontWeight.w600,
+              ),
+              textAlign: TextAlign.center,
+            ),
+            const SizedBox(height: 4),
+            Text(
+              'Real-time alerts for project works, billing & messages will appear here.',
+              style: TextStyle(
+                color: kPremiumMuted.withOpacity(0.6),
+                fontSize: 11.5,
+              ),
+              textAlign: TextAlign.center,
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+// ─────────────────────────────────────────────
+// Notification Card with Rich Details & Quick Copy
+// ─────────────────────────────────────────────
+class _NotificationCard extends StatelessWidget {
+  final AppNotification notification;
+  final VoidCallback onMarkRead;
+  final VoidCallback onDelete;
+
+  const _NotificationCard({
     required this.notification,
-    required this.onDismiss,
+    required this.onMarkRead,
+    required this.onDelete,
   });
 
   @override
   Widget build(BuildContext context) {
     final n = notification;
-    return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Container(
-            width: 36,
-            height: 36,
-            decoration: BoxDecoration(
-              color: n.color.withValues(alpha: 0.15),
-              borderRadius: BorderRadius.circular(10),
-              border: Border.all(color: n.color.withValues(alpha: 0.3)),
+    final payload = n.payload ?? {};
+    final inviteCode = payload['code']?.toString() ?? payload['token']?.toString() ?? '';
+
+    return Dismissible(
+      key: Key(n.id),
+      direction: DismissDirection.endToStart,
+      background: Container(
+        alignment: Alignment.centerRight,
+        padding: const EdgeInsets.only(right: 18),
+        decoration: BoxDecoration(
+          color: Colors.red.withOpacity(0.3),
+          borderRadius: BorderRadius.circular(14),
+        ),
+        child: const Icon(Icons.delete_outline, color: Colors.white, size: 22),
+      ),
+      onDismissed: (_) => onDelete(),
+      child: InkWell(
+        onTap: () {
+          if (!n.isRead) onMarkRead();
+        },
+        borderRadius: BorderRadius.circular(14),
+        child: AnimatedContainer(
+          duration: const Duration(milliseconds: 250),
+          padding: const EdgeInsets.all(12),
+          decoration: BoxDecoration(
+            color: n.isRead ? const Color(0xFF18182E) : const Color(0xFF22223D),
+            borderRadius: BorderRadius.circular(14),
+            border: Border.all(
+              color: n.isRead
+                  ? Colors.white.withOpacity(0.06)
+                  : n.color.withOpacity(0.35),
             ),
-            child: Icon(n.icon, color: n.color, size: 18),
+            boxShadow: n.isRead
+                ? null
+                : [
+                    BoxShadow(
+                      color: n.color.withOpacity(0.12),
+                      blurRadius: 10,
+                      offset: const Offset(0, 3),
+                    ),
+                  ],
           ),
-          const SizedBox(width: 10),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  n.title,
-                  style: const TextStyle(
-                    fontSize: 12.5,
-                    fontWeight: FontWeight.w700,
-                    color: Colors.white,
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  // Icon
+                  Container(
+                    width: 36,
+                    height: 36,
+                    decoration: BoxDecoration(
+                      color: n.color.withOpacity(0.16),
+                      borderRadius: BorderRadius.circular(10),
+                      border: Border.all(color: n.color.withOpacity(0.3)),
+                    ),
+                    child: Icon(n.icon, color: n.color, size: 19),
                   ),
-                ),
-                const SizedBox(height: 2),
-                Text(
+                  const SizedBox(width: 10),
+
+                  // Title & Meta
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Row(
+                          children: [
+                            Container(
+                              padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                              decoration: BoxDecoration(
+                                color: n.color.withOpacity(0.15),
+                                borderRadius: BorderRadius.circular(6),
+                              ),
+                              child: Text(
+                                n.categoryLabel.toUpperCase(),
+                                style: TextStyle(
+                                  fontSize: 8.5,
+                                  fontWeight: FontWeight.w800,
+                                  color: n.color,
+                                  letterSpacing: 0.5,
+                                ),
+                              ),
+                            ),
+                            const Spacer(),
+                            Text(
+                              n.timeAgo,
+                              style: TextStyle(
+                                fontSize: 10.5,
+                                color: kPremiumMuted.withOpacity(0.65),
+                              ),
+                            ),
+                            if (!n.isRead) ...[
+                              const SizedBox(width: 6),
+                              Container(
+                                width: 7,
+                                height: 7,
+                                decoration: const BoxDecoration(
+                                  color: kPremiumGold,
+                                  shape: BoxShape.circle,
+                                ),
+                              ),
+                            ],
+                          ],
+                        ),
+                        const SizedBox(height: 4),
+                        Text(
+                          n.title,
+                          style: TextStyle(
+                            fontSize: 13,
+                            fontWeight: n.isRead ? FontWeight.w600 : FontWeight.w800,
+                            color: Colors.white,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+
+              const SizedBox(height: 6),
+              // Body text
+              Padding(
+                padding: const EdgeInsets.only(left: 46),
+                child: Text(
                   n.body,
                   style: TextStyle(
-                    fontSize: 11.5,
-                    color: kPremiumMuted,
-                    height: 1.3,
+                    fontSize: 12,
+                    color: n.isRead ? kPremiumMuted : Colors.white.withOpacity(0.85),
+                    height: 1.35,
                   ),
                 ),
-                const SizedBox(height: 3),
-                Text(
-                  _timeAgo(n.timestamp),
-                  style: TextStyle(
-                    fontSize: 10,
-                    color: kPremiumMuted.withValues(alpha: 0.5),
+              ),
+
+              // Interactive Action: Access Code Copy Banner if available
+              if (inviteCode.isNotEmpty) ...[
+                const SizedBox(height: 8),
+                Padding(
+                  padding: const EdgeInsets.only(left: 46),
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                    decoration: BoxDecoration(
+                      color: kPremiumGold.withOpacity(0.12),
+                      borderRadius: BorderRadius.circular(8),
+                      border: Border.all(color: kPremiumGold.withOpacity(0.3)),
+                    ),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        const Icon(Icons.vpn_key_rounded, size: 14, color: kPremiumGold),
+                        const SizedBox(width: 6),
+                        Text(
+                          'Code: $inviteCode',
+                          style: const TextStyle(
+                            fontSize: 12,
+                            fontWeight: FontWeight.w800,
+                            color: kPremiumGold,
+                            letterSpacing: 1.2,
+                          ),
+                        ),
+                        const SizedBox(width: 10),
+                        InkWell(
+                          onTap: () {
+                            Clipboard.setData(ClipboardData(text: inviteCode));
+                            HapticFeedback.selectionClick();
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              SnackBar(
+                                content: Text('Access code "$inviteCode" copied!'),
+                                duration: const Duration(seconds: 2),
+                                backgroundColor: const Color(0xFF2ECC71),
+                              ),
+                            );
+                          },
+                          child: Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                            decoration: BoxDecoration(
+                              color: kPremiumGold,
+                              borderRadius: BorderRadius.circular(4),
+                            ),
+                            child: const Text(
+                              'COPY',
+                              style: TextStyle(
+                                fontSize: 9.5,
+                                fontWeight: FontWeight.w900,
+                                color: Colors.black,
+                              ),
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
                   ),
                 ),
               ],
-            ),
+            ],
           ),
-          if (!n.isRead)
-            Container(
-              width: 7,
-              height: 7,
-              margin: const EdgeInsets.only(top: 4, left: 4),
-              decoration: BoxDecoration(
-                color: kPremiumGold,
-                shape: BoxShape.circle,
-              ),
-            ),
-        ],
+        ),
       ),
     );
-  }
-
-  String _timeAgo(DateTime dt) {
-    final diff = DateTime.now().difference(dt);
-    if (diff.inSeconds < 60) return 'just now';
-    if (diff.inMinutes < 60) return '${diff.inMinutes}m ago';
-    if (diff.inHours < 24) return '${diff.inHours}h ago';
-    return '${diff.inDays}d ago';
   }
 }
 
@@ -441,32 +779,42 @@ class _NotificationToastState extends State<NotificationToast>
   late AnimationController _ctrl;
   late Animation<double> _fade;
   late Animation<Offset> _slide;
+  Timer? _dismissTimer;
 
   @override
   void initState() {
     super.initState();
     _ctrl = AnimationController(
       vsync: this,
-      duration: const Duration(milliseconds: 300),
+      duration: const Duration(milliseconds: 320),
     );
     _fade = CurvedAnimation(parent: _ctrl, curve: Curves.easeOut);
     _slide = Tween<Offset>(
-      begin: const Offset(1.2, 0),
+      begin: const Offset(0, -0.6),
       end: Offset.zero,
     ).animate(CurvedAnimation(parent: _ctrl, curve: Curves.easeOutBack));
     _ctrl.forward();
 
-    Future.delayed(const Duration(seconds: 4), _dismiss);
+    _dismissTimer = Timer(const Duration(seconds: 5), () {
+      if (mounted) _dismiss();
+    });
   }
 
   void _dismiss() async {
+    _dismissTimer?.cancel();
+    _dismissTimer = null;
     if (!mounted) return;
-    await _ctrl.reverse();
-    widget.onDismiss();
+    try {
+      await _ctrl.reverse();
+    } catch (_) {}
+    if (mounted) {
+      widget.onDismiss();
+    }
   }
 
   @override
   void dispose() {
+    _dismissTimer?.cancel();
     _ctrl.dispose();
     super.dispose();
   }
@@ -474,44 +822,50 @@ class _NotificationToastState extends State<NotificationToast>
   @override
   Widget build(BuildContext context) {
     final n = widget.notification;
-    return FadeTransition(
-      opacity: _fade,
-      child: SlideTransition(
-        position: _slide,
-        child: GestureDetector(
-          onTap: _dismiss,
+    final payload = n.payload ?? {};
+    final inviteCode = payload['code']?.toString() ?? payload['token']?.toString() ?? '';
+
+    return Material(
+      color: Colors.transparent,
+      child: FadeTransition(
+        opacity: _fade,
+        child: SlideTransition(
+          position: _slide,
+          child: GestureDetector(
+            onTap: _dismiss,
           child: Container(
-            width: 320,
             padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
             decoration: BoxDecoration(
-              color: const Color(0xFF1A1A2E),
-              borderRadius: BorderRadius.circular(14),
-              border: Border.all(color: n.color.withValues(alpha: 0.4)),
+              color: const Color(0xFF151528),
+              borderRadius: BorderRadius.circular(16),
+              border: Border.all(color: n.color.withOpacity(0.4)),
               boxShadow: [
                 BoxShadow(
-                  color: n.color.withValues(alpha: 0.2),
-                  blurRadius: 16,
-                  offset: const Offset(0, 4),
+                  color: n.color.withOpacity(0.25),
+                  blurRadius: 20,
+                  offset: const Offset(0, 6),
                 ),
                 BoxShadow(
-                  color: Colors.black.withValues(alpha: 0.4),
-                  blurRadius: 12,
+                  color: Colors.black.withOpacity(0.6),
+                  blurRadius: 16,
+                  offset: const Offset(0, 4),
                 ),
               ],
             ),
             child: Row(
+              crossAxisAlignment: CrossAxisAlignment.center,
               children: [
                 Container(
                   width: 38,
                   height: 38,
                   decoration: BoxDecoration(
-                    color: n.color.withValues(alpha: 0.15),
+                    color: n.color.withOpacity(0.18),
                     borderRadius: BorderRadius.circular(10),
-                    border: Border.all(color: n.color.withValues(alpha: 0.3)),
+                    border: Border.all(color: n.color.withOpacity(0.35)),
                   ),
                   child: Icon(n.icon, color: n.color, size: 20),
                 ),
-                const SizedBox(width: 10),
+                const SizedBox(width: 12),
                 Expanded(
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
@@ -521,17 +875,63 @@ class _NotificationToastState extends State<NotificationToast>
                         n.title,
                         style: const TextStyle(
                           fontSize: 13,
-                          fontWeight: FontWeight.w700,
+                          fontWeight: FontWeight.w800,
                           color: Colors.white,
                         ),
                       ),
                       const SizedBox(height: 2),
                       Text(
                         n.body,
-                        style: TextStyle(fontSize: 11.5, color: kPremiumMuted),
+                        style: TextStyle(
+                          fontSize: 11.5,
+                          color: Colors.white.withOpacity(0.8),
+                        ),
                         maxLines: 2,
                         overflow: TextOverflow.ellipsis,
                       ),
+                      if (inviteCode.isNotEmpty) ...[
+                        const SizedBox(height: 4),
+                        Row(
+                          children: [
+                            Text(
+                              'Code: $inviteCode',
+                              style: const TextStyle(
+                                fontSize: 11,
+                                fontWeight: FontWeight.bold,
+                                color: kPremiumGold,
+                              ),
+                            ),
+                            const SizedBox(width: 8),
+                            InkWell(
+                              onTap: () {
+                                Clipboard.setData(ClipboardData(text: inviteCode));
+                                HapticFeedback.selectionClick();
+                                ScaffoldMessenger.of(context).showSnackBar(
+                                  SnackBar(
+                                    content: Text('Code $inviteCode copied!'),
+                                    duration: const Duration(seconds: 1),
+                                  ),
+                                );
+                              },
+                              child: Container(
+                                padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1.5),
+                                decoration: BoxDecoration(
+                                  color: kPremiumGold,
+                                  borderRadius: BorderRadius.circular(4),
+                                ),
+                                child: const Text(
+                                  'COPY',
+                                  style: TextStyle(
+                                    fontSize: 8.5,
+                                    fontWeight: FontWeight.w900,
+                                    color: Colors.black,
+                                  ),
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ],
                     ],
                   ),
                 ),
@@ -547,8 +947,9 @@ class _NotificationToastState extends State<NotificationToast>
           ),
         ),
       ),
-    );
-  }
+    ),
+  );
+}
 }
 
 // ─────────────────────────────────────────────
@@ -566,27 +967,55 @@ class ToastManager extends StatefulWidget {
 }
 
 class ToastManagerState extends State<ToastManager> {
+  final GlobalKey<OverlayState> _overlayKey = GlobalKey<OverlayState>();
   final List<OverlayEntry> _toasts = [];
 
   void showToast(AppNotification notification) {
     late OverlayEntry entry;
     entry = OverlayEntry(
-      builder: (ctx) => Positioned(
-        right: 16,
-        bottom: 80 + _toasts.indexOf(entry) * 80.0,
-        child: NotificationToast(
-          notification: notification,
-          onDismiss: () {
-            entry.remove();
-            _toasts.remove(entry);
-          },
-        ),
-      ),
+      builder: (ctx) {
+        final screenWidth = MediaQuery.of(ctx).size.width;
+        final toastWidth = math.min(420.0, screenWidth - 32);
+        final topPadding = MediaQuery.of(ctx).padding.top;
+        final idx = _toasts.indexOf(entry);
+
+        return Positioned(
+          top: topPadding + 10 + (idx >= 0 ? idx * 75.0 : 0.0),
+          left: (screenWidth - toastWidth) / 2,
+          width: toastWidth,
+          child: Material(
+            color: Colors.transparent,
+            child: SizedBox(
+              width: toastWidth,
+              child: NotificationToast(
+                notification: notification,
+                onDismiss: () {
+                  if (entry.mounted) {
+                    entry.remove();
+                  }
+                  _toasts.remove(entry);
+                },
+              ),
+            ),
+          ),
+        );
+      },
     );
-    _toasts.add(entry);
-    Overlay.of(context).insert(entry);
+
+    final overlay = _overlayKey.currentState ?? Overlay.maybeOf(context);
+    if (overlay != null) {
+      _toasts.add(entry);
+      overlay.insert(entry);
+    }
   }
 
   @override
-  Widget build(BuildContext context) => widget.child;
+  Widget build(BuildContext context) {
+    return Overlay(
+      key: _overlayKey,
+      initialEntries: [
+        OverlayEntry(builder: (ctx) => widget.child),
+      ],
+    );
+  }
 }

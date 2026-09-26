@@ -8,6 +8,7 @@ class MessageBubble extends StatelessWidget {
   final bool isMe;
   final bool isDesktop;
   final bool showSenderHeader;
+  final String? searchQuery;
   final VoidCallback? onRetry;
   final VoidCallback? onEdit;
   final VoidCallback? onDelete;
@@ -18,6 +19,7 @@ class MessageBubble extends StatelessWidget {
     required this.isMe,
     this.isDesktop = false,
     this.showSenderHeader = false,
+    this.searchQuery,
     this.onRetry,
     this.onEdit,
     this.onDelete,
@@ -66,6 +68,18 @@ class MessageBubble extends StatelessWidget {
                   );
                 },
               ),
+              if (message.deliveryStatus == MessageDeliveryStatus.error && onRetry != null) ...[
+                const Divider(height: 1, color: Colors.white10),
+                ListTile(
+                  leading: const Icon(Icons.refresh_rounded, color: kPremiumGold),
+                  title: const Text('Retry Sending', style: TextStyle(color: kPremiumText, fontWeight: FontWeight.bold)),
+                  subtitle: const Text('Attempt to re-send this failed message', style: TextStyle(color: kPremiumMuted, fontSize: 11)),
+                  onTap: () {
+                    Navigator.pop(ctx);
+                    onRetry?.call();
+                  },
+                ),
+              ],
               if (isMe && !message.isDeleted && onEdit != null) ...[
                 const Divider(height: 1, color: Colors.white10),
                 ListTile(
@@ -114,19 +128,120 @@ class MessageBubble extends StatelessWidget {
       case MessageDeliveryStatus.error:
         return GestureDetector(
           onTap: onRetry,
-          child: Row(
-            mainAxisSize: MainAxisSize.min,
-            children: const [
-              Icon(Icons.error_outline_rounded, size: 13, color: kPremiumDanger),
-              SizedBox(width: 3),
-              Text(
-                'Retry',
-                style: TextStyle(fontSize: 10, color: kPremiumDanger, fontWeight: FontWeight.bold),
-              ),
-            ],
+          child: Container(
+            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+            decoration: BoxDecoration(
+              color: kPremiumDanger.withOpacity(0.2),
+              borderRadius: BorderRadius.circular(6),
+              border: Border.all(color: kPremiumDanger.withOpacity(0.5)),
+            ),
+            child: const Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Icon(Icons.error_outline_rounded, size: 12, color: kPremiumDanger),
+                SizedBox(width: 4),
+                Text(
+                  'Failed • Tap to Retry',
+                  style: TextStyle(fontSize: 10, color: kPremiumDanger, fontWeight: FontWeight.bold),
+                ),
+              ],
+            ),
           ),
         );
     }
+  }
+
+  Widget _buildMessageText() {
+    if (message.isDeleted) {
+      return const Text(
+        'This message was deleted',
+        style: TextStyle(
+          fontSize: 14,
+          height: 1.35,
+          fontStyle: FontStyle.italic,
+          color: Colors.white60,
+        ),
+      );
+    }
+
+    final query = searchQuery?.trim();
+    if (query == null || query.isEmpty) {
+      return Text(
+        message.message,
+        style: const TextStyle(
+          fontSize: 14,
+          height: 1.35,
+          color: Colors.white,
+        ),
+      );
+    }
+
+    final text = message.message;
+    final lowerText = text.toLowerCase();
+    final lowerQuery = query.toLowerCase();
+
+    if (!lowerText.contains(lowerQuery)) {
+      return Text(
+        text,
+        style: const TextStyle(
+          fontSize: 14,
+          height: 1.35,
+          color: Colors.white,
+        ),
+      );
+    }
+
+    final spans = <InlineSpan>[];
+    int start = 0;
+
+    while (true) {
+      final index = lowerText.indexOf(lowerQuery, start);
+      if (index == -1) {
+        if (start < text.length) {
+          spans.add(TextSpan(text: text.substring(start)));
+        }
+        break;
+      }
+
+      if (index > start) {
+        spans.add(TextSpan(text: text.substring(start, index)));
+      }
+
+      spans.add(
+        WidgetSpan(
+          alignment: PlaceholderAlignment.middle,
+          child: Container(
+            padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 1),
+            decoration: BoxDecoration(
+              color: kPremiumGold.withOpacity(0.35),
+              borderRadius: BorderRadius.circular(4),
+              border: Border.all(color: kPremiumGold.withOpacity(0.8), width: 1),
+            ),
+            child: Text(
+              text.substring(index, index + query.length),
+              style: const TextStyle(
+                color: Colors.white,
+                fontWeight: FontWeight.bold,
+                fontSize: 14,
+              ),
+            ),
+          ),
+        ),
+      );
+
+      start = index + query.length;
+    }
+
+    return RichText(
+      text: TextSpan(
+        style: const TextStyle(
+          fontSize: 14,
+          height: 1.35,
+          color: Colors.white,
+        ),
+        children: spans,
+      ),
+    );
   }
 
   @override
@@ -152,7 +267,9 @@ class MessageBubble extends StatelessWidget {
               bottomRight: isMe ? const Radius.circular(4) : const Radius.circular(18),
             ),
             border: isMe
-                ? Border.all(color: kPremiumBlue.withOpacity(0.35))
+                ? (message.deliveryStatus == MessageDeliveryStatus.error
+                    ? Border.all(color: kPremiumDanger.withOpacity(0.85), width: 1.2)
+                    : Border.all(color: kPremiumBlue.withOpacity(0.35)))
                 : Border.all(color: kPremiumBorder),
             boxShadow: [
               BoxShadow(
@@ -198,15 +315,7 @@ class MessageBubble extends StatelessWidget {
                 ),
                 const SizedBox(height: 5),
               ],
-              Text(
-                message.isDeleted ? 'This message was deleted' : message.message,
-                style: TextStyle(
-                  fontSize: 14,
-                  height: 1.35,
-                  fontStyle: message.isDeleted ? FontStyle.italic : FontStyle.normal,
-                  color: message.isDeleted ? Colors.white60 : Colors.white,
-                ),
-              ),
+              _buildMessageText(),
               const SizedBox(height: 4),
               Row(
                 mainAxisSize: MainAxisSize.min,

@@ -15,6 +15,7 @@ dependencies:
   encrypt: ^5.0.3
   crypto: ^3.0.6
   overlay_support: ^2.1.0
+  url_launcher: ^6.3.0
 
 dev_dependencies:
   flutter_test:

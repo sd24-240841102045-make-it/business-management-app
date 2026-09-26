@@ -8,9 +8,41 @@ AS $$
 BEGIN
     RETURN EXISTS (
         SELECT 1 FROM public.invitations 
-        WHERE token = invite_code_param 
+        WHERE upper(trim(token)) = upper(trim(invite_code_param)) 
           AND status = 'pending' 
           AND expires_at > now()
+    );
+END;
+$$;
+
+-- 1b. Create a secure function to fetch invitation details for login pre-fill
+CREATE OR REPLACE FUNCTION public.get_invite_details(invite_code_param text)
+RETURNS json
+LANGUAGE plpgsql
+SECURITY DEFINER
+AS $$
+DECLARE
+    invitation_record record;
+    org_record record;
+BEGIN
+    SELECT * INTO invitation_record 
+    FROM public.invitations 
+    WHERE upper(trim(token)) = upper(trim(invite_code_param))
+      AND status = 'pending'
+      AND expires_at > now();
+
+    IF NOT FOUND THEN
+        RETURN json_build_object('valid', false);
+    END IF;
+
+    SELECT name INTO org_record FROM public.organizations WHERE id = invitation_record.organization_id;
+
+    RETURN json_build_object(
+        'valid', true,
+        'email', invitation_record.email,
+        'role', invitation_record.role,
+        'organization_id', invitation_record.organization_id,
+        'organization_name', COALESCE(org_record.name, 'Enterprise Workspace')
     );
 END;
 $$;
@@ -87,6 +119,26 @@ BEGIN
         VALUES (new_org_id, auth.uid(), 'Staff', 'General', 'Active');
     END IF;
 
+    -- Notify the inviter admin
+    BEGIN
+        INSERT INTO public.notifications (organization_id, user_id, title, body, event_type, payload)
+        VALUES (
+            new_org_id,
+            invitation_record.invited_by,
+            '🎉 Invitation Accepted!',
+            COALESCE(user_email, 'A member') || ' has accepted the invite and joined as ' || assigned_role || '.',
+            'invitation_accepted',
+            json_build_object(
+                'email', user_email,
+                'role', assigned_role,
+                'token', invite_code_param
+            )
+        );
+    EXCEPTION WHEN OTHERS THEN
+        NULL; -- Non-blocking
+    END;
+
     RETURN json_build_object('success', true, 'organization_id', new_org_id, 'role', assigned_role);
 END;
 $$;
+

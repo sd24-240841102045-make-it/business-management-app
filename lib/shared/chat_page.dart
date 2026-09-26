@@ -43,7 +43,12 @@ class _ChatPageState extends State<ChatPage> {
 
   final TextEditingController _msgController = TextEditingController();
   final TextEditingController _searchController = TextEditingController();
+  final TextEditingController _inChatSearchController = TextEditingController();
   final ScrollController _scrollController = ScrollController();
+
+  // In-chat search state
+  bool _showInChatSearch = false;
+  String _inChatSearchQuery = '';
 
   // Active conversation state
   String? _activeConversationId;
@@ -104,6 +109,7 @@ class _ChatPageState extends State<ChatPage> {
     _scrollController.dispose();
     _msgController.dispose();
     _searchController.dispose();
+    _inChatSearchController.dispose();
     _store.removeListener(_onStoreUpdate);
 
     if (_activeConversationId != null) {
@@ -235,6 +241,156 @@ class _ChatPageState extends State<ChatPage> {
   // ---------------------------------------------------------------------------
   // DIRECT USER CHAT SELECTION (RELATIONSHIP CONTROLLED)
   // ---------------------------------------------------------------------------
+  void _showCommunicationRestrictionDialog({
+    required String targetId,
+    required String targetName,
+    required String targetRole,
+    String? email,
+  }) {
+    final myRole = SupabaseService().currentRole.toLowerCase();
+    final isAdmin = myRole == 'admin' || myRole == 'owner';
+    final sharedProjects = _messagingService.getSharedProjects(targetId);
+
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: kPremiumSurface,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(20),
+          side: const BorderSide(color: kPremiumBorder),
+        ),
+        title: Row(
+          children: [
+            Container(
+              padding: const EdgeInsets.all(8),
+              decoration: BoxDecoration(
+                color: kPremiumDanger.withOpacity(0.15),
+                shape: BoxShape.circle,
+              ),
+              child: const Icon(Icons.lock_person_outlined, color: kPremiumDanger, size: 22),
+            ),
+            const SizedBox(width: 12),
+            const Expanded(
+              child: Text(
+                'Direct Chat Restricted',
+                style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16, color: kPremiumText),
+              ),
+            ),
+          ],
+        ),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              'Direct 1-on-1 messaging with $targetName (${targetRole.toUpperCase()}) is restricted under current organizational communication policies.',
+              style: const TextStyle(color: kPremiumMuted, fontSize: 13, height: 1.4),
+            ),
+            const SizedBox(height: 14),
+
+            // Shared Project Rectification Option
+            if (sharedProjects.isNotEmpty) ...[
+              Container(
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: kPremiumGold.withOpacity(0.08),
+                  borderRadius: BorderRadius.circular(12),
+                  border: Border.all(color: kPremiumGold.withOpacity(0.35)),
+                ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Row(
+                      children: [
+                        Icon(Icons.hub_outlined, size: 16, color: kPremiumGold),
+                        SizedBox(width: 6),
+                        Text(
+                          'Available Shared Project Channel',
+                          style: TextStyle(color: kPremiumGold, fontWeight: FontWeight.bold, fontSize: 12),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 6),
+                    Text(
+                      'You and $targetName collaborate on "${sharedProjects.first.name}". You can communicate securely through that project thread.',
+                      style: const TextStyle(color: kPremiumText, fontSize: 12),
+                    ),
+                    const SizedBox(height: 10),
+                    SizedBox(
+                      width: double.infinity,
+                      child: ElevatedButton.icon(
+                        icon: const Icon(Icons.arrow_forward_rounded, size: 16),
+                        label: Text('Open ${sharedProjects.first.name} Chat'),
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: kPremiumGold,
+                          foregroundColor: kPremiumBg,
+                          padding: const EdgeInsets.symmetric(vertical: 10),
+                        ),
+                        onPressed: () {
+                          Navigator.pop(ctx);
+                          _selectProject(sharedProjects.first.id, sharedProjects.first.name);
+                        },
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ] else ...[
+              Container(
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: Colors.white.withOpacity(0.04),
+                  borderRadius: BorderRadius.circular(12),
+                  border: Border.all(color: Colors.white10),
+                ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Row(
+                      children: [
+                        Icon(Icons.info_outline, size: 16, color: kPremiumBlue),
+                        SizedBox(width: 6),
+                        Text(
+                          'Policy Reason & Guidance',
+                          style: TextStyle(color: kPremiumBlue, fontWeight: FontWeight.bold, fontSize: 12),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 6),
+                    Text(
+                      myRole == 'client'
+                          ? 'Client accounts are organized around projects. Specialists can be contacted directly once assigned to an active project or client account.'
+                          : 'Direct communication between these roles requires an active project assignment or permission from an organization administrator.',
+                      style: const TextStyle(color: kPremiumMuted, fontSize: 11.5, height: 1.3),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ],
+        ),
+        actions: [
+          if (isAdmin)
+            TextButton(
+              onPressed: () {
+                Navigator.pop(ctx);
+                _showCommunicationSettingsDialog();
+              },
+              child: const Text('Configure Policies', style: TextStyle(color: kPremiumGold, fontWeight: FontWeight.bold)),
+            ),
+          ElevatedButton(
+            onPressed: () => Navigator.pop(ctx),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: Colors.white12,
+              foregroundColor: Colors.white,
+            ),
+            child: const Text('Understood'),
+          ),
+        ],
+      ),
+    );
+  }
+
   Future<void> _selectTarget(
     String id,
     String name,
@@ -258,14 +414,11 @@ class _ChatPageState extends State<ChatPage> {
 
     if (!canChat) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text(
-              '🔒 Direct communication restricted. Please use the assigned Project Chat for work-related discussions.',
-            ),
-            backgroundColor: kPremiumDanger,
-            duration: Duration(seconds: 4),
-          ),
+        _showCommunicationRestrictionDialog(
+          targetId: id,
+          targetName: name,
+          targetRole: type,
+          email: email,
         );
       }
       return;
@@ -459,8 +612,46 @@ class _ChatPageState extends State<ChatPage> {
   }
 
   // ---------------------------------------------------------------------------
-  // MESSAGE EDIT & DELETE ACTIONS
+  // MESSAGE RETRY, EDIT & DELETE ACTIONS
   // ---------------------------------------------------------------------------
+  Future<void> _handleRetryMessage(ChatMessageModel msg) async {
+    final convId = _activeConversationId;
+    if (convId == null) return;
+
+    final result = await _messagingService.retrySendMessage(
+      conversationId: convId,
+      failedMessage: msg,
+    );
+
+    if (result == null && mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: const Row(
+            children: [
+              Icon(Icons.wifi_off_rounded, color: Colors.white, size: 18),
+              SizedBox(width: 10),
+              Expanded(
+                child: Text(
+                  'Message delivery failed. Please check your connection or organization permissions.',
+                  style: TextStyle(fontSize: 12),
+                ),
+              ),
+            ],
+          ),
+          backgroundColor: kPremiumDanger,
+          behavior: SnackBarBehavior.floating,
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+          action: SnackBarAction(
+            label: 'Retry',
+            textColor: Colors.white,
+            onPressed: () => _handleRetryMessage(msg),
+          ),
+          duration: const Duration(seconds: 4),
+        ),
+      );
+    }
+  }
+
   Future<void> _handleEditMessage(ChatMessageModel msg) async {
     final editCtrl = TextEditingController(text: msg.message);
     final convId = _activeConversationId;
@@ -877,12 +1068,23 @@ class _ChatPageState extends State<ChatPage> {
 
               // Search Bar
               TextField(
+                controller: _searchController,
                 onChanged: (val) => setState(() => _searchQuery = val),
                 style: const TextStyle(color: kPremiumText, fontSize: 14),
                 decoration: InputDecoration(
                   hintText: 'Search projects or contacts...',
                   hintStyle: const TextStyle(color: kPremiumMuted, fontSize: 13),
                   prefixIcon: const Icon(Icons.search_rounded, color: kPremiumGold, size: 20),
+                  suffixIcon: _searchQuery.isNotEmpty
+                      ? IconButton(
+                          icon: const Icon(Icons.clear_rounded, color: kPremiumMuted, size: 18),
+                          tooltip: 'Clear search',
+                          onPressed: () {
+                            _searchController.clear();
+                            setState(() => _searchQuery = '');
+                          },
+                        )
+                      : null,
                   filled: true,
                   fillColor: kPremiumSurface.withOpacity(0.7),
                   contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
@@ -1011,7 +1213,6 @@ class _ChatPageState extends State<ChatPage> {
 
     // 4. Authorized Clients
     final filteredClients = _store.clients.where((c) {
-      final cUid = (c.userId != null && c.userId!.isNotEmpty) ? c.userId! : c.id;
       if (myUserId != null && (c.userId == myUserId || c.id == myUserId)) return false;
 
       if (isClient) {
@@ -1032,6 +1233,15 @@ class _ChatPageState extends State<ChatPage> {
       if (q.isEmpty) return true;
       return c.name.toLowerCase().contains(q) || c.company.toLowerCase().contains(q);
     }).toList();
+
+    final totalMatches = authorizedProjects.length +
+        filteredAdmins.length +
+        filteredEmployees.length +
+        (isClient ? 0 : filteredClients.length);
+
+    if (q.isNotEmpty && totalMatches == 0) {
+      return _buildSearchEmptyState(tabIndex: 0);
+    }
 
     return ListView(
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
@@ -1153,6 +1363,187 @@ class _ChatPageState extends State<ChatPage> {
     );
   }
 
+  Widget _buildSearchEmptyState({required int tabIndex}) {
+    final myRole = SupabaseService().currentRole.toLowerCase();
+    final isClient = myRole == 'client';
+    final isEmployee = myRole == 'employee';
+    final isAdmin = myRole == 'admin' || myRole == 'owner';
+
+    return Center(
+      child: SingleChildScrollView(
+        padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 24),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Container(
+              padding: const EdgeInsets.all(16),
+              decoration: BoxDecoration(
+                color: kPremiumGold.withOpacity(0.08),
+                shape: BoxShape.circle,
+                border: Border.all(color: kPremiumGold.withOpacity(0.2)),
+              ),
+              child: const Icon(Icons.search_off_rounded, size: 36, color: kPremiumGold),
+            ),
+            const SizedBox(height: 14),
+            Text(
+              'No matches for "$_searchQuery"',
+              style: const TextStyle(
+                fontSize: 16,
+                fontWeight: FontWeight.bold,
+                color: kPremiumText,
+              ),
+              textAlign: TextAlign.center,
+            ),
+            const SizedBox(height: 6),
+            Text(
+              tabIndex == 1
+                  ? 'No prior conversations match your search query.'
+                  : 'No contacts or projects match your search in this view.',
+              style: const TextStyle(color: kPremiumMuted, fontSize: 12),
+              textAlign: TextAlign.center,
+            ),
+            const SizedBox(height: 14),
+
+            // Diagnostic card explaining visibility boundaries
+            Container(
+              padding: const EdgeInsets.all(14),
+              decoration: BoxDecoration(
+                color: kPremiumSurface.withOpacity(0.7),
+                borderRadius: BorderRadius.circular(14),
+                border: Border.all(color: kPremiumBorder),
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Row(
+                    children: [
+                      Icon(Icons.shield_outlined, size: 16, color: kPremiumGold),
+                      SizedBox(width: 8),
+                      Text(
+                        'Search Diagnostics & Visibility',
+                        style: TextStyle(
+                          color: kPremiumGold,
+                          fontWeight: FontWeight.bold,
+                          fontSize: 12,
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 8),
+                  if (tabIndex == 1) ...[
+                    const Text(
+                      '• Recent Chats only includes conversations that already have a message history.',
+                      style: TextStyle(color: kPremiumMuted, fontSize: 11.5, height: 1.35),
+                    ),
+                    const SizedBox(height: 5),
+                    const Text(
+                      '• Try searching the "Directory & Projects" tab to find contacts or projects to start a new chat.',
+                      style: TextStyle(color: kPremiumMuted, fontSize: 11.5, height: 1.35),
+                    ),
+                  ] else if (isClient) ...[
+                    const Text(
+                      '• Client accounts can only view active assigned projects, their designated account manager, and specialists on their active projects.',
+                      style: TextStyle(color: kPremiumMuted, fontSize: 11.5, height: 1.35),
+                    ),
+                    const SizedBox(height: 5),
+                    const Text(
+                      '• Unassigned staff and other client accounts are restricted to protect client confidentiality.',
+                      style: TextStyle(color: kPremiumMuted, fontSize: 11.5, height: 1.35),
+                    ),
+                  ] else if (isEmployee) ...[
+                    const Text(
+                      '• Specialists and staff only view assigned projects, teammates on those projects, and clients with active task assignments.',
+                      style: TextStyle(color: kPremiumMuted, fontSize: 11.5, height: 1.35),
+                    ),
+                    const SizedBox(height: 5),
+                    const Text(
+                      '• If you need to communicate with this contact, request assignment to their project from management.',
+                      style: TextStyle(color: kPremiumMuted, fontSize: 11.5, height: 1.35),
+                    ),
+                  ] else ...[
+                    const Text(
+                      '• Check for typos or alternative spellings in name, email, or project title.',
+                      style: TextStyle(color: kPremiumMuted, fontSize: 11.5, height: 1.35),
+                    ),
+                    const SizedBox(height: 5),
+                    const Text(
+                      '• Refresh the directory data to fetch recently added users or organizations.',
+                      style: TextStyle(color: kPremiumMuted, fontSize: 11.5, height: 1.35),
+                    ),
+                  ],
+                ],
+              ),
+            ),
+            const SizedBox(height: 16),
+
+            // Actionable rectification buttons
+            Wrap(
+              spacing: 8,
+              runSpacing: 8,
+              alignment: WrapAlignment.center,
+              children: [
+                OutlinedButton.icon(
+                  icon: const Icon(Icons.clear_rounded, size: 16),
+                  label: const Text('Clear Search'),
+                  style: OutlinedButton.styleFrom(
+                    foregroundColor: kPremiumText,
+                    side: const BorderSide(color: kPremiumBorder),
+                  ),
+                  onPressed: () {
+                    _searchController.clear();
+                    setState(() => _searchQuery = '');
+                  },
+                ),
+                if (tabIndex == 1)
+                  ElevatedButton.icon(
+                    icon: const Icon(Icons.people_outline_rounded, size: 16),
+                    label: const Text('Search in Directory'),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: kPremiumGold,
+                      foregroundColor: kPremiumBg,
+                    ),
+                    onPressed: () => setState(() => _inboxTab = 0),
+                  )
+                else
+                  ElevatedButton.icon(
+                    icon: const Icon(Icons.forum_outlined, size: 16),
+                    label: const Text('Search in Recent Chats'),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: kPremiumGold,
+                      foregroundColor: kPremiumBg,
+                    ),
+                    onPressed: () => setState(() => _inboxTab = 1),
+                  ),
+                OutlinedButton.icon(
+                  icon: const Icon(Icons.refresh_rounded, size: 16),
+                  label: const Text('Refresh Data'),
+                  style: OutlinedButton.styleFrom(
+                    foregroundColor: kPremiumGold,
+                    side: const BorderSide(color: kPremiumBorder),
+                  ),
+                  onPressed: () {
+                    _store.refreshFromSupabase();
+                    _loadRecentConversations();
+                  },
+                ),
+                if (isAdmin)
+                  OutlinedButton.icon(
+                    icon: const Icon(Icons.shield_outlined, size: 16),
+                    label: const Text('Policy Settings'),
+                    style: OutlinedButton.styleFrom(
+                      foregroundColor: kPremiumBlue,
+                      side: const BorderSide(color: kPremiumBorder),
+                    ),
+                    onPressed: _showCommunicationSettingsDialog,
+                  ),
+              ],
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
   Widget _buildRecentChatsList() {
     if (_loadingRecentChats) {
       return const Center(child: CircularProgressIndicator(color: kPremiumGold));
@@ -1169,13 +1560,23 @@ class _ChatPageState extends State<ChatPage> {
               const SizedBox(height: 12),
               const Text(
                 'No recent conversations',
-                style: TextStyle(color: kPremiumMuted, fontSize: 13),
+                style: TextStyle(color: kPremiumText, fontWeight: FontWeight.bold, fontSize: 14),
               ),
-              const SizedBox(height: 4),
+              const SizedBox(height: 6),
               const Text(
                 'Select a project or contact from the Directory to open communication.',
-                style: TextStyle(color: kPremiumMuted, fontSize: 11),
+                style: TextStyle(color: kPremiumMuted, fontSize: 12),
                 textAlign: TextAlign.center,
+              ),
+              const SizedBox(height: 14),
+              ElevatedButton.icon(
+                icon: const Icon(Icons.people_outline_rounded, size: 16),
+                label: const Text('Open Directory'),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: kPremiumGold,
+                  foregroundColor: kPremiumBg,
+                ),
+                onPressed: () => setState(() => _inboxTab = 0),
               ),
             ],
           ),
@@ -1183,11 +1584,29 @@ class _ChatPageState extends State<ChatPage> {
       );
     }
 
+    // Filter recent conversations by query
+    final q = _searchQuery.trim().toLowerCase();
+    final filtered = _recentConversations.where((conv) {
+      if (q.isEmpty) return true;
+      if (conv.title.toLowerCase().contains(q)) return true;
+      if (conv.lastMessage != null && conv.lastMessage!.message.toLowerCase().contains(q)) return true;
+      if (conv.members.any((m) =>
+          (m.fullName?.toLowerCase().contains(q) ?? false) ||
+          (m.role?.toLowerCase().contains(q) ?? false))) {
+        return true;
+      }
+      return false;
+    }).toList();
+
+    if (q.isNotEmpty && filtered.isEmpty) {
+      return _buildSearchEmptyState(tabIndex: 1);
+    }
+
     return ListView.builder(
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-      itemCount: _recentConversations.length,
+      itemCount: filtered.length,
       itemBuilder: (ctx, index) {
-        final conv = _recentConversations[index];
+        final conv = filtered[index];
         final isSelected = _activeConversationId == conv.id;
         final lastMsg = conv.lastMessage;
 
@@ -1323,6 +1742,23 @@ class _ChatPageState extends State<ChatPage> {
               ),
               IconButton(
                 icon: Icon(
+                  _showInChatSearch ? Icons.search_off_rounded : Icons.search_rounded,
+                  color: _showInChatSearch ? kPremiumGold : kPremiumMuted,
+                  size: 20,
+                ),
+                tooltip: _showInChatSearch ? 'Close Search' : 'Search in Conversation',
+                onPressed: () {
+                  setState(() {
+                    _showInChatSearch = !_showInChatSearch;
+                    if (!_showInChatSearch) {
+                      _inChatSearchController.clear();
+                      _inChatSearchQuery = '';
+                    }
+                  });
+                },
+              ),
+              IconButton(
+                icon: Icon(
                   _showProfileInfo ? Icons.info_rounded : Icons.info_outline_rounded,
                   color: _showProfileInfo ? kPremiumGold : kPremiumMuted,
                 ),
@@ -1382,6 +1818,68 @@ class _ChatPageState extends State<ChatPage> {
           ),
         ),
 
+        // In-Chat Search Bar
+        if (_showInChatSearch)
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+            decoration: BoxDecoration(
+              color: kPremiumSurface.withOpacity(0.95),
+              border: const Border(bottom: BorderSide(color: kPremiumBorder)),
+            ),
+            child: Row(
+              children: [
+                const Icon(Icons.search_rounded, color: kPremiumGold, size: 18),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: TextField(
+                    controller: _inChatSearchController,
+                    autofocus: true,
+                    style: const TextStyle(color: kPremiumText, fontSize: 13),
+                    decoration: InputDecoration(
+                      hintText: 'Search messages in this conversation...',
+                      hintStyle: const TextStyle(color: kPremiumMuted, fontSize: 12),
+                      isDense: true,
+                      contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                      border: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(10),
+                        borderSide: const BorderSide(color: kPremiumBorder),
+                      ),
+                      enabledBorder: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(10),
+                        borderSide: const BorderSide(color: kPremiumBorder),
+                      ),
+                      focusedBorder: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(10),
+                        borderSide: const BorderSide(color: kPremiumGold, width: 1.2),
+                      ),
+                    ),
+                    onChanged: (val) => setState(() => _inChatSearchQuery = val),
+                  ),
+                ),
+                if (_inChatSearchQuery.isNotEmpty)
+                  IconButton(
+                    icon: const Icon(Icons.clear_rounded, size: 16, color: kPremiumMuted),
+                    tooltip: 'Clear search',
+                    onPressed: () {
+                      _inChatSearchController.clear();
+                      setState(() => _inChatSearchQuery = '');
+                    },
+                  ),
+                IconButton(
+                  icon: const Icon(Icons.close_rounded, size: 18, color: kPremiumMuted),
+                  tooltip: 'Close search',
+                  onPressed: () {
+                    setState(() {
+                      _showInChatSearch = false;
+                      _inChatSearchController.clear();
+                      _inChatSearchQuery = '';
+                    });
+                  },
+                ),
+              ],
+            ),
+          ),
+
         // Conversation Body + Profile Drawer
         Expanded(
           child: Stack(
@@ -1412,6 +1910,12 @@ class _ChatPageState extends State<ChatPage> {
                                           return _buildEmptyChatState();
                                         }
 
+                                        final hasSearch = _showInChatSearch && _inChatSearchQuery.trim().isNotEmpty;
+                                        final searchClean = _inChatSearchQuery.trim().toLowerCase();
+                                        final matchCount = hasSearch
+                                            ? messages.where((m) => !m.isDeleted && m.message.toLowerCase().contains(searchClean)).length
+                                            : 0;
+
                                         if (!_showScrollToBottom) {
                                           WidgetsBinding.instance.addPostFrameCallback((_) {
                                             if (_scrollController.hasClients) {
@@ -1420,73 +1924,135 @@ class _ChatPageState extends State<ChatPage> {
                                           });
                                         }
 
-                                        return ListView.builder(
-                                          controller: _scrollController,
-                                          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
-                                          itemCount: messages.length + (_isLoadingOlder ? 1 : 0),
-                                          itemBuilder: (ctx, index) {
-                                            if (_isLoadingOlder && index == 0) {
-                                              return const Padding(
-                                                padding: EdgeInsets.symmetric(vertical: 8),
-                                                child: Center(
-                                                  child: SizedBox(
-                                                    width: 18,
-                                                    height: 18,
-                                                    child: CircularProgressIndicator(
-                                                      strokeWidth: 2,
-                                                      valueColor: AlwaysStoppedAnimation<Color>(kPremiumGold),
+                                        return Column(
+                                          children: [
+                                            if (hasSearch)
+                                              Container(
+                                                width: double.infinity,
+                                                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                                                decoration: BoxDecoration(
+                                                  color: matchCount > 0
+                                                      ? kPremiumGold.withOpacity(0.12)
+                                                      : kPremiumDanger.withOpacity(0.12),
+                                                  border: Border(
+                                                    bottom: BorderSide(
+                                                      color: (matchCount > 0 ? kPremiumGold : kPremiumDanger).withOpacity(0.3),
                                                     ),
                                                   ),
                                                 ),
-                                              );
-                                            }
-
-                                            final msgIndex = _isLoadingOlder ? index - 1 : index;
-                                            final msg = messages[msgIndex];
-                                            final isMe = msg.senderId == user.id;
-
-                                            bool showDateDivider = false;
-                                            if (msgIndex == 0) {
-                                              showDateDivider = true;
-                                            } else {
-                                              final prev = messages[msgIndex - 1].createdAt;
-                                              if (msg.createdAt.day != prev.day ||
-                                                  msg.createdAt.month != prev.month ||
-                                                  msg.createdAt.year != prev.year) {
-                                                showDateDivider = true;
-                                              }
-                                            }
-
-                                            return Column(
-                                              children: [
-                                                if (showDateDivider)
-                                                  Padding(
-                                                    padding: const EdgeInsets.symmetric(vertical: 12),
-                                                    child: Container(
-                                                      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 4),
-                                                      decoration: BoxDecoration(
-                                                        color: Colors.white.withOpacity(0.06),
-                                                        borderRadius: BorderRadius.circular(12),
-                                                        border: Border.all(color: kPremiumBorder),
-                                                      ),
-                                                      child: Text(
-                                                        _formatDateHeader(msg.createdAt),
-                                                        style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w600, color: kPremiumMuted),
-                                                      ),
+                                                child: Row(
+                                                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                                  children: [
+                                                    Row(
+                                                      children: [
+                                                        Icon(
+                                                          matchCount > 0 ? Icons.search_rounded : Icons.info_outline_rounded,
+                                                          size: 15,
+                                                          color: matchCount > 0 ? kPremiumGold : kPremiumDanger,
+                                                        ),
+                                                        const SizedBox(width: 8),
+                                                        Text(
+                                                          matchCount > 0
+                                                              ? '$matchCount matching message${matchCount == 1 ? "" : "s"} found'
+                                                              : 'No messages contain "$_inChatSearchQuery" in this chat',
+                                                          style: TextStyle(
+                                                            fontSize: 12,
+                                                            fontWeight: FontWeight.w600,
+                                                            color: matchCount > 0 ? kPremiumGold : kPremiumDanger,
+                                                          ),
+                                                        ),
+                                                      ],
                                                     ),
-                                                  ),
-                                                MessageBubble(
-                                                  message: msg,
-                                                  isMe: isMe,
-                                                  isDesktop: isDesktop,
-                                                  showSenderHeader: !isMe,
-                                                  onRetry: () => _sendMessage(msg.message),
-                                                  onEdit: isMe && !msg.isDeleted ? () => _handleEditMessage(msg) : null,
-                                                  onDelete: !msg.isDeleted ? () => _handleDeleteMessage(msg) : null,
+                                                    if (matchCount == 0)
+                                                      GestureDetector(
+                                                        onTap: () {
+                                                          _inChatSearchController.clear();
+                                                          setState(() => _inChatSearchQuery = '');
+                                                        },
+                                                        child: const Text(
+                                                          'Clear Filter',
+                                                          style: TextStyle(
+                                                            fontSize: 11,
+                                                            color: kPremiumMuted,
+                                                            decoration: TextDecoration.underline,
+                                                          ),
+                                                        ),
+                                                      ),
+                                                  ],
                                                 ),
-                                              ],
-                                            );
-                                          },
+                                              ),
+                                            Expanded(
+                                              child: ListView.builder(
+                                                controller: _scrollController,
+                                                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+                                                itemCount: messages.length + (_isLoadingOlder ? 1 : 0),
+                                                itemBuilder: (ctx, index) {
+                                                  if (_isLoadingOlder && index == 0) {
+                                                    return const Padding(
+                                                      padding: EdgeInsets.symmetric(vertical: 8),
+                                                      child: Center(
+                                                        child: SizedBox(
+                                                          width: 18,
+                                                          height: 18,
+                                                          child: CircularProgressIndicator(
+                                                            strokeWidth: 2,
+                                                            valueColor: AlwaysStoppedAnimation<Color>(kPremiumGold),
+                                                          ),
+                                                        ),
+                                                      ),
+                                                    );
+                                                  }
+
+                                                  final msgIndex = _isLoadingOlder ? index - 1 : index;
+                                                  final msg = messages[msgIndex];
+                                                  final isMe = msg.senderId == user.id;
+
+                                                  bool showDateDivider = false;
+                                                  if (msgIndex == 0) {
+                                                    showDateDivider = true;
+                                                  } else {
+                                                    final prev = messages[msgIndex - 1].createdAt;
+                                                    if (msg.createdAt.day != prev.day ||
+                                                        msg.createdAt.month != prev.month ||
+                                                        msg.createdAt.year != prev.year) {
+                                                      showDateDivider = true;
+                                                    }
+                                                  }
+
+                                                  return Column(
+                                                    children: [
+                                                      if (showDateDivider)
+                                                        Padding(
+                                                          padding: const EdgeInsets.symmetric(vertical: 12),
+                                                          child: Container(
+                                                            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 4),
+                                                            decoration: BoxDecoration(
+                                                              color: Colors.white.withOpacity(0.06),
+                                                              borderRadius: BorderRadius.circular(12),
+                                                              border: Border.all(color: kPremiumBorder),
+                                                            ),
+                                                            child: Text(
+                                                              _formatDateHeader(msg.createdAt),
+                                                              style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w600, color: kPremiumMuted),
+                                                            ),
+                                                          ),
+                                                        ),
+                                                      MessageBubble(
+                                                        message: msg,
+                                                        isMe: isMe,
+                                                        isDesktop: isDesktop,
+                                                        showSenderHeader: !isMe,
+                                                        searchQuery: _showInChatSearch ? _inChatSearchQuery : null,
+                                                        onRetry: () => _handleRetryMessage(msg),
+                                                        onEdit: isMe && !msg.isDeleted ? () => _handleEditMessage(msg) : null,
+                                                        onDelete: !msg.isDeleted ? () => _handleDeleteMessage(msg) : null,
+                                                      ),
+                                                    ],
+                                                  );
+                                                },
+                                              ),
+                                            ),
+                                          ],
                                         );
                                       },
                                     ),

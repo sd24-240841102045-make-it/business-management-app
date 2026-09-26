@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 import 'supabase_service.dart';
+import 'cache_service.dart';
+import '../models/saas_models.dart';
 
 class Employee {
   final String id;
@@ -534,36 +536,47 @@ class AppDataStore extends ChangeNotifier {
     notifyListeners();
   }
 
-  /// Sync database from Supabase
+  /// Sync database from Supabase concurrently
   Future<void> refreshFromSupabase() async {
     if (_isLoadingFromSupabase) return;
     _isLoadingFromSupabase = true;
     notifyListeners();
 
     try {
-      final remoteAdmins = await SupabaseService().fetchAdmins();
+      // 🚀 Scalability Upgrade: Parallel concurrent fetch across all tables
+      final results = await Future.wait([
+        SupabaseService().fetchAdmins(),
+        SupabaseService().fetchEmployees(),
+        SupabaseService().fetchClients(),
+        SupabaseService().fetchLeaveRequests(),
+        SupabaseService().fetchProjects(),
+        SupabaseService().fetchTasks(),
+        SupabaseService().fetchInvoices(),
+      ]);
+
+      final remoteAdmins = results[0] as List<AdminModel>;
+      final remoteEmployees = results[1] as List<Employee>?;
+      final remoteClients = results[2] as List<ClientModel>?;
+      final remoteLeaves = results[3] as List<LeaveRequest>?;
+      final remoteProjects = results[4] as List<ProjectDomainModel>;
+      final remoteTasks = results[5] as List<TaskDomainModel>;
+      final remoteInvoices = results[6] as List<InvoiceDomainModel>;
+
       if (remoteAdmins.isNotEmpty) {
         _admins.clear();
         _admins.addAll(remoteAdmins);
       }
 
-      final remoteEmployees = await SupabaseService().fetchEmployees();
       if (remoteEmployees != null) {
         _employees.clear();
         _employees.addAll(remoteEmployees);
       }
 
-      final remoteClients = await SupabaseService().fetchClients();
       if (remoteClients != null) {
         final uniqueClientsMap = <String, ClientModel>{};
         for (final c in remoteClients) {
           final key = c.email.isNotEmpty ? c.email.trim().toLowerCase() : c.id;
-          if (!uniqueClientsMap.containsKey(key)) {
-            uniqueClientsMap[key] = c;
-          } else {
-            // Keep the row with the most recent data
-            uniqueClientsMap[key] = c;
-          }
+          uniqueClientsMap[key] = c;
         }
 
         _clients.clear();
@@ -595,13 +608,11 @@ class AppDataStore extends ChangeNotifier {
         }
       }
 
-      final remoteLeaves = await SupabaseService().fetchLeaveRequests();
       if (remoteLeaves != null) {
         _leaveRequests.clear();
         _leaveRequests.addAll(remoteLeaves);
       }
 
-      final remoteProjects = await SupabaseService().fetchProjects();
       if (remoteProjects.isNotEmpty) {
         _projects.clear();
         for (final p in remoteProjects) {
@@ -620,7 +631,6 @@ class AppDataStore extends ChangeNotifier {
 
       final activeProjectIds = _projects.map((p) => p.id).toSet();
 
-      final remoteTasks = await SupabaseService().fetchTasks();
       if (remoteTasks.isNotEmpty) {
         _tasks.clear();
         for (final t in remoteTasks) {
@@ -647,7 +657,6 @@ class AppDataStore extends ChangeNotifier {
         }
       }
 
-      final remoteInvoices = await SupabaseService().fetchInvoices();
       _invoices.clear();
       for (final inv in remoteInvoices) {
         String cName = 'Client';
@@ -665,6 +674,16 @@ class AppDataStore extends ChangeNotifier {
           dueDate: inv.dueDate,
         ));
       }
+
+      // Offline Snapshot persistence
+      CacheService().setPersistent('snapshot_stats', {
+        'admin_count': _admins.length,
+        'employee_count': _employees.length,
+        'client_count': _clients.length,
+        'project_count': _projects.length,
+        'task_count': _tasks.length,
+        'invoice_count': _invoices.length,
+      });
     } catch (e) {
       debugPrint('Error syncing with Supabase: $e');
     } finally {
@@ -672,6 +691,7 @@ class AppDataStore extends ChangeNotifier {
       notifyListeners();
     }
   }
+
 
   // --- EMPLOYEE MANAGEMENT ---
   void addEmployee(Employee emp) {

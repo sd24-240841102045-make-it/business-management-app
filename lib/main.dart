@@ -7,11 +7,15 @@ import 'package:business_managment_app/shared/main_shell.dart';
 import 'package:business_managment_app/services/supabase_service.dart';
 import 'package:business_managment_app/services/app_data_store.dart';
 import 'package:business_managment_app/services/notification_service.dart';
+import 'package:business_managment_app/services/cache_service.dart';
 import 'package:business_managment_app/shared/notification_widgets.dart';
 import 'package:business_managment_app/core/premium_theme.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
+
+  // Initialize Cache & Offline store
+  await CacheService().initialize();
 
   // Initialize Supabase
   await Supabase.initialize(
@@ -172,12 +176,24 @@ class _AuthGateState extends State<AuthGate> {
         }
       }
 
+      // Find clientId if current user is a client
+      String? clientId;
+      if (role == 'client') {
+        for (final c in AppDataStore().clients) {
+          if (c.userId == userId || c.id == userId || c.email.trim().toLowerCase() == (session.user.email ?? '').trim().toLowerCase()) {
+            clientId = c.id;
+            break;
+          }
+        }
+      }
+
       // Initialize real-time notifications
       NotificationService().initialize(
         orgId: orgId,
         userId: userId,
         role: role,
         employeeId: employeeId,
+        clientId: clientId,
       );
 
       // Hook toast callback once context is ready

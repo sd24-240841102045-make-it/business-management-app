@@ -4,7 +4,6 @@ import 'package:crypto/crypto.dart';
 import 'package:flutter/foundation.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import '../models/saas_models.dart';
-import 'encryption_service.dart';
 import 'app_data_store.dart';
 
 class SupabaseService {
@@ -147,6 +146,49 @@ class SupabaseService {
     return response;
   }
 
+  /// Verify an invitation code and get details (email, role, organization)
+  Future<Map<String, dynamic>?> checkInviteDetails(String code) async {
+    final cleanCode = code.trim().toUpperCase();
+    if (cleanCode.length < 3) return null;
+
+    // 1. Try RPC get_invite_details
+    try {
+      final res = await client.rpc('get_invite_details', params: {'invite_code_param': cleanCode});
+      if (res is Map && res['valid'] == true) {
+        return Map<String, dynamic>.from(res);
+      }
+    } catch (_) {}
+
+    // 2. Try RPC verify_invite_code
+    try {
+      final res = await client.rpc('verify_invite_code', params: {'invite_code_param': cleanCode});
+      if (res == true) {
+        return {'valid': true, 'token': cleanCode};
+      }
+    } catch (_) {}
+
+    // 3. Fallback: direct table query
+    try {
+      final res = await client
+          .from('invitations')
+          .select()
+          .eq('token', cleanCode)
+          .eq('status', 'pending')
+          .maybeSingle();
+      if (res != null) {
+        return {
+          'valid': true,
+          'email': res['email'],
+          'role': res['role'],
+          'organization_id': res['organization_id'],
+          'token': cleanCode,
+        };
+      }
+    } catch (_) {}
+
+    return null;
+  }
+
   /// Accept Employee or Client Invitation via Token
   Future<AuthResponse> acceptInvitation({
     required String token,
@@ -157,8 +199,12 @@ class SupabaseService {
     _isAuthActionInProgress = true;
     try {
       final cleanToken = token.trim().toUpperCase();
-      final cleanName = fullName.trim();
       final targetEmail = email?.trim().toLowerCase();
+      final cleanName = fullName.trim().isNotEmpty
+          ? fullName.trim()
+          : (targetEmail != null && targetEmail.contains('@')
+              ? targetEmail.split('@').first
+              : 'Team Member');
 
       if (cleanToken.isEmpty) {
         throw Exception('Please enter your invitation code.');

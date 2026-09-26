@@ -7,6 +7,7 @@ import 'package:business_managment_app/shared/project_details_page.dart';
 import 'package:business_managment_app/employee/assigned_consultations_page.dart';
 import 'package:business_managment_app/shared/project_page.dart';
 import 'package:business_managment_app/shared/invoice_page.dart';
+import 'package:business_managment_app/services/notification_service.dart';
 
 class ClientDashboardPage extends StatefulWidget {
   const ClientDashboardPage({super.key});
@@ -131,6 +132,12 @@ class _ClientDashboardPageState extends State<ClientDashboardPage> {
             .eq('client_id', matchedClient.id)
             .order('created_at', ascending: false);
         projectsData = List<Map<String, dynamic>>.from(res);
+        for (final p in projectsData) {
+          final pid = p['id']?.toString();
+          if (pid != null && pid.isNotEmpty) {
+            NotificationService().registerClientProjectId(pid);
+          }
+        }
       }
     } catch (e) {
       debugPrint('Error fetching client projects: $e');

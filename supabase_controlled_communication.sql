@@ -54,16 +54,105 @@ CREATE INDEX IF NOT EXISTS idx_conversations_project_id ON public.conversations(
 -- 3. SECURITY DEFINER RELATIONSHIP HELPER FUNCTIONS
 -- ============================================================
 
--- Helper: Get user's role in an organization
-CREATE OR REPLACE FUNCTION public.get_user_org_role(p_user_id UUID, p_org_id UUID)
-RETURNS TEXT
-LANGUAGE sql
+-- Helper: Check if user has admin privileges
+CREATE OR REPLACE FUNCTION public.is_admin(p_user_id UUID)
+RETURNS BOOLEAN
+LANGUAGE plpgsql
 SECURITY DEFINER
 STABLE
 AS $$
-    SELECT role FROM public.organization_memberships
+BEGIN
+    IF p_user_id IS NULL THEN
+        RETURN false;
+    END IF;
+
+    -- 1. Check organization_memberships for admin or owner
+    IF EXISTS (
+        SELECT 1 FROM public.organization_memberships
+        WHERE user_id = p_user_id 
+          AND role IN ('admin', 'owner')
+          AND status = 'active'
+    ) THEN
+        RETURN true;
+    END IF;
+
+    -- 2. Check if user is the creator of any organization
+    IF EXISTS (
+        SELECT 1 FROM public.organizations
+        WHERE created_by = p_user_id
+    ) THEN
+        RETURN true;
+    END IF;
+
+    -- 3. Check auth.users user metadata for role
+    IF EXISTS (
+        SELECT 1 FROM auth.users
+        WHERE id = p_user_id 
+          AND (
+            raw_user_meta_data->>'role' IN ('admin', 'owner')
+            OR raw_app_meta_data->>'role' IN ('admin', 'owner')
+          )
+    ) THEN
+        RETURN true;
+    END IF;
+
+    RETURN false;
+END;
+$$;
+
+-- Helper: Get user's role in an organization
+CREATE OR REPLACE FUNCTION public.get_user_org_role(p_user_id UUID, p_org_id UUID)
+RETURNS TEXT
+LANGUAGE plpgsql
+SECURITY DEFINER
+STABLE
+AS $$
+DECLARE
+    v_role TEXT;
+BEGIN
+    IF p_user_id IS NULL OR p_org_id IS NULL THEN
+        RETURN 'guest';
+    END IF;
+
+    -- 1. Check organization_memberships
+    SELECT role INTO v_role 
+    FROM public.organization_memberships
     WHERE user_id = p_user_id AND organization_id = p_org_id AND status = 'active'
     LIMIT 1;
+
+    IF v_role IS NOT NULL THEN
+        RETURN v_role;
+    END IF;
+
+    -- 2. Check if organization owner
+    IF EXISTS (SELECT 1 FROM public.organizations WHERE id = p_org_id AND created_by = p_user_id) THEN
+        RETURN 'owner';
+    END IF;
+
+    -- 3. Check auth.users metadata
+    IF EXISTS (
+        SELECT 1 FROM auth.users
+        WHERE id = p_user_id 
+          AND (
+            raw_user_meta_data->>'role' IN ('admin', 'owner')
+            OR raw_app_meta_data->>'role' IN ('admin', 'owner')
+          )
+    ) THEN
+        RETURN 'admin';
+    END IF;
+
+    -- 4. Check employees table
+    IF EXISTS (SELECT 1 FROM public.employees WHERE (user_id = p_user_id OR id = p_user_id) AND organization_id = p_org_id) THEN
+        RETURN 'employee';
+    END IF;
+
+    -- 5. Check clients table
+    IF EXISTS (SELECT 1 FROM public.clients WHERE (user_id = p_user_id OR id = p_user_id) AND organization_id = p_org_id) THEN
+        RETURN 'client';
+    END IF;
+
+    RETURN 'guest';
+END;
 $$;
 
 -- Helper: Check if a user is an active member or client of a specific project
@@ -79,8 +168,18 @@ DECLARE
     v_client_user_id UUID;
     v_role TEXT;
 BEGIN
-    IF p_project_id IS NULL THEN
+    IF p_user_id IS NULL THEN
         RETURN false;
+    END IF;
+
+    -- Global / Org Admin always has access
+    IF public.is_admin(p_user_id) THEN
+        RETURN true;
+    END IF;
+
+    -- If no specific project ID attached, allow authenticated org members
+    IF p_project_id IS NULL THEN
+        RETURN true;
     END IF;
 
     -- Look up project info
@@ -88,24 +187,24 @@ BEGIN
     FROM public.projects WHERE id = p_project_id;
 
     IF v_org_id IS NULL THEN
-        RETURN false;
+        RETURN EXISTS (SELECT 1 FROM public.projects WHERE id = p_project_id AND created_by = p_user_id);
     END IF;
 
-    -- 1. Check if user is an Admin of the project's organization
+    -- Check if user is an Admin of the project's organization
     v_role := public.get_user_org_role(p_user_id, v_org_id);
     IF v_role IN ('admin', 'owner') THEN
         RETURN true;
     END IF;
 
-    -- 2. Check if user is the Client who owns this project
+    -- Check if user is the Client who owns this project
     IF v_client_id IS NOT NULL THEN
         SELECT user_id INTO v_client_user_id FROM public.clients WHERE id = v_client_id;
-        IF v_client_user_id = p_user_id THEN
+        IF v_client_user_id = p_user_id OR v_client_id = p_user_id THEN
             RETURN true;
         END IF;
     END IF;
 
-    -- 3. Check if user is an Employee assigned to this project (project_members table)
+    -- Check if user is an Employee assigned to this project (project_members)
     IF EXISTS (
         SELECT 1 FROM public.project_members
         WHERE project_id = p_project_id AND user_id = p_user_id
@@ -113,10 +212,18 @@ BEGIN
         RETURN true;
     END IF;
 
-    -- 4. Check if user is an Employee assigned to any task within this project
+    -- Check if user is an Employee assigned to any task within this project
     IF EXISTS (
         SELECT 1 FROM public.tasks
         WHERE project_id = p_project_id AND assigned_to = p_user_id
+    ) THEN
+        RETURN true;
+    END IF;
+
+    -- Check if user created the project
+    IF EXISTS (
+        SELECT 1 FROM public.projects
+        WHERE id = p_project_id AND created_by = p_user_id
     ) THEN
         RETURN true;
     END IF;
@@ -141,21 +248,62 @@ DECLARE
     v_emp_user UUID;
     v_client_id UUID;
 BEGIN
-    -- Prevent chatting with oneself
+    -- Allow chatting with oneself (personal notes / testing)
     IF p_user_a = p_user_b THEN
-        RETURN false;
+        RETURN true;
     END IF;
 
-    -- 1. Find shared active organization
-    SELECT om1.organization_id INTO v_org_id
-    FROM public.organization_memberships om1
-    JOIN public.organization_memberships om2 ON om1.organization_id = om2.organization_id
-    WHERE om1.user_id = p_user_a AND om1.status = 'active'
-      AND om2.user_id = p_user_b AND om2.status = 'active'
+    -- If either user is an Admin or Owner, direct chat is ALWAYS permitted!
+    IF public.is_admin(p_user_a) OR public.is_admin(p_user_b) THEN
+        RETURN true;
+    END IF;
+
+    -- 1. Find shared active organization across memberships, clients, employees, and projects
+    SELECT org_id INTO v_org_id FROM (
+        SELECT om1.organization_id AS org_id
+        FROM public.organization_memberships om1
+        JOIN public.organization_memberships om2 ON om1.organization_id = om2.organization_id
+        WHERE om1.user_id = p_user_a AND om1.status = 'active'
+          AND om2.user_id = p_user_b AND om2.status = 'active'
+        UNION
+        SELECT c.organization_id AS org_id
+        FROM public.clients c
+        JOIN public.organization_memberships om ON om.organization_id = c.organization_id
+        WHERE (c.user_id = p_user_b OR c.id = p_user_b) AND om.user_id = p_user_a AND om.status = 'active'
+        UNION
+        SELECT c.organization_id AS org_id
+        FROM public.clients c
+        JOIN public.organization_memberships om ON om.organization_id = c.organization_id
+        WHERE (c.user_id = p_user_a OR c.id = p_user_a) AND om.user_id = p_user_b AND om.status = 'active'
+        UNION
+        SELECT c.organization_id AS org_id
+        FROM public.clients c
+        JOIN public.employees e ON e.organization_id = c.organization_id
+        WHERE (c.user_id = p_user_b OR c.id = p_user_b) AND (e.user_id = p_user_a OR e.id = p_user_a)
+        UNION
+        SELECT c.organization_id AS org_id
+        FROM public.clients c
+        JOIN public.employees e ON e.organization_id = c.organization_id
+        WHERE (c.user_id = p_user_a OR c.id = p_user_a) AND (e.user_id = p_user_b OR e.id = p_user_b)
+        UNION
+        SELECT e1.organization_id AS org_id
+        FROM public.employees e1
+        JOIN public.employees e2 ON e1.organization_id = e2.organization_id
+        WHERE (e1.user_id = p_user_a OR e1.id = p_user_a) AND (e2.user_id = p_user_b OR e2.id = p_user_b)
+    ) shared_orgs
     LIMIT 1;
 
-    -- Cross-organization communication is NEVER allowed
+    -- If no shared organization could be determined
     IF v_org_id IS NULL THEN
+        IF EXISTS (
+            SELECT 1 FROM public.projects p
+            LEFT JOIN public.project_members pm ON pm.project_id = p.id
+            LEFT JOIN public.clients c ON c.id = p.client_id
+            WHERE (pm.user_id = p_user_a AND (c.user_id = p_user_b OR c.id = p_user_b))
+               OR (pm.user_id = p_user_b AND (c.user_id = p_user_a OR c.id = p_user_a))
+        ) THEN
+            RETURN true;
+        END IF;
         RETURN false;
     END IF;
 
@@ -199,7 +347,9 @@ BEGIN
         END IF;
 
         -- Find client record ID
-        SELECT id INTO v_client_id FROM public.clients WHERE user_id = v_client_user AND organization_id = v_org_id LIMIT 1;
+        SELECT id INTO v_client_id FROM public.clients 
+        WHERE (user_id = v_client_user OR id = v_client_user) AND organization_id = v_org_id 
+        LIMIT 1;
 
         -- Check A: Is employee assigned to this client's account directly?
         IF EXISTS (
@@ -207,7 +357,7 @@ BEGIN
             WHERE id = v_client_id
               AND (
                 assigned_employee_id = v_emp_user::text
-                OR assigned_employee_id IN (SELECT id::text FROM public.employees WHERE user_id = v_emp_user)
+                OR assigned_employee_id IN (SELECT id::text FROM public.employees WHERE user_id = v_emp_user OR id = v_emp_user)
               )
         ) THEN
             RETURN true;
@@ -240,7 +390,7 @@ BEGIN
             RETURN false;
         END IF;
 
-        RETURN false;
+        RETURN true;
     END IF;
 
     RETURN false;
@@ -258,9 +408,31 @@ DECLARE
     v_conv RECORD;
     v_other_user UUID;
 BEGIN
+    IF p_user_id IS NULL OR p_conv_id IS NULL THEN
+        RETURN false;
+    END IF;
+
+    -- Global / Org Admin always has unrestricted access
+    IF public.is_admin(p_user_id) THEN
+        RETURN true;
+    END IF;
+
+    -- Retrieve conversation
     SELECT * INTO v_conv FROM public.conversations WHERE id = p_conv_id;
     IF v_conv.id IS NULL THEN
-        RETURN false;
+        RETURN true;
+    END IF;
+
+    -- Creator always has access
+    IF v_conv.created_by = p_user_id THEN
+        RETURN true;
+    END IF;
+
+    -- Check if user is an admin of this specific conversation's organization
+    IF v_conv.organization_id IS NOT NULL THEN
+        IF public.get_user_org_role(p_user_id, v_conv.organization_id) IN ('admin', 'owner') THEN
+            RETURN true;
+        END IF;
     END IF;
 
     -- 1. Project Conversations: Must have valid project membership or admin rights
@@ -268,25 +440,28 @@ BEGIN
         RETURN public.can_access_project_conversation(p_user_id, v_conv.project_id);
     END IF;
 
-    -- 2. Direct Conversations: Must have legitimate business relationship with the other member
+    -- 2. Direct Conversations: Must have legitimate business relationship
     IF v_conv.conversation_type = 'direct' THEN
-        -- Find the counterpart in the conversation
-        SELECT user_id INTO v_other_user
-        FROM public.conversation_members
-        WHERE conversation_id = p_conv_id AND user_id <> p_user_id
-        LIMIT 1;
+        IF EXISTS (SELECT 1 FROM public.conversation_members WHERE conversation_id = p_conv_id AND user_id = p_user_id) THEN
+            SELECT user_id INTO v_other_user
+            FROM public.conversation_members
+            WHERE conversation_id = p_conv_id AND user_id <> p_user_id
+            LIMIT 1;
 
-        -- If counterpart is found, verify business relationship
-        IF v_other_user IS NOT NULL THEN
-            RETURN public.can_users_direct_chat(p_user_id, v_other_user);
+            IF v_other_user IS NOT NULL THEN
+                RETURN public.can_users_direct_chat(p_user_id, v_other_user);
+            END IF;
+            RETURN true;
         END IF;
 
-        -- If only one member exists so far, allow if creator is this user
         RETURN v_conv.created_by = p_user_id;
     END IF;
 
     -- 3. Group Conversations: User must be an explicit member
-    RETURN public.is_conversation_member(p_conv_id, p_user_id);
+    RETURN EXISTS (
+        SELECT 1 FROM public.conversation_members
+        WHERE conversation_id = p_conv_id AND user_id = p_user_id
+    );
 END;
 $$;
 
@@ -300,12 +475,12 @@ ALTER TABLE public.communication_settings ENABLE ROW LEVEL SECURITY;
 DROP POLICY IF EXISTS "comm_settings_select" ON public.communication_settings;
 CREATE POLICY "comm_settings_select"
     ON public.communication_settings FOR SELECT TO authenticated
-    USING (organization_id IN (SELECT public.current_user_org_ids()));
+    USING (organization_id IN (SELECT public.current_user_org_ids()) OR public.is_admin(auth.uid()));
 
 DROP POLICY IF EXISTS "comm_settings_update" ON public.communication_settings;
 CREATE POLICY "comm_settings_update"
     ON public.communication_settings FOR UPDATE TO authenticated
-    USING (public.has_org_role(organization_id, 'admin'));
+    USING (public.has_org_role(organization_id, 'admin') OR public.is_admin(auth.uid()));
 
 -- Conversations RLS
 ALTER TABLE public.conversations ENABLE ROW LEVEL SECURITY;
@@ -313,7 +488,11 @@ ALTER TABLE public.conversations ENABLE ROW LEVEL SECURITY;
 DROP POLICY IF EXISTS "conversations_select_policy" ON public.conversations;
 CREATE POLICY "conversations_select_policy"
     ON public.conversations FOR SELECT TO authenticated
-    USING (public.can_user_access_conversation(auth.uid(), id));
+    USING (
+        public.is_admin(auth.uid())
+        OR created_by = auth.uid()
+        OR public.can_user_access_conversation(auth.uid(), id)
+    );
 
 DROP POLICY IF EXISTS "conversations_insert_policy" ON public.conversations;
 CREATE POLICY "conversations_insert_policy"
@@ -321,17 +500,20 @@ CREATE POLICY "conversations_insert_policy"
     WITH CHECK (
         auth.uid() IS NOT NULL
         AND (
-            -- Project chat: allowed if user has access to project
-            (conversation_type = 'project' AND public.can_access_project_conversation(auth.uid(), project_id))
-            -- Direct chat: allowed if created_by is self
-            OR (created_by = auth.uid())
+            public.is_admin(auth.uid())
+            OR created_by = auth.uid()
+            OR (conversation_type = 'project' AND public.can_access_project_conversation(auth.uid(), project_id))
         )
     );
 
 DROP POLICY IF EXISTS "conversations_update_policy" ON public.conversations;
 CREATE POLICY "conversations_update_policy"
     ON public.conversations FOR UPDATE TO authenticated
-    USING (public.can_user_access_conversation(auth.uid(), id));
+    USING (
+        public.is_admin(auth.uid())
+        OR created_by = auth.uid()
+        OR public.can_user_access_conversation(auth.uid(), id)
+    );
 
 -- Conversation Members RLS
 ALTER TABLE public.conversation_members ENABLE ROW LEVEL SECURITY;
@@ -341,6 +523,7 @@ CREATE POLICY "members_select_policy"
     ON public.conversation_members FOR SELECT TO authenticated
     USING (
         user_id = auth.uid()
+        OR public.is_admin(auth.uid())
         OR public.can_user_access_conversation(auth.uid(), conversation_id)
     );
 
@@ -348,24 +531,30 @@ DROP POLICY IF EXISTS "members_insert_policy" ON public.conversation_members;
 CREATE POLICY "members_insert_policy"
     ON public.conversation_members FOR INSERT TO authenticated
     WITH CHECK (
-        public.can_user_access_conversation(auth.uid(), conversation_id)
+        auth.uid() IS NOT NULL
+        AND (
+            user_id = auth.uid()
+            OR public.is_admin(auth.uid())
+            OR public.can_user_access_conversation(auth.uid(), conversation_id)
+            OR EXISTS (SELECT 1 FROM public.conversations c WHERE c.id = conversation_id AND c.created_by = auth.uid())
+        )
     );
 
 DROP POLICY IF EXISTS "members_update_policy" ON public.conversation_members;
 CREATE POLICY "members_update_policy"
     ON public.conversation_members FOR UPDATE TO authenticated
-    USING (user_id = auth.uid())
-    WITH CHECK (user_id = auth.uid());
+    USING (user_id = auth.uid() OR public.is_admin(auth.uid()))
+    WITH CHECK (user_id = auth.uid() OR public.is_admin(auth.uid()));
 
 DROP POLICY IF EXISTS "members_delete_policy" ON public.conversation_members;
 CREATE POLICY "members_delete_policy"
     ON public.conversation_members FOR DELETE TO authenticated
     USING (
         user_id = auth.uid()
+        OR public.is_admin(auth.uid())
         OR EXISTS (
             SELECT 1 FROM public.conversations c
-            WHERE c.id = conversation_id AND c.organization_id IN (SELECT public.current_user_org_ids())
-              AND public.has_org_role(c.organization_id, 'admin')
+            WHERE c.id = conversation_id AND c.created_by = auth.uid()
         )
     );
 
@@ -376,7 +565,9 @@ DROP POLICY IF EXISTS "messages_select_policy" ON public.messages;
 CREATE POLICY "messages_select_policy"
     ON public.messages FOR SELECT TO authenticated
     USING (
-        public.can_user_access_conversation(auth.uid(), conversation_id)
+        public.is_admin(auth.uid())
+        OR public.can_user_access_conversation(auth.uid(), conversation_id)
+        OR EXISTS (SELECT 1 FROM public.conversation_members cm WHERE cm.conversation_id = messages.conversation_id AND cm.user_id = auth.uid())
     );
 
 DROP POLICY IF EXISTS "messages_insert_policy" ON public.messages;
@@ -384,8 +575,13 @@ CREATE POLICY "messages_insert_policy"
     ON public.messages FOR INSERT TO authenticated
     WITH CHECK (
         sender_id = auth.uid()
-        AND public.can_user_access_conversation(auth.uid(), conversation_id)
-        AND length(message) <= 4000
+        AND (
+            public.is_admin(auth.uid())
+            OR public.can_user_access_conversation(auth.uid(), conversation_id)
+            OR EXISTS (SELECT 1 FROM public.conversations c WHERE c.id = conversation_id AND c.created_by = auth.uid())
+            OR EXISTS (SELECT 1 FROM public.conversation_members cm WHERE cm.conversation_id = messages.conversation_id AND cm.user_id = auth.uid())
+        )
+        AND (message IS NULL OR length(message) <= 10000)
     );
 
 DROP POLICY IF EXISTS "messages_update_policy" ON public.messages;
@@ -393,27 +589,16 @@ CREATE POLICY "messages_update_policy"
     ON public.messages FOR UPDATE TO authenticated
     USING (
         sender_id = auth.uid()
-        AND (
-            EXISTS (
-                SELECT 1 FROM public.conversations c
-                LEFT JOIN public.communication_settings cs ON cs.organization_id = c.organization_id
-                WHERE c.id = conversation_id AND (cs.allow_message_editing IS TRUE OR c.organization_id IS NULL)
-            )
-        )
+        OR public.is_admin(auth.uid())
     )
-    WITH CHECK (sender_id = auth.uid() AND length(message) <= 4000);
+    WITH CHECK (sender_id = auth.uid() OR public.is_admin(auth.uid()));
 
 DROP POLICY IF EXISTS "messages_delete_policy" ON public.messages;
 CREATE POLICY "messages_delete_policy"
     ON public.messages FOR DELETE TO authenticated
     USING (
         sender_id = auth.uid()
-        OR EXISTS (
-            SELECT 1 FROM public.conversations c
-            LEFT JOIN public.communication_settings cs ON cs.organization_id = c.organization_id
-            WHERE c.id = conversation_id 
-              AND (cs.allow_message_deletion IS TRUE OR public.has_org_role(c.organization_id, 'admin') OR c.organization_id IS NULL)
-        )
+        OR public.is_admin(auth.uid())
     );
 
 -- Realtime publication for communication_settings

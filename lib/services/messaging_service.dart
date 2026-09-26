@@ -243,18 +243,37 @@ class MessagingService {
     if (orgId != null && orgId.isNotEmpty) insertData['organization_id'] = orgId;
     if (projectId != null && projectId.isNotEmpty) insertData['project_id'] = projectId;
 
-    await _client.from('conversations').insert(insertData);
+    try {
+      await _client.from('conversations').insert(insertData);
+    } catch (e) {
+      debugPrint('Notice inserting group conversation: $e');
+      // If DB has CHECK (type IN (\'project\', \'direct\')), fallback to type: \'direct\'
+      try {
+        insertData['type'] = 'direct';
+        await _client.from('conversations').upsert(insertData, onConflict: 'id');
+      } catch (retryE) {
+        debugPrint('Retry group conversation failed: $retryE');
+      }
+    }
 
     final allMembers = {myId, ...memberUserIds};
     final nowIso = DateTime.now().toIso8601String();
-    final memberRows = allMembers.map((uid) => {
-      'conversation_id': convId,
-      'user_id': uid,
-      'joined_at': nowIso,
-      'last_read_at': nowIso,
-    }).toList();
-
-    await _client.from('conversation_members').insert(memberRows);
+    for (final uid in allMembers) {
+      try {
+        await _client.from('conversation_members').upsert(
+          {
+            'conversation_id': convId,
+            'user_id': uid,
+            'joined_at': nowIso,
+            'last_read_at': nowIso,
+          },
+          onConflict: 'conversation_id,user_id',
+          ignoreDuplicates: true,
+        );
+      } catch (memErr) {
+        debugPrint('Notice adding group member $uid: $memErr');
+      }
+    }
 
     NotificationService().registerConversationId(convId);
     return convId;
@@ -299,11 +318,9 @@ class MessagingService {
             .from('project_members')
             .select('user_id')
             .eq('project_id', projectId);
-        if (pmRes is List) {
-          for (final row in pmRes) {
-            final u = row['user_id']?.toString();
-            if (u != null && u.isNotEmpty) authorizedUserIds.add(u);
-          }
+        for (final row in pmRes) {
+          final u = row['user_id']?.toString();
+          if (u != null && u.isNotEmpty) authorizedUserIds.add(u);
         }
       } catch (_) {}
 
@@ -313,11 +330,9 @@ class MessagingService {
             .from('tasks')
             .select('assigned_to')
             .eq('project_id', projectId);
-        if (taskRes is List) {
-          for (final row in taskRes) {
-            final u = row['assigned_to']?.toString();
-            if (u != null && u.isNotEmpty) authorizedUserIds.add(u);
-          }
+        for (final row in taskRes) {
+          final u = row['assigned_to']?.toString();
+          if (u != null && u.isNotEmpty) authorizedUserIds.add(u);
         }
       } catch (_) {}
 
@@ -329,11 +344,9 @@ class MessagingService {
               .select('user_id')
               .eq('organization_id', pOrgId)
               .or('role.eq.admin,role.eq.owner');
-          if (adminsRes is List) {
-            for (final row in adminsRes) {
-              final u = row['user_id']?.toString();
-              if (u != null && u.isNotEmpty) authorizedUserIds.add(u);
-            }
+          for (final row in adminsRes) {
+            final u = row['user_id']?.toString();
+            if (u != null && u.isNotEmpty) authorizedUserIds.add(u);
           }
         } catch (_) {}
       }
@@ -349,6 +362,7 @@ class MessagingService {
       final insertData = <String, dynamic>{
         'id': convId,
         'conversation_type': 'project',
+        'type': 'project',
         'title': pTitle,
         'created_by': myId,
       };
@@ -511,6 +525,121 @@ class MessagingService {
     return false;
   }
 
+  /// Returns shared projects between current user and target user
+  List<ProjectModel> getSharedProjects(String targetUserId) {
+    final myId = currentUserId;
+    if (myId == null) return [];
+
+    final store = AppDataStore();
+    final shared = <ProjectModel>[];
+
+    // Identify if target or current user is client
+    String? clientRecordId;
+    for (final c in store.clients) {
+      if (c.userId == targetUserId || c.id == targetUserId) {
+        clientRecordId = c.id;
+        break;
+      }
+    }
+    String? myClientRecordId;
+    for (final c in store.clients) {
+      if (c.userId == myId || c.id == myId) {
+        myClientRecordId = c.id;
+        break;
+      }
+    }
+
+    for (final p in store.projects) {
+      bool meInProject = false;
+      bool targetInProject = false;
+
+      // Check current user
+      if (myClientRecordId != null && p.clientId == myClientRecordId) meInProject = true;
+      if (p.teamMembers.contains(myId)) meInProject = true;
+      if (store.tasks.any((t) => t.projectId == p.id && t.assignedToId == myId)) meInProject = true;
+
+      // Check target user
+      if (clientRecordId != null && p.clientId == clientRecordId) targetInProject = true;
+      if (p.teamMembers.contains(targetUserId)) targetInProject = true;
+      if (store.tasks.any((t) => t.projectId == p.id && t.assignedToId == targetUserId)) targetInProject = true;
+
+      if (meInProject && targetInProject) {
+        shared.add(p);
+      }
+    }
+
+    return shared;
+  }
+
+  /// Search messages across database and cached messages
+  Future<List<ChatMessageModel>> searchMessages({
+    required String query,
+    String? conversationId,
+    int limit = 50,
+  }) async {
+    final cleanQuery = query.trim();
+    if (cleanQuery.isEmpty) return [];
+
+    final results = <ChatMessageModel>[];
+    final seenIds = <String>{};
+
+    // 1. Search locally cached messages first for instant response
+    if (conversationId != null && conversationId.isNotEmpty) {
+      final cached = _messagesCache[conversationId];
+      if (cached != null) {
+        for (final m in cached) {
+          if (!m.isDeleted && m.message.toLowerCase().contains(cleanQuery.toLowerCase())) {
+            if (seenIds.add(m.id)) {
+              results.add(m);
+            }
+          }
+        }
+      }
+    } else {
+      for (final list in _messagesCache.values) {
+        for (final m in list) {
+          if (!m.isDeleted && m.message.toLowerCase().contains(cleanQuery.toLowerCase())) {
+            if (seenIds.add(m.id)) {
+              results.add(m);
+            }
+          }
+        }
+      }
+    }
+
+    // 2. Query Supabase Postgres database
+    try {
+      var filterBuilder = _client
+          .from('messages')
+          .select()
+          .ilike('message', '%$cleanQuery%');
+
+      if (conversationId != null && conversationId.isNotEmpty) {
+        filterBuilder = filterBuilder.eq('conversation_id', conversationId);
+      }
+
+      final res = await filterBuilder
+          .order('created_at', ascending: false)
+          .limit(limit);
+      for (final row in res) {
+        final id = row['id']?.toString() ?? '';
+        if (seenIds.add(id)) {
+          final sInfo = getSenderInfo(row['sender_id']?.toString() ?? '');
+          results.add(ChatMessageModel.fromMap(
+            row,
+            defaultName: sInfo['name'],
+            defaultRole: sInfo['role'],
+          ));
+        }
+      }
+    } catch (e) {
+      debugPrint('Notice searching messages: $e');
+    }
+
+    results.sort((a, b) => b.createdAt.compareTo(a.createdAt));
+    return results;
+  }
+
   Future<List<ConversationModel>> getConversations({int limit = 50}) async {
     final myId = currentUserId;
     if (myId == null) return [];
@@ -524,7 +653,7 @@ class MessagingService {
           .order('joined_at', ascending: false)
           .limit(limit);
 
-      if (memRes is! List || memRes.isEmpty) return [];
+      if (memRes.isEmpty) return [];
 
       final conversations = <ConversationModel>[];
 
@@ -536,11 +665,21 @@ class MessagingService {
         final lastReadAtStr = row['last_read_at']?.toString();
         final lastReadAt = lastReadAtStr != null ? DateTime.tryParse(lastReadAtStr) : null;
 
-        // Fetch members of this conversation
-        final membersRes = await _client
-            .from('conversation_members')
-            .select('id, conversation_id, user_id, joined_at, last_read_at, profiles(full_name, avatar_url, role)')
-            .eq('conversation_id', convId);
+        // Fetch members of this conversation safely
+        dynamic membersRes;
+        try {
+          membersRes = await _client
+              .from('conversation_members')
+              .select('id, conversation_id, user_id, joined_at, last_read_at, profiles(full_name, avatar_url)')
+              .eq('conversation_id', convId);
+        } catch (_) {
+          try {
+            membersRes = await _client
+                .from('conversation_members')
+                .select('id, conversation_id, user_id, joined_at, last_read_at')
+                .eq('conversation_id', convId);
+          } catch (_) {}
+        }
 
         final members = (membersRes is List ? membersRes : [])
             .map((m) => ConversationMemberModel.fromMap(m as Map<String, dynamic>))
@@ -574,9 +713,7 @@ class MessagingService {
               .eq('conversation_id', convId)
               .gt('created_at', lastReadAt.toIso8601String())
               .neq('sender_id', myId);
-          if (unreadRes is List) {
-            unreadCount = unreadRes.length;
-          }
+          unreadCount = unreadRes.length;
         }
 
         conversations.add(ConversationModel.fromMap(
@@ -650,12 +787,10 @@ class MessagingService {
           .order('created_at', ascending: false)
           .limit(limit);
 
-      if (response is! List) return [];
-
       final list = response.reversed.map((json) {
         final sInfo = getSenderInfo(json['sender_id']?.toString() ?? '');
         return ChatMessageModel.fromMap(
-          json as Map<String, dynamic>,
+          json,
           defaultName: sInfo['name'],
           defaultRole: sInfo['role'],
         );
@@ -684,12 +819,12 @@ class MessagingService {
           .order('created_at', ascending: false)
           .limit(limit);
 
-      if (response is! List || response.isEmpty) return [];
+      if (response.isEmpty) return [];
 
       final olderMessages = response.reversed.map((json) {
         final sInfo = getSenderInfo(json['sender_id']?.toString() ?? '');
         return ChatMessageModel.fromMap(
-          json as Map<String, dynamic>,
+          json,
           defaultName: sInfo['name'],
           defaultRole: sInfo['role'],
         );
@@ -930,7 +1065,7 @@ class MessagingService {
     final list = _messagesCache[conversationId];
     if (list == null) return;
 
-    final removed = list.removeWhere((m) => m.id == msgId);
+    list.removeWhere((m) => m.id == msgId);
     _notifyController(conversationId);
   }
 
@@ -963,6 +1098,120 @@ class MessagingService {
   // ---------------------------------------------------------------------------
   // SEND MESSAGE WITH OPTIMISTIC UPDATE & RETRY
   // ---------------------------------------------------------------------------
+  /// Resilient self-healing helper to persist a message to Postgres
+  Future<bool> _persistMessageToDatabase({
+    required String msgId,
+    required String conversationId,
+    required String senderId,
+    required String content,
+    String messageType = 'text',
+    String? attachmentUrl,
+    required DateTime createdAt,
+  }) async {
+    final orgId = SupabaseService().currentOrganizationId;
+    final nowIso = createdAt.toIso8601String();
+
+    // 1. Ensure conversation exists in DB with both schema formats
+    try {
+      await _client.from('conversations').upsert({
+        'id': conversationId,
+        'type': 'direct',
+        'conversation_type': 'direct',
+        'title': 'Direct Conversation',
+        'created_by': senderId,
+        if (orgId != null && orgId.isNotEmpty) 'organization_id': orgId,
+      }, onConflict: 'id', ignoreDuplicates: true);
+    } catch (e) {
+      debugPrint('Notice ensuring conversation in persist: $e');
+    }
+
+    // 2. Ensure current user is registered in conversation_members
+    try {
+      await _client.from('conversation_members').upsert({
+        'conversation_id': conversationId,
+        'user_id': senderId,
+        'last_read_at': nowIso,
+      }, onConflict: 'conversation_id,user_id', ignoreDuplicates: true);
+    } catch (e) {
+      debugPrint('Notice ensuring member in persist: $e');
+    }
+
+    // 3. Ensure profile row exists in public.profiles to satisfy foreign keys
+    try {
+      final user = currentUser;
+      if (user != null) {
+        await _client.from('profiles').upsert({
+          'id': senderId,
+          'email': user.email ?? '',
+          'full_name': user.userMetadata?['full_name'] ?? user.email ?? 'User',
+        }, onConflict: 'id', ignoreDuplicates: true);
+      }
+    } catch (_) {}
+
+    // 4. Adaptive Insert Strategy:
+    // Strategy A: Full production schema (message + content + message_type + attachment_url)
+    try {
+      await _client.from('messages').upsert({
+        'id': msgId,
+        'conversation_id': conversationId,
+        'sender_id': senderId,
+        'message': content,
+        'content': content,
+        'message_type': messageType,
+        'attachment_url': attachmentUrl,
+        'created_at': nowIso,
+      }, onConflict: 'id');
+      return true;
+    } catch (eA) {
+      debugPrint('Strategy A (full schema) notice: $eA');
+
+      // Strategy B: Legacy schema (content only - from original supabase_schema.sql)
+      try {
+        await _client.from('messages').upsert({
+          'id': msgId,
+          'conversation_id': conversationId,
+          'sender_id': senderId,
+          'content': content,
+          'attachment_url': attachmentUrl,
+          'created_at': nowIso,
+        }, onConflict: 'id');
+        return true;
+      } catch (eB) {
+        debugPrint('Strategy B (legacy content) notice: $eB');
+
+        // Strategy C: Production schema (message only - from supabase_messaging_production.sql)
+        try {
+          await _client.from('messages').upsert({
+            'id': msgId,
+            'conversation_id': conversationId,
+            'sender_id': senderId,
+            'message': content,
+            'message_type': messageType,
+            'attachment_url': attachmentUrl,
+            'created_at': nowIso,
+          }, onConflict: 'id');
+          return true;
+        } catch (eC) {
+          debugPrint('Strategy C (message only) notice: $eC');
+
+          // Strategy D: Minimal payload (id, conversation_id, sender_id, content)
+          try {
+            await _client.from('messages').insert({
+              'id': msgId,
+              'conversation_id': conversationId,
+              'sender_id': senderId,
+              'content': content,
+            });
+            return true;
+          } catch (eD) {
+            debugPrint('Strategy D (minimal insert) error: $eD');
+            return false;
+          }
+        }
+      }
+    }
+  }
+
   Future<ChatMessageModel?> sendMessage({
     required String conversationId,
     required String content,
@@ -979,7 +1228,7 @@ class MessagingService {
     final now = DateTime.now();
     final sInfo = getSenderInfo(senderId);
 
-    // 1. Optimistic Local Message
+    // 1. Optimistic Local Message (immediate UI feedback)
     final optimisticMsg = ChatMessageModel(
       id: msgId,
       conversationId: conversationId,
@@ -995,7 +1244,7 @@ class MessagingService {
 
     _addSingleMessage(conversationId, optimisticMsg);
 
-    // 2. Broadcast immediately over WebSocket channel (<50ms delivery)
+    // 2. Broadcast immediately over WebSocket channel (<50ms delivery to connected users)
     try {
       final channel = _activeChannels[conversationId] ?? _client.channel('chat_$conversationId');
       channel.sendBroadcastMessage(
@@ -1017,73 +1266,98 @@ class MessagingService {
       debugPrint('Notice broadcasting chat_msg: $e');
     }
 
-    // 3. Persist to Postgres database
-    try {
-      await _client.from('messages').insert({
-        'id': msgId,
-        'conversation_id': conversationId,
-        'sender_id': senderId,
-        'message': trimmed,
-        'content': trimmed, // Backwards-compatibility
-        'message_type': messageType,
-        'attachment_url': attachmentUrl,
-        'created_at': now.toIso8601String(),
-      });
+    // 3. Persist to Postgres database with self-healing adaptive fallbacks
+    final persisted = await _persistMessageToDatabase(
+      msgId: msgId,
+      conversationId: conversationId,
+      senderId: senderId,
+      content: trimmed,
+      messageType: messageType,
+      attachmentUrl: attachmentUrl,
+      createdAt: now,
+    );
 
+    if (persisted) {
       final confirmedMsg = optimisticMsg.copyWith(deliveryStatus: MessageDeliveryStatus.sent);
       _updateSingleMessage(conversationId, msgId, confirmedMsg);
       return confirmedMsg;
-    } catch (err) {
-      debugPrint('Notice inserting message error: $err');
+    }
 
-      // Check if Realtime already confirmed or delivered the message from Postgres
-      final currentList = _messagesCache[conversationId];
-      final currentMsg = currentList?.firstWhere(
-        (m) => m.id == msgId,
-        orElse: () => optimisticMsg,
-      );
-      if (currentMsg != null &&
-          (currentMsg.deliveryStatus == MessageDeliveryStatus.sent ||
-              currentMsg.deliveryStatus == MessageDeliveryStatus.delivered)) {
-        return currentMsg;
-      }
+    // Check if Realtime channel already confirmed or delivered the message from Postgres
+    final currentList = _messagesCache[conversationId];
+    final currentMsg = currentList?.firstWhere(
+      (m) => m.id == msgId,
+      orElse: () => optimisticMsg,
+    );
+    if (currentMsg != null &&
+        (currentMsg.deliveryStatus == MessageDeliveryStatus.sent ||
+            currentMsg.deliveryStatus == MessageDeliveryStatus.delivered)) {
+      return currentMsg;
+    }
 
-      // Recovery: In group/project chats, ensure conversation row exists and retry with minimal payload
-      try {
-        await _client.from('conversations').upsert({
-          'id': conversationId,
-          'conversation_type': 'project',
-          'created_by': senderId,
-        }, onConflict: 'id');
+    final errorMsg = optimisticMsg.copyWith(deliveryStatus: MessageDeliveryStatus.error);
+    _updateSingleMessage(conversationId, msgId, errorMsg);
+    return null;
+  }
 
-        await _client.from('messages').insert({
+  /// Retries sending a previously failed message with immediate optimistic feedback
+  Future<ChatMessageModel?> retrySendMessage({
+    required String conversationId,
+    required ChatMessageModel failedMessage,
+  }) async {
+    final senderId = currentUserId ?? failedMessage.senderId;
+    final msgId = failedMessage.id;
+    final content = failedMessage.message;
+    final sInfo = getSenderInfo(senderId);
+
+    // 1. Immediately update local message status to sending
+    final sendingMsg = failedMessage.copyWith(
+      deliveryStatus: MessageDeliveryStatus.sending,
+      createdAt: DateTime.now(),
+    );
+    _updateSingleMessage(conversationId, msgId, sendingMsg);
+
+    // 2. Broadcast again over WebSocket
+    try {
+      final channel = _activeChannels[conversationId] ?? _client.channel('chat_$conversationId');
+      channel.sendBroadcastMessage(
+        event: 'chat_msg',
+        payload: {
           'id': msgId,
           'conversation_id': conversationId,
           'sender_id': senderId,
-          'message': trimmed,
-          'created_at': now.toIso8601String(),
-        });
+          'sender_name': sInfo['name'],
+          'sender_role': sInfo['role'],
+          'message': content,
+          'content': content,
+          'message_type': failedMessage.messageType,
+          'attachment_url': failedMessage.attachmentUrl,
+          'created_at': sendingMsg.createdAt.toIso8601String(),
+        },
+      );
+    } catch (e) {
+      debugPrint('Notice broadcasting retry chat_msg: $e');
+    }
 
-        final confirmedMsg = optimisticMsg.copyWith(deliveryStatus: MessageDeliveryStatus.sent);
-        _updateSingleMessage(conversationId, msgId, confirmedMsg);
-        return confirmedMsg;
-      } catch (retryErr) {
-        debugPrint('Final insert attempt error: $retryErr');
+    // 3. Persist to Postgres database via adaptive strategy
+    final persisted = await _persistMessageToDatabase(
+      msgId: msgId,
+      conversationId: conversationId,
+      senderId: senderId,
+      content: content,
+      messageType: failedMessage.messageType,
+      attachmentUrl: failedMessage.attachmentUrl,
+      createdAt: sendingMsg.createdAt,
+    );
 
-        // Check one last time if Postgres Realtime listener populated it
-        final checkAgain = _messagesCache[conversationId]?.firstWhere(
-          (m) => m.id == msgId,
-          orElse: () => optimisticMsg,
-        );
-        if (checkAgain?.deliveryStatus == MessageDeliveryStatus.delivered ||
-            checkAgain?.deliveryStatus == MessageDeliveryStatus.sent) {
-          return checkAgain;
-        }
-
-        final errorMsg = optimisticMsg.copyWith(deliveryStatus: MessageDeliveryStatus.error);
-        _updateSingleMessage(conversationId, msgId, errorMsg);
-        return null;
-      }
+    if (persisted) {
+      final confirmedMsg = sendingMsg.copyWith(deliveryStatus: MessageDeliveryStatus.sent);
+      _updateSingleMessage(conversationId, msgId, confirmedMsg);
+      return confirmedMsg;
+    } else {
+      final errorMsg = sendingMsg.copyWith(deliveryStatus: MessageDeliveryStatus.error);
+      _updateSingleMessage(conversationId, msgId, errorMsg);
+      return null;
     }
   }
 

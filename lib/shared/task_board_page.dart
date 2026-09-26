@@ -245,7 +245,7 @@ class _TaskBoardPageState extends State<TaskBoardPage> {
 
                   final bool matchesUserId = userId != null && assignedTo == userId;
                   final bool matchesEmpId = myEmployeeId != null && assignedTo == myEmployeeId;
-                  final bool matchesEmpName = (myEmployeeName != null && myEmployeeName!.isNotEmpty && (assignedTo?.toLowerCase() == myEmployeeName || assignedName == myEmployeeName)) ||
+                  final bool matchesEmpName = (myEmployeeName != null && myEmployeeName.isNotEmpty && (assignedTo?.toLowerCase() == myEmployeeName || assignedName == myEmployeeName)) ||
                       (userName.isNotEmpty && (assignedTo?.toLowerCase() == userName || assignedName == userName));
 
                   return matchesUserId || matchesEmpId || matchesEmpName;

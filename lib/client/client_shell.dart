@@ -6,6 +6,7 @@ import 'package:business_managment_app/shared/login_page.dart';
 import 'package:business_managment_app/shared/settings_page.dart';
 import 'package:business_managment_app/shared/chat_page.dart';
 import 'package:business_managment_app/client/client_dashboard_page.dart';
+import 'package:business_managment_app/shared/notification_widgets.dart';
 import 'package:business_managment_app/core/premium_theme.dart';
 
 class ClientShell extends StatefulWidget {
@@ -116,6 +117,8 @@ class _ClientShellState extends State<ClientShell> {
                   );
                 },
               ),
+              const NotificationBell(),
+              const SizedBox(width: 8),
             ],
           ),
           body: isWideScreen
